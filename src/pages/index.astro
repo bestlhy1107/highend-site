@@ -1,16 +1,144 @@
 ---
+export const prerender = false;
 
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { getCollection } from "astro:content";
+import { readSiteSettings } from "../lib/site-store";
+import { readTeachers } from "../lib/teachers-store";
+import { readServices } from "../lib/services-store";
+
+import ScoreCarousel from "../components/ScoreCarousel.astro";
+import ServiceGrid from "../components/ServiceGrid.astro";
+import TeacherShowcase from "../components/TeacherShowcase.astro";
+import NewsFeed from "../components/NewsFeed.astro";
+import ContactSection from "../components/ContactSection.astro";
+import { readExams } from "../lib/exams-store";
+const site = await readSiteSettings();
+const teachers = await readTeachers();
+
+const scores = await getCollection("scores");
+const services = await readServices();
+const exams = await readExams();
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<BaseLayout
+  title={site.companyName ?? "Wanhe Education"}
+  description={site.slogan ?? ""}
+>
+  <main>
+    <section class="hero-section">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <div class="hero-kicker">Wanhe Education</div>
+          <h1 class="hero-title">{site.companyName ?? "Wanhe Education"}</h1>
+          <p class="hero-subtitle">
+            {site.slogan ?? "高分出分 · 名师指导 · 留学申请一站式"}
+          </p>
+
+          <div class="hero-actions">
+            <a class="btn" href="/services">查看服务</a>
+            <a class="btn btn-ghost-dark" href="#contact">联系我们</a>
+          </div>
+
+          <div class="hero-points">
+            <span class="hero-pill">TOEFL</span>
+            <span class="hero-pill">IELTS</span>
+            <span class="hero-pill">GRE</span>
+            <span class="hero-pill">DET</span>
+            <span class="hero-pill">TOEIC</span>
+            <span class="hero-pill">留学申请</span>
+          </div>
+        </div>
+
+        <div class="hero-panel">
+          <div class="hero-card">
+            <div class="hero-card-label">热门服务</div>
+
+            <div class="hero-card-list">
+              <div class="hero-card-item">
+                <span>托福提分课程</span>
+                <strong>口语 / 写作 / 模考</strong>
+              </div>
+
+              <div class="hero-card-item">
+                <span>雅思系统课程</span>
+                <strong>听说读写全科规划</strong>
+              </div>
+
+              <div class="hero-card-item">
+                <span>留学申请服务</span>
+                <strong>选校 / 文书 / 申请 / 签证</strong>
+              </div>
+            </div>
+
+            <div class="hero-stats">
+              <div class="hero-stat">
+                <strong>{scores.length || 12}+</strong>
+                <span>出分案例</span>
+              </div>
+              <div class="hero-stat">
+                <strong>{teachers.length || 3}+</strong>
+                <span>核心老师</span>
+              </div>
+              <div class="hero-stat">
+                <strong>{services.length || 5}+</strong>
+                <span>服务模块</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {exams.length ? (
+      <section class="section-block">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Exams</div>
+              <h2 class="section-title">语言 / 考试服务</h2>
+              <p class="section-desc">点击进入查看每个考试项目的完整介绍与学习建议</p>
+            </div>
+            <a class="section-link" href="/exams">查看全部考试 →</a>
+          </div>
+
+          <div class="exam-grid">
+            {exams.slice(0, 6).map((e) => (
+              <a class="exam-card" href={`/exams/${e.id}`}>
+                <h3>{e.title}</h3>
+                {e.subtitle ? <p>{e.subtitle}</p> : null}
+                {e.tags?.length ? (
+                  <div class="card-tags">
+                    {e.tags.slice(0, 4).map((t: string) => (
+                      <span>{t}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+    ) : null}
+
+    <section class="section-block compact-top">
+      <ScoreCarousel scores={scores} />
+    </section>
+
+    <section class="section-block compact-top">
+      <ServiceGrid services={services} />
+    </section>
+
+    <section class="section-block compact-top">
+      <TeacherShowcase teachers={teachers} />
+    </section>
+
+    <section class="section-block compact-top">
+      <NewsFeed />
+    </section>
+
+    <section class="section-block compact-top">
+      <ContactSection site={site} />
+    </section>
+  </main>
+</BaseLayout>

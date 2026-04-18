@@ -1,0 +1,70 @@
+---
+import type { CollectionEntry } from "astro:content";
+type ScoreEntry = CollectionEntry<"scores">;
+
+type Props = { scores: ScoreEntry[] };
+const { scores } = Astro.props as Props;
+---
+
+<section id="scores" class="section container" data-carousel-root>
+    <div class="section-head">
+        <div>
+            <h2 class="h2">出分展示</h2>
+            <p class="muted">真实案例滚动展示（后续换成你的截图即可）</p>
+        </div>
+        <div class="btn-row">
+            <button class="btn" type="button" data-prev>←</button>
+            <button class="btn" type="button" data-next>→</button>
+        </div>
+    </div>
+
+    <div class="carousel">
+        <div class="carousel-track" data-track>
+            {
+                scores.map((s) => (
+                    <div class="card score-card">
+                        <div class="muted text-sm">
+                            {s.data.exam}
+                            {s.data.date ? ` · ${s.data.date}` : ""}
+                        </div>
+                        <div class="h3 mt-2">{s.data.scoreText}</div>
+                        {s.data.highlight ? (
+                            <div class="muted mt-1">{s.data.highlight}</div>
+                        ) : null}
+                        <img
+                            class="score-img"
+                            src={s.data.image}
+                            alt={String(s.data.scoreText ?? s.data.exam ?? "")}
+                        />
+                    </div>
+                ))
+            }
+        </div>
+    </div>
+
+    <script is:inline>
+        (() => {
+            const root = document.currentScript?.closest(
+                "[data-carousel-root]",
+            );
+            if (!root) return;
+
+            const track = root.querySelector("[data-track]");
+            if (!(track instanceof HTMLElement)) return;
+
+            const prev = root.querySelector("[data-prev]");
+            const next = root.querySelector("[data-next]");
+
+            const step = () =>
+                Math.max(320, Math.floor(track.clientWidth * 0.9));
+
+            prev?.addEventListener("click", () => {
+                track.scrollBy({ left: -step(), behavior: "smooth" });
+            });
+
+            next?.addEventListener("click", () => {
+                track.scrollBy({ left: step(), behavior: "smooth" });
+            });
+        })();
+    </script>
+</section>

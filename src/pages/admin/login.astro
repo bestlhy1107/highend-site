@@ -1,0 +1,70 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions, isInputError } from "astro:actions";
+
+const sessionUser = await Astro.session?.get("adminUser");
+if (sessionUser) {
+  return Astro.redirect("/admin");
+}
+
+const result = Astro.getActionResult(actions.adminLogin);
+const inputErrors = isInputError(result?.error) ? result.error.fields : {};
+const unauthorized =
+  result?.error && "code" in result.error && result.error.code === "UNAUTHORIZED";
+---
+
+<BaseLayout title="管理员登录" description="管理员登录后台">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Admin</div>
+        <h1 class="section-title">管理员登录</h1>
+        <p class="section-desc">登录后可查看咨询数据，后续再增加在线修改功能。</p>
+      </div>
+    </div>
+
+    {unauthorized && (
+      <div class="contact-notice contact-notice--error mt-4">
+        管理员账号或密码错误。
+      </div>
+    )}
+
+    <form method="POST" action={actions.adminLogin} class="contact-shell mt-4" style="max-width: 560px;">
+      <div class="form-item">
+        <label class="form-label" for="admin-username">账号</label>
+        <input
+          class="input"
+          id="admin-username"
+          name="username"
+          type="text"
+          placeholder="请输入管理员账号"
+          required
+        />
+        {inputErrors.username && (
+          <p class="form-error">{inputErrors.username.join("，")}</p>
+        )}
+      </div>
+
+      <div class="form-item mt-4">
+        <label class="form-label" for="admin-password">密码</label>
+        <input
+          class="input"
+          id="admin-password"
+          name="password"
+          type="password"
+          placeholder="请输入管理员密码"
+          required
+        />
+        {inputErrors.password && (
+          <p class="form-error">{inputErrors.password.join("，")}</p>
+        )}
+      </div>
+
+      <div class="mt-4">
+        <button class="btn" type="submit">登录后台</button>
+      </div>
+    </form>
+  </main>
+</BaseLayout>

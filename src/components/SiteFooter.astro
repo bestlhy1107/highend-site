@@ -1,0 +1,49 @@
+---
+type Props = {
+  brand: string;
+};
+
+const { brand } = Astro.props as Props;
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer-dark">
+  <div class="container footer-dark-grid">
+    <div>
+      <div class="footer-dark-brand">{brand}</div>
+      <p class="footer-dark-text">
+        托福 / 雅思 / GRE / 多邻国 / 托业 + 留学服务，
+        一站式规划与提分。
+      </p>
+    </div>
+
+    <div>
+      <div class="footer-dark-title">快速入口</div>
+      <div class="footer-dark-links">
+        <a href="/services">服务</a>
+        <a href="/exams">考试</a>
+        <a href="/teachers">师资</a>
+        <a href="/#contact">联系我们</a>
+      </div>
+    </div>
+
+    <div>
+      <div class="footer-dark-title">最新动态</div>
+      <div class="footer-dark-links">
+        <a href="/#news">考试资讯</a>
+        <a href="/#scores">出分展示</a>
+      </div>
+    </div>
+
+    <div>
+      <div class="footer-dark-title">联系信息</div>
+      <p class="footer-dark-text">工作时间：09:00 - 21:00</p>
+      <p class="footer-dark-text">微信 / 电话 / 邮箱：见首页联系区</p>
+    </div>
+  </div>
+
+  <div class="container footer-dark-bottom">
+    <span>© {year} {brand}. All rights reserved.</span>
+    <span>备案号：后续备案后填写</span>
+  </div>
+</footer>

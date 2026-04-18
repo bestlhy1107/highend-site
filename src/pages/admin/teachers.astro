@@ -1,0 +1,259 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions, isInputError } from "astro:actions";
+import { readTeachers } from "../../lib/teachers-store";
+
+const adminUser = await Astro.session?.get("adminUser");
+if (!adminUser) {
+  return Astro.redirect("/admin/login");
+}
+
+const teachers = await readTeachers();
+
+const saveResult = Astro.getActionResult(actions.saveTeacher);
+const removeResult = Astro.getActionResult(actions.removeTeacher);
+
+const inputErrors = isInputError(saveResult?.error) ? saveResult.error.fields : {};
+const saveSuccess = saveResult && !saveResult.error ? saveResult.data : null;
+const removeSuccess = removeResult && !removeResult.error ? removeResult.data : null;
+---
+
+<BaseLayout title="管理员后台 - Teachers" description="管理老师信息">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Admin</div>
+        <h1 class="section-title">老师后台编辑</h1>
+        <p class="section-desc">修改后首页老师展示会立即读取最新数据。</p>
+      </div>
+
+      <a class="btn btn-ghost" href="/admin">返回后台</a>
+    </div>
+
+    {saveSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {saveSuccess.message}
+      </div>
+    )}
+
+    {removeSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {removeSuccess.message}
+      </div>
+    )}
+
+    <div class="contact-shell mt-4">
+      <div class="h3">新增老师</div>
+
+      <form method="POST" action={actions.saveTeacher} class="mt-4 teacher-form">
+        <div class="form-grid">
+          <div class="form-item">
+            <label class="form-label">老师姓名</label>
+            <input class="input" name="name" type="text" required />
+            {inputErrors.name && <p class="form-error">{inputErrors.name.join("，")}</p>}
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">老师职位</label>
+            <input class="input" name="title" type="text" required />
+            {inputErrors.title && <p class="form-error">{inputErrors.title.join("，")}</p>}
+          </div>
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label">排序</label>
+            <input class="input" name="order" type="number" value="999" required />
+            {inputErrors.order && <p class="form-error">{inputErrors.order.join("，")}</p>}
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">头像路径</label>
+            <input class="input" name="avatar" type="text" placeholder="/uploads/teachers/xxx.jpg" data-avatar-path />
+          </div>
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">上传老师图片</label>
+          <input class="input" type="file" accept="image/*" data-avatar-upload />
+          <p class="muted mt-2" data-upload-status></p>
+          <img class="mt-3" data-avatar-preview style="max-width: 180px; border-radius: 16px; display:none;" />
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">老师简介</label>
+          <textarea class="input" name="intro"></textarea>
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label">擅长方向（逗号分隔）</label>
+            <input class="input" name="specialties" type="text" placeholder="TOEFL, IELTS, 口语" />
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">标签（逗号分隔）</label>
+            <input class="input" name="badges" type="text" placeholder="高分规划, 一对一指导" />
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button class="btn" type="submit">新增老师</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="cards mt-6">
+      {teachers.map((teacher) => (
+        <div class="card">
+          <div class="card-top">
+            <div>
+              <div class="h3">{teacher.name}</div>
+              <div class="muted mt-1">{teacher.title}</div>
+            </div>
+            <div class="badge">#{teacher.order}</div>
+          </div>
+
+          <form method="POST" action={actions.saveTeacher} class="mt-4 teacher-form">
+            <input type="hidden" name="id" value={teacher.id} />
+
+            <div class="form-grid">
+              <div class="form-item">
+                <label class="form-label">老师姓名</label>
+                <input class="input" name="name" type="text" value={teacher.name} required />
+              </div>
+
+              <div class="form-item">
+                <label class="form-label">老师职位</label>
+                <input class="input" name="title" type="text" value={teacher.title} required />
+              </div>
+            </div>
+
+            <div class="form-grid mt-4">
+              <div class="form-item">
+                <label class="form-label">排序</label>
+                <input class="input" name="order" type="number" value={teacher.order} required />
+              </div>
+
+              <div class="form-item">
+                <label class="form-label">头像路径</label>
+                <input class="input" name="avatar" type="text" value={teacher.avatar ?? ""} data-avatar-path />
+              </div>
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">上传/替换老师图片</label>
+              <input class="input" type="file" accept="image/*" data-avatar-upload />
+              <p class="muted mt-2" data-upload-status></p>
+              {teacher.avatar ? (
+                <img
+                  class="mt-3"
+                  src={teacher.avatar}
+                  data-avatar-preview
+                  style="max-width: 180px; border-radius: 16px;"
+                />
+              ) : (
+                <img
+                  class="mt-3"
+                  data-avatar-preview
+                  style="max-width: 180px; border-radius: 16px; display:none;"
+                />
+              )}
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">老师简介</label>
+              <textarea class="input" name="intro">{teacher.intro ?? ""}</textarea>
+            </div>
+
+            <div class="form-grid mt-4">
+              <div class="form-item">
+                <label class="form-label">擅长方向（逗号分隔）</label>
+                <input
+                  class="input"
+                  name="specialties"
+                  type="text"
+                  value={teacher.specialties.join(", ")}
+                />
+              </div>
+
+              <div class="form-item">
+                <label class="form-label">标签（逗号分隔）</label>
+                <input
+                  class="input"
+                  name="badges"
+                  type="text"
+                  value={teacher.badges.join(", ")}
+                />
+              </div>
+            </div>
+
+            <div class="mt-4" style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn" type="submit">保存修改</button>
+            </div>
+          </form>
+
+          <form method="POST" action={actions.removeTeacher} class="mt-3">
+            <input type="hidden" name="id" value={teacher.id} />
+            <button class="btn btn-ghost" type="submit">删除老师</button>
+          </form>
+        </div>
+      ))}
+    </div>
+  </main>
+
+  <script is:inline>
+    (() => {
+      const forms = document.querySelectorAll(".teacher-form");
+
+      forms.forEach((form) => {
+        const uploadInput = form.querySelector("[data-avatar-upload]");
+        const pathInput = form.querySelector("[data-avatar-path]");
+        const statusEl = form.querySelector("[data-upload-status]");
+        const previewEl = form.querySelector("[data-avatar-preview]");
+
+        if (!(uploadInput instanceof HTMLInputElement)) return;
+        if (!(pathInput instanceof HTMLInputElement)) return;
+
+        uploadInput.addEventListener("change", async () => {
+          const file = uploadInput.files?.[0];
+          if (!file) return;
+
+          if (statusEl) statusEl.textContent = "上传中...";
+
+          const formData = new FormData();
+          formData.append("file", file);
+
+          try {
+            const res = await fetch("/api/admin/upload-teacher-image", {
+              method: "POST",
+              body: formData,
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || !data?.ok) {
+              throw new Error(data?.message || "上传失败");
+            }
+
+            pathInput.value = data.path;
+
+            if (previewEl instanceof HTMLImageElement) {
+              previewEl.src = data.path;
+              previewEl.style.display = "block";
+            }
+
+            if (statusEl) statusEl.textContent = "上传成功";
+          } catch (error) {
+            if (statusEl) {
+              statusEl.textContent =
+                error instanceof Error ? error.message : "上传失败";
+            }
+          }
+        });
+      });
+    })();
+  </script>
+</BaseLayout>

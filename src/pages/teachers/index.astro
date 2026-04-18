@@ -1,0 +1,52 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getCollection, getEntry } from "astro:content";
+
+const site = await getEntry("site", "main");
+if (!site) throw new Error("Missing src/content/site/main.json");
+
+const teachers = await getCollection("teachers");
+const items = [...teachers].sort((a, b) => (a.data.order ?? 999) - (b.data.order ?? 999));
+---
+
+<BaseLayout title={`师资团队 · ${site.data.companyName ?? ""}`} description="老师介绍与擅长方向">
+  <main class="container">
+    <a class="breadcrumb" href="/#teachers">← 返回首页</a>
+
+    <header class="detail-hero reveal">
+      <h1 class="text-3xl font-semibold tracking-tight">师资团队</h1>
+      <p class="mt-2 text-slate-600">点击老师卡片进入详情页</p>
+    </header>
+
+    <section class="mt-8 cards cards--2">
+      {items.map((t) => (
+        <a class="card teacher-card card--hover" href={`/teachers/${t.id}`}>
+          <div class="teacher-top">
+            {t.data.avatar ? (
+              <img class="avatar" src={t.data.avatar} alt={t.data.name ?? "老师头像"} loading="lazy" />
+            ) : (
+              <div class="avatar avatar--ph">{(t.data.name ?? "T").slice(0, 1)}</div>
+            )}
+
+            <div>
+              <div class="h3">{t.data.name ?? "未命名老师"}</div>
+              <div class="muted">{t.data.title ?? ""}</div>
+            </div>
+          </div>
+
+          {t.data.intro ? <p class="muted mt-3">{t.data.intro}</p> : null}
+
+          {t.data.specialties?.length ? (
+            <div class="tags mt-3">
+              {(t.data.specialties ?? []).slice(0, 6).map((sp: string) => (
+                <span class="tag">{sp}</span>
+              ))}
+            </div>
+          ) : null}
+
+          <div class="card-cta mt-4">查看详情 →</div>
+        </a>
+      ))}
+    </section>
+  </main>
+</BaseLayout>

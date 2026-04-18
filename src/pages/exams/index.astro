@@ -1,0 +1,42 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getCollection, getEntry } from "astro:content";
+
+const site = await getEntry("site", "main");
+if (!site) throw new Error("Missing src/content/site/main.json");
+
+const exams = await getCollection("exams");
+const items = [...exams].sort((a, b) => (a.data.order ?? 999) - (b.data.order ?? 999));
+---
+
+<BaseLayout title={`考试服务 · ${site.data.companyName ?? ""}`} description="TOEFL / IELTS / GRE 等考试服务介绍">
+  <main class="container">
+    <a class="breadcrumb" href="/#exams">← 返回首页</a>
+
+    <header class="detail-hero reveal">
+      <h1 class="text-3xl font-semibold tracking-tight">考试服务</h1>
+      <p class="mt-2 text-slate-600">选择考试类型进入详情页</p>
+    </header>
+
+    <section class="mt-8 cards cards--3">
+      {items.map((e) => (
+        <a class="card card--hover" href={`/exams/${e.id}`}>
+          <div class="card-top">
+            <h3 class="h3">{e.data.title}</h3>
+          </div>
+          <p class="muted">{e.data.subtitle ?? ""}</p>
+
+          {e.data.tags?.length ? (
+            <div class="tags">
+              {(e.data.tags ?? []).slice(0, 4).map((t: string) => (
+                <span class="tag">{t}</span>
+              ))}
+            </div>
+          ) : null}
+
+          <div class="card-cta">查看详情 →</div>
+        </a>
+      ))}
+    </section>
+  </main>
+</BaseLayout>

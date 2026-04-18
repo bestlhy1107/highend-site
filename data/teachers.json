@@ -1,0 +1,20 @@
+[
+  {
+    "id": "amy",
+    "name": "Amy",
+    "title": "TOEFL / IELTS 导师",
+    "order": 1,
+    "avatar": "/uploads/teachers/1774783185836-zhizhao.jpg",
+    "intro": "擅长托福口语、雅思写作与学习规划。",
+    "specialties": [
+      "TOEFL",
+      "IELTS",
+      "口语",
+      "写作"
+    ],
+    "badges": [
+      "高分规划",
+      "一对一指导"
+    ]
+  }
+]

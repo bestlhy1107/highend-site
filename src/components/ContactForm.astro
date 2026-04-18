@@ -1,0 +1,53 @@
+<section class="container reveal" id="contact">
+  <div>
+    <h2 class="text-2xl font-semibold tracking-tight">联系我们</h2>
+    <p class="mt-1 text-slate-600">填写信息，我们会尽快联系你（自动邮件通知）</p>
+  </div>
+
+  <div class="mt-6 card">
+    <form class="grid gap-3" data-form>
+      <div class="grid gap-2">
+        <label>姓名</label>
+        <input class="input" name="name" placeholder="如：张同学" required />
+      </div>
+
+      <div class="grid gap-2">
+        <label>联系方式（微信/手机/邮箱）</label>
+        <input class="input" name="contact" placeholder="如：wxid / 138**** / xxx@email.com" required />
+      </div>
+
+      <div class="grid gap-2">
+        <label>需求</label>
+        <textarea class="input" name="message" rows="4" placeholder="例如：托福口语提分 / 留学申请咨询…" required></textarea>
+      </div>
+
+      <button class="btn" type="submit">提交咨询</button>
+      <div class="muted" data-tip></div>
+    </form>
+  </div>
+
+  <script is:inline>
+    (() => {
+      const root = document.currentScript?.closest("#contact");
+      if (!root) return;
+      const form = root.querySelector("[data-form]");
+      const tip = root.querySelector("[data-tip]");
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        tip.textContent = "提交中…";
+        const fd = new FormData(form);
+
+        try {
+          const r = await fetch("/api/contact", { method: "POST", body: fd });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.ok) throw new Error(j.message || "submit failed");
+          tip.textContent = "提交成功！我们会尽快联系你。";
+          form.reset();
+        } catch (err) {
+          tip.textContent = "提交失败，请稍后再试或直接微信联系。";
+        }
+      });
+    })();
+  </script>
+</section>

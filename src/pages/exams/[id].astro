@@ -1,0 +1,92 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { readSiteSettings } from "../../lib/site-store";
+import { readExamById } from "../../lib/exams-store";
+
+const site = await readSiteSettings();
+
+const id = Astro.params.id;
+if (!id) {
+  return Astro.redirect("/");
+}
+
+const exam = await readExamById(id);
+if (!exam) {
+  return Astro.redirect("/");
+}
+
+const summaryParagraphs = String(exam.summary ?? "")
+  .split("\n")
+  .map((s) => s.trim())
+  .filter(Boolean);
+---
+
+<BaseLayout title={`${exam.title} - ${site.companyName}`} description={exam.subtitle}>
+  <main class="container page">
+    <a class="breadcrumb" href="/">← 返回首页</a>
+
+    <div class="detail-hero mt-4">
+      <div>
+        <div class="section-kicker">Exam Detail</div>
+        <h1 class="section-title">{exam.title}</h1>
+        <p class="section-desc">{exam.subtitle}</p>
+
+        {exam.tags.length ? (
+          <div class="tags mt-4">
+            {exam.tags.map((tag) => (
+              <span class="tag">{tag}</span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div class="card">
+        <div class="h3">适合人群</div>
+        <p class="muted mt-2">
+          可在后台继续扩展这部分字段。当前先用考试详情 + 亮点 + FAQ 作为主要展示内容。
+        </p>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <article class="prose">
+        <h2>考试介绍</h2>
+        {summaryParagraphs.length ? (
+          summaryParagraphs.map((item) => <p>{item}</p>)
+        ) : (
+          <p>暂无详细介绍。</p>
+        )}
+
+        {exam.highlights.length ? (
+          <>
+            <h2>课程亮点</h2>
+            <ul class="list">
+              {exam.highlights.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </article>
+
+      <aside class="card">
+        <div class="h3">常见问题</div>
+
+        {exam.faqs.length ? (
+          <div class="mt-3">
+            {exam.faqs.map((faq) => (
+              <details class="faq">
+                <summary>{faq.q}</summary>
+                <p class="muted mt-2">{faq.a}</p>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <p class="muted mt-3">暂无常见问题。</p>
+        )}
+      </aside>
+    </div>
+  </main>
+</BaseLayout>

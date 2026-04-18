@@ -1,0 +1,389 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions } from "astro:actions";
+
+import { readSiteSettings } from "../../lib/site-store";
+import { readTeachers } from "../../lib/teachers-store";
+import { readServices } from "../../lib/services-store";
+import { readExams } from "../../lib/exams-store";
+import { readLeads } from "../../lib/leads-store";
+
+const adminUser = await Astro.session?.get("adminUser");
+
+if (!adminUser) {
+  return Astro.redirect("/admin/login");
+}
+
+const site = await readSiteSettings();
+const teachers = await readTeachers();
+const services = await readServices();
+const exams = await readExams();
+const leads = await readLeads();
+
+const updateLeadResult = Astro.getActionResult(actions.updateLead);
+const deleteLeadResult = Astro.getActionResult(actions.deleteLead);
+
+const updateLeadSuccess = updateLeadResult && !updateLeadResult.error ? updateLeadResult.data : null;
+const deleteLeadSuccess = deleteLeadResult && !deleteLeadResult.error ? deleteLeadResult.data : null;
+
+const STATUS_LABELS: Record<string, string> = {
+  new: "未处理",
+  contacted: "已联系",
+  done: "已完成",
+  invalid: "无效",
+};
+
+const APPOINTMENT_LABELS: Record<string, string> = {
+  trial: "预约试听",
+  consultation: "预约咨询",
+};
+
+function startOfToday() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function startOfWeek() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  base.setDate(base.getDate() - diff);
+  return base;
+}
+
+const todayStart = startOfToday();
+const weekStart = startOfWeek();
+
+const todayLeads = leads.filter((lead) => new Date(lead.createdAt) >= todayStart);
+const weekLeads = leads.filter((lead) => new Date(lead.createdAt) >= weekStart);
+
+const statusStats = {
+  new: leads.filter((lead) => lead.status === "new").length,
+  contacted: leads.filter((lead) => lead.status === "contacted").length,
+  done: leads.filter((lead) => lead.status === "done").length,
+  invalid: leads.filter((lead) => lead.status === "invalid").length,
+};
+
+const appointmentStatsMap = leads.reduce<Record<string, number>>((acc, lead) => {
+  const key = lead.appointmentType || "consultation";
+  acc[key] = (acc[key] ?? 0) + 1;
+  return acc;
+}, {});
+
+const appointmentStats = Object.entries(appointmentStatsMap)
+  .map(([key, count]) => ({
+    key,
+    label: APPOINTMENT_LABELS[key] ?? key,
+    count,
+  }))
+  .sort((a, b) => b.count - a.count);
+
+const examStatsMap = leads.reduce<Record<string, number>>((acc, lead) => {
+  const key = (lead.examType || "未填写").trim() || "未填写";
+  acc[key] = (acc[key] ?? 0) + 1;
+  return acc;
+}, {});
+
+const examStats = Object.entries(examStatsMap)
+  .map(([name, count]) => ({ name, count }))
+  .sort((a, b) => b.count - a.count);
+
+const latestLeads = leads.slice(0, 10);
+---
+
+<BaseLayout title="管理员后台" description="后台总览">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Admin Dashboard</div>
+        <h1 class="section-title">管理员后台</h1>
+        <p class="section-desc">
+          当前登录账号：{adminUser.username}
+        </p>
+      </div>
+
+      <form method="POST" action={actions.adminLogout}>
+        <button class="btn btn-ghost" type="submit">退出登录</button>
+      </form>
+    </div>
+
+    <div class="cards cards--3 mt-4">
+      <a class="card card--hover" href="/admin/settings">
+        <div class="card-top">
+          <div class="h3">站点设置</div>
+          <span class="badge">Site</span>
+        </div>
+        <p class="muted mt-2">修改公司名称、标语、电话、邮箱、微信。</p>
+        <div class="card-cta">进入设置 →</div>
+      </a>
+
+      <a class="card card--hover" href="/admin/teachers">
+        <div class="card-top">
+          <div class="h3">老师管理</div>
+          <span class="badge">{teachers.length}</span>
+        </div>
+        <p class="muted mt-2">新增、修改、删除老师，并上传老师图片。</p>
+        <div class="card-cta">进入管理 →</div>
+      </a>
+
+      <a class="card card--hover" href="/admin/services">
+        <div class="card-top">
+          <div class="h3">服务管理</div>
+          <span class="badge">{services.length}</span>
+        </div>
+        <p class="muted mt-2">新增、修改、删除服务，并上传服务图片。</p>
+        <div class="card-cta">进入管理 →</div>
+      </a>
+
+      <a class="card card--hover" href="/admin/exams">
+        <div class="card-top">
+          <div class="h3">考试管理</div>
+          <span class="badge">{exams.length}</span>
+        </div>
+        <p class="muted mt-2">新增、修改、删除考试，维护考试详情页内容。</p>
+        <div class="card-cta">进入管理 →</div>
+      </a>
+
+      <a class="card card--hover" href="#leads">
+        <div class="card-top">
+          <div class="h3">咨询管理</div>
+          <span class="badge">{leads.length}</span>
+        </div>
+        <p class="muted mt-2">修改咨询状态、填写备注、删除无效记录。</p>
+        <div class="card-cta">查看管理 ↓</div>
+      </a>
+
+      <a class="card card--hover" href="/">
+        <div class="card-top">
+          <div class="h3">返回前台</div>
+          <span class="badge">Home</span>
+        </div>
+        <p class="muted mt-2">回到官网首页查看最新前台展示效果。</p>
+        <div class="card-cta">打开首页 →</div>
+      </a>
+    </div>
+
+    <section class="mt-8">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Overview</div>
+          <h2 class="section-title">站点概览</h2>
+          <p class="section-desc">这里显示当前前台正在使用的基础信息。</p>
+        </div>
+      </div>
+
+      <div class="cards cards--2 mt-4">
+        <div class="card">
+          <div class="h3">当前站点信息</div>
+
+          <div class="mt-3">
+            <div><strong>公司名称：</strong>{site.companyName}</div>
+            <div class="mt-2"><strong>站点标语：</strong>{site.slogan}</div>
+            <div class="mt-2"><strong>电话：</strong>{site.phone}</div>
+            <div class="mt-2"><strong>邮箱：</strong>{site.email}</div>
+            <div class="mt-2"><strong>微信：</strong>{site.wechat}</div>
+          </div>
+
+          <div class="mt-4">
+            <a class="btn btn-ghost" href="/admin/settings">去修改站点信息</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="h3">内容统计</div>
+
+          <div class="cards cards--2 mt-4">
+            <div class="card">
+              <div class="muted text-sm">咨询记录</div>
+              <div class="h2 mt-2">{leads.length}</div>
+            </div>
+
+            <div class="card">
+              <div class="muted text-sm">老师数量</div>
+              <div class="h2 mt-2">{teachers.length}</div>
+            </div>
+
+            <div class="card">
+              <div class="muted text-sm">服务数量</div>
+              <div class="h2 mt-2">{services.length}</div>
+            </div>
+
+            <div class="card">
+              <div class="muted text-sm">考试数量</div>
+              <div class="h2 mt-2">{exams.length}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-8">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Stats</div>
+          <h2 class="section-title">预约数据看板</h2>
+          <p class="section-desc">快速查看近期预约、状态分布和考试类型分布。</p>
+        </div>
+      </div>
+
+      <div class="cards cards--3 mt-4">
+        <div class="card">
+          <div class="muted text-sm">今日新增预约</div>
+          <div class="h2 mt-2">{todayLeads.length}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">本周新增预约</div>
+          <div class="h2 mt-2">{weekLeads.length}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">未处理预约</div>
+          <div class="h2 mt-2">{statusStats.new}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">已联系</div>
+          <div class="h2 mt-2">{statusStats.contacted}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">已完成</div>
+          <div class="h2 mt-2">{statusStats.done}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">无效线索</div>
+          <div class="h2 mt-2">{statusStats.invalid}</div>
+        </div>
+      </div>
+
+      <div class="cards cards--2 mt-6">
+        <div class="card">
+          <div class="h3">预约类型分布</div>
+
+          {appointmentStats.length ? (
+            <div class="mt-4">
+              {appointmentStats.map((item) => (
+                <div class="card mt-3">
+                  <div class="card-top">
+                    <div>{item.label}</div>
+                    <div class="badge">{item.count}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p class="muted mt-3">暂无预约数据。</p>
+          )}
+        </div>
+
+        <div class="card">
+          <div class="h3">考试类型分布</div>
+
+          {examStats.length ? (
+            <div class="mt-4">
+              {examStats.map((item) => (
+                <div class="card mt-3">
+                  <div class="card-top">
+                    <div>{item.name}</div>
+                    <div class="badge">{item.count}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p class="muted mt-3">暂无考试类型数据。</p>
+          )}
+        </div>
+      </div>
+    </section>
+
+    <section id="leads" class="mt-8">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Leads</div>
+          <h2 class="section-title">咨询记录管理</h2>
+          <p class="section-desc">可以修改状态、填写备注，也可以删除无效咨询。</p>
+        </div>
+      </div>
+
+      {updateLeadSuccess && (
+        <div class="contact-notice contact-notice--success mt-4">
+          {updateLeadSuccess.message}
+        </div>
+      )}
+
+      {deleteLeadSuccess && (
+        <div class="contact-notice contact-notice--success mt-4">
+          {deleteLeadSuccess.message}
+        </div>
+      )}
+
+      {latestLeads.length ? (
+        <div class="cards mt-4">
+          {latestLeads.map((lead) => (
+            <div class="card">
+              <div class="card-top">
+                <div>
+                  <div class="h3">{lead.name}</div>
+                  <div class="muted mt-1">联系方式：{lead.contact}</div>
+                </div>
+
+                <div class="badge">{STATUS_LABELS[lead.status] ?? lead.status}</div>
+              </div>
+
+              <div class="mt-2 muted">来源：{lead.source ?? "homepage"}</div>
+              <div class="mt-2 muted">
+                预约类型：{APPOINTMENT_LABELS[lead.appointmentType] ?? lead.appointmentType}
+              </div>
+              <div class="mt-2 muted">考试类型：{lead.examType || "未填写"}</div>
+              <div class="mt-2 muted">期望时间：{lead.preferredTime || "未填写"}</div>
+              <div class="mt-2 muted">提交时间：{lead.createdAt}</div>
+              <div class="mt-3">{lead.need}</div>
+              <div class="mt-3 text-xs muted">线索ID：{lead.id}</div>
+
+              <form method="POST" action={actions.updateLead} class="mt-4">
+                <input type="hidden" name="id" value={lead.id} />
+
+                <div class="form-grid">
+                  <div class="form-item">
+                    <label class="form-label">处理状态</label>
+                    <select class="input" name="status">
+                      <option value="new" selected={lead.status === "new"}>未处理</option>
+                      <option value="contacted" selected={lead.status === "contacted"}>已联系</option>
+                      <option value="done" selected={lead.status === "done"}>已完成</option>
+                      <option value="invalid" selected={lead.status === "invalid"}>无效</option>
+                    </select>
+                  </div>
+
+                  <div class="form-item">
+                    <label class="form-label">管理员备注</label>
+                    <textarea class="input" name="adminNote">{lead.adminNote ?? ""}</textarea>
+                  </div>
+                </div>
+
+                <div class="mt-4" style="display:flex; gap:10px; flex-wrap:wrap;">
+                  <button class="btn" type="submit">保存状态</button>
+                </div>
+              </form>
+
+              <form method="POST" action={actions.deleteLead} class="mt-3">
+                <input type="hidden" name="id" value={lead.id} />
+                <button class="btn btn-ghost" type="submit">删除记录</button>
+              </form>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div class="card mt-4">
+          <div class="h3">暂无咨询记录</div>
+          <p class="muted mt-2">当前还没有用户提交咨询表单。</p>
+        </div>
+      )}
+    </section>
+  </main>
+</BaseLayout>

@@ -1,0 +1,39 @@
+---
+import "../styles/global.css";
+import SiteHeader from "../components/SiteHeader.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import { readSiteSettings } from "../lib/site-store";
+
+type Props = {
+  title?: string;
+  description?: string;
+};
+
+const {
+  title = "Wanhe Education",
+  description = "高分出分 · 名师指导 · 留学申请一站式",
+} = Astro.props as Props;
+
+const site = await readSiteSettings();
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到正文</a>
+
+    <SiteHeader brand={site.companyName} />
+
+    <div id="main">
+      <slot />
+    </div>
+
+    <SiteFooter brand={site.companyName} />
+  </body>
+</html>

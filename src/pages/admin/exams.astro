@@ -1,0 +1,164 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions, isInputError } from "astro:actions";
+import { readExams } from "../../lib/exams-store";
+
+const adminUser = await Astro.session?.get("adminUser");
+if (!adminUser) {
+  return Astro.redirect("/admin/login");
+}
+
+const exams = await readExams();
+
+const saveResult = Astro.getActionResult(actions.saveExam);
+const removeResult = Astro.getActionResult(actions.removeExam);
+
+const inputErrors = isInputError(saveResult?.error) ? saveResult.error.fields : {};
+const saveSuccess = saveResult && !saveResult.error ? saveResult.data : null;
+const removeSuccess = removeResult && !removeResult.error ? removeResult.data : null;
+---
+
+<BaseLayout title="管理员后台 - Exams" description="管理考试信息">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Admin</div>
+        <h1 class="section-title">考试后台编辑</h1>
+        <p class="section-desc">修改后首页与考试详情页会立即读取最新考试数据。</p>
+      </div>
+
+      <a class="btn btn-ghost" href="/admin">返回后台</a>
+    </div>
+
+    {saveSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {saveSuccess.message}
+      </div>
+    )}
+
+    {removeSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {removeSuccess.message}
+      </div>
+    )}
+
+    <div class="contact-shell mt-4">
+      <div class="h3">新增考试</div>
+
+      <form method="POST" action={actions.saveExam} class="mt-4">
+        <div class="form-grid">
+          <div class="form-item">
+            <label class="form-label">考试标题</label>
+            <input class="input" name="title" type="text" required />
+            {inputErrors.title && <p class="form-error">{inputErrors.title.join("，")}</p>}
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">副标题</label>
+            <input class="input" name="subtitle" type="text" />
+          </div>
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">排序</label>
+          <input class="input" name="order" type="number" value="999" required />
+          {inputErrors.order && <p class="form-error">{inputErrors.order.join("，")}</p>}
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">考试介绍</label>
+          <textarea class="input" name="summary"></textarea>
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label">亮点（每行一条）</label>
+            <textarea class="input" name="highlights"></textarea>
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">FAQ（每行一条，格式：问题 | 回答）</label>
+            <textarea class="input" name="faqs"></textarea>
+          </div>
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">标签（逗号分隔）</label>
+          <input class="input" name="tags" type="text" placeholder="TOEFL, 口语, 写作" />
+        </div>
+
+        <div class="mt-4">
+          <button class="btn" type="submit">新增考试</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="cards mt-6">
+      {exams.map((exam) => (
+        <div class="card">
+          <div class="card-top">
+            <div>
+              <div class="h3">{exam.title}</div>
+              <div class="muted mt-1">{exam.subtitle}</div>
+            </div>
+            <div class="badge">#{exam.order}</div>
+          </div>
+
+          <form method="POST" action={actions.saveExam} class="mt-4">
+            <input type="hidden" name="id" value={exam.id} />
+
+            <div class="form-grid">
+              <div class="form-item">
+                <label class="form-label">考试标题</label>
+                <input class="input" name="title" type="text" value={exam.title} required />
+              </div>
+
+              <div class="form-item">
+                <label class="form-label">副标题</label>
+                <input class="input" name="subtitle" type="text" value={exam.subtitle} />
+              </div>
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">排序</label>
+              <input class="input" name="order" type="number" value={exam.order} required />
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">考试介绍</label>
+              <textarea class="input" name="summary">{exam.summary ?? ""}</textarea>
+            </div>
+
+            <div class="form-grid mt-4">
+              <div class="form-item">
+                <label class="form-label">亮点（每行一条）</label>
+                <textarea class="input" name="highlights">{exam.highlights.join("\n")}</textarea>
+              </div>
+
+              <div class="form-item">
+                <label class="form-label">FAQ（每行一条，格式：问题 | 回答）</label>
+                <textarea class="input" name="faqs">{exam.faqs.map((item) => `${item.q} | ${item.a}`).join("\n")}</textarea>
+              </div>
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">标签（逗号分隔）</label>
+              <input class="input" name="tags" type="text" value={exam.tags.join(", ")} />
+            </div>
+
+            <div class="mt-4" style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn" type="submit">保存修改</button>
+            </div>
+          </form>
+
+          <form method="POST" action={actions.removeExam} class="mt-3">
+            <input type="hidden" name="id" value={exam.id} />
+            <button class="btn btn-ghost" type="submit">删除考试</button>
+          </form>
+        </div>
+      ))}
+    </div>
+  </main>
+</BaseLayout>

@@ -1,0 +1,56 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { readSiteSettings } from "../../lib/site-store";
+import { readServices } from "../../lib/services-store";
+
+const site = await readSiteSettings();
+const services = await readServices();
+---
+
+<BaseLayout title={`服务 - ${site.companyName}`} description="查看全部服务">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Services</div>
+        <h1 class="section-title">全部服务</h1>
+        <p class="section-desc">这里展示当前后台维护的全部服务模块。</p>
+      </div>
+    </div>
+
+    {services.length ? (
+      <div class="cards cards--3 mt-4">
+        {services.map((service) => (
+          <a class="card card--hover" href={`/services/${service.id}`}>
+            <div class="card-top">
+              <div>
+                <div class="h3">
+                  {service.icon ? `${service.icon} ` : ""}{service.title}
+                </div>
+                <div class="muted mt-1">{service.subtitle}</div>
+              </div>
+              <div class="badge">
+                {service.category === "abroad" ? "留学" : "语言"}
+              </div>
+            </div>
+
+            {service.tags.length ? (
+              <div class="tags">
+                {service.tags.map((tag) => (
+                  <span class="tag">{tag}</span>
+                ))}
+              </div>
+            ) : null}
+
+            <div class="card-cta">查看详情 →</div>
+          </a>
+        ))}
+      </div>
+    ) : (
+      <div class="card mt-4">
+        <div class="h3">暂无服务</div>
+      </div>
+    )}
+  </main>
+</BaseLayout>

@@ -1,0 +1,130 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions, isInputError } from "astro:actions";
+import { readSiteSettings } from "../../lib/site-store";
+
+const adminUser = await Astro.session?.get("adminUser");
+if (!adminUser) {
+  return Astro.redirect("/admin/login");
+}
+
+const current = await readSiteSettings();
+const result = Astro.getActionResult(actions.updateSiteSettings);
+const inputErrors = isInputError(result?.error) ? result.error.fields : {};
+const success = result && !result.error ? result.data : null;
+const unauthorized =
+  result?.error && "code" in result.error && result.error.code === "UNAUTHORIZED";
+---
+
+<BaseLayout title="管理员后台 - 站点设置" description="修改站点基础信息">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Admin</div>
+        <h1 class="section-title">站点基础信息设置</h1>
+        <p class="section-desc">修改后首页会立即读取最新内容。</p>
+      </div>
+
+      <a class="btn btn-ghost" href="/admin">返回后台</a>
+    </div>
+
+    {success && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {success.message}
+      </div>
+    )}
+
+    {unauthorized && (
+      <div class="contact-notice contact-notice--error mt-4">
+        请先重新登录管理员后台。
+      </div>
+    )}
+
+    <form method="POST" action={actions.updateSiteSettings} class="contact-shell mt-4" style="max-width: 760px;">
+      <div class="form-grid">
+        <div class="form-item">
+          <label class="form-label" for="site-companyName">公司名称</label>
+          <input
+            class="input"
+            id="site-companyName"
+            name="companyName"
+            type="text"
+            value={current.companyName}
+            required
+          />
+          {inputErrors.companyName && (
+            <p class="form-error">{inputErrors.companyName.join("，")}</p>
+          )}
+        </div>
+
+        <div class="form-item">
+          <label class="form-label" for="site-phone">联系电话</label>
+          <input
+            class="input"
+            id="site-phone"
+            name="phone"
+            type="text"
+            value={current.phone}
+            required
+          />
+          {inputErrors.phone && (
+            <p class="form-error">{inputErrors.phone.join("，")}</p>
+          )}
+        </div>
+      </div>
+
+      <div class="form-item mt-4">
+        <label class="form-label" for="site-slogan">站点标语</label>
+        <input
+          class="input"
+          id="site-slogan"
+          name="slogan"
+          type="text"
+          value={current.slogan}
+          required
+        />
+        {inputErrors.slogan && (
+          <p class="form-error">{inputErrors.slogan.join("，")}</p>
+        )}
+      </div>
+
+      <div class="form-grid mt-4">
+        <div class="form-item">
+          <label class="form-label" for="site-email">邮箱</label>
+          <input
+            class="input"
+            id="site-email"
+            name="email"
+            type="email"
+            value={current.email}
+            required
+          />
+          {inputErrors.email && (
+            <p class="form-error">{inputErrors.email.join("，")}</p>
+          )}
+        </div>
+
+        <div class="form-item">
+          <label class="form-label" for="site-wechat">微信号</label>
+          <input
+            class="input"
+            id="site-wechat"
+            name="wechat"
+            type="text"
+            value={current.wechat}
+            required
+          />
+          {inputErrors.wechat && (
+            <p class="form-error">{inputErrors.wechat.join("，")}</p>
+          )}
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <button class="btn" type="submit">保存站点信息</button>
+      </div>
+    </form>
+  </main>
+</BaseLayout>

@@ -1,0 +1,149 @@
+---
+const title = "最新考试动态";
+
+const TAGS = [
+  { key: "all", label: "全部" },
+  { key: "toefl", label: "TOEFL" },
+  { key: "ielts", label: "IELTS" },
+  { key: "gre", label: "GRE" },
+  { key: "det", label: "DET" },
+  { key: "toeic", label: "TOEIC" },
+];
+---
+
+<section class="container reveal" id="news">
+  <div class="section-head">
+    <div>
+      <div class="section-kicker">News</div>
+      <h2 class="section-title">{title}</h2>
+      <p class="section-desc">优先展示考试垂类资讯，不再混入综合新闻</p>
+    </div>
+
+    <div class="news-filters" data-news-filters>
+      {TAGS.map((tag) => (
+        <button
+          class={`news-filter ${tag.key === "all" ? "is-active" : ""}`}
+          data-tag={tag.key}
+          type="button"
+        >
+          {tag.label}
+        </button>
+      ))}
+    </div>
+  </div>
+
+  <div class="news-shell">
+    <div class="muted" data-news-status>加载中...</div>
+    <div class="news-grid" data-news-list></div>
+  </div>
+
+  <script is:inline>
+    (() => {
+      const root = document.currentScript?.closest("#news");
+      if (!root) return;
+
+      const statusEl = root.querySelector("[data-news-status]");
+      const listEl = root.querySelector("[data-news-list]");
+      const buttons = Array.from(root.querySelectorAll("[data-tag]"));
+
+      let currentTag = "all";
+      let controller = null;
+
+      const esc = (value) =>
+        String(value ?? "").replace(/[&<>"']/g, (char) => {
+          const map = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          };
+          return map[char] || char;
+        });
+
+      const formatDate = (value) => {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+
+        return new Intl.DateTimeFormat("zh-CN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(date);
+      };
+
+      const render = (items) => {
+        if (!listEl) return;
+
+        listEl.innerHTML = items
+          .map((item) => {
+            const source = esc(item.source || "News");
+            const title = esc(item.title || "");
+            const link = esc(item.link || "#");
+            const date = item.pubDate ? formatDate(item.pubDate) : "";
+            const snippet = esc(item.snippet || "");
+
+            return `
+              <a class="news-card" href="${link}" target="_blank" rel="noreferrer">
+                <div class="news-card-source">${source}</div>
+                <div class="news-card-title">${title}</div>
+                ${date ? `<div class="news-card-date">${esc(date)}</div>` : ""}
+                ${snippet ? `<p class="news-card-snippet">${snippet}</p>` : ""}
+                <div class="news-card-cta">查看原文 →</div>
+              </a>
+            `;
+          })
+          .join("");
+      };
+
+      const setActive = (tag) => {
+        buttons.forEach((btn) => {
+          const active = btn.getAttribute("data-tag") === tag;
+          btn.classList.toggle("is-active", active);
+        });
+      };
+
+      const load = async (tag) => {
+        currentTag = tag;
+        setActive(tag);
+
+        if (controller) controller.abort();
+        controller = new AbortController();
+
+        if (statusEl) statusEl.textContent = "加载中...";
+        if (listEl) listEl.innerHTML = "";
+
+        try {
+          const res = await fetch(`/api/news?tag=${encodeURIComponent(tag)}&limit=6`, {
+            signal: controller.signal,
+          });
+
+          const data = await res.json();
+          const items = Array.isArray(data?.items) ? data.items : [];
+
+          if (!items.length) {
+            if (statusEl) statusEl.textContent = "暂无动态";
+            return;
+          }
+
+          if (statusEl) statusEl.textContent = "";
+          render(items);
+        } catch (error) {
+          if (error?.name === "AbortError") return;
+          if (statusEl) statusEl.textContent = "加载失败，请稍后再试";
+          if (listEl) listEl.innerHTML = "";
+        }
+      };
+
+      buttons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tag = btn.getAttribute("data-tag") || "all";
+          load(tag);
+        });
+      });
+
+      load("all");
+    })();
+  </script>
+</section>

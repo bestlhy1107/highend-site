@@ -1,0 +1,53 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getCollection, getEntry, render } from "astro:content";
+
+export async function getStaticPaths() {
+  const teachers = await getCollection("teachers");
+  return teachers.map((t) => ({ params: { id: t.id } }));
+}
+
+const site = await getEntry("site", "main");
+if (!site) throw new Error("Missing src/content/site/main.json");
+
+const id = Astro.params.id;
+if (!id) throw new Error("Missing route param: id");
+
+const teacher = await getEntry("teachers", id);
+if (!teacher) return Astro.redirect("/teachers");
+
+const { Content } = await render(teacher);
+---
+
+<BaseLayout
+  title={`${teacher.data.name ?? "老师"} · ${site.data.companyName ?? ""}`}
+  description={teacher.data.title ?? ""}
+>
+  <main class="container">
+    <a class="breadcrumb" href="/teachers">← 返回师资列表</a>
+
+    <header class="detail-hero reveal">
+      <div class="teacher-top">
+        {teacher.data.avatar ? (
+          <img class="avatar" src={teacher.data.avatar} alt={teacher.data.name ?? "老师头像"} loading="lazy" />
+        ) : (
+          <div class="avatar avatar--ph">{(teacher.data.name ?? "T").slice(0, 1)}</div>
+        )}
+        <div>
+          <h1 class="text-3xl font-semibold tracking-tight">{teacher.data.name ?? "未命名老师"}</h1>
+          <p class="mt-2 text-slate-600">{teacher.data.title ?? ""}</p>
+        </div>
+      </div>
+
+      {teacher.data.specialties?.length ? (
+        <div class="tags mt-4">
+          {(teacher.data.specialties ?? []).map((sp: string) => <span class="tag">{sp}</span>)}
+        </div>
+      ) : null}
+    </header>
+
+    <article class="prose mt-8">
+      <Content />
+    </article>
+  </main>
+</BaseLayout>

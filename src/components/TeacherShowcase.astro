@@ -1,0 +1,101 @@
+---
+type Teacher = {
+  id: string;
+  name: string;
+  title: string;
+  order: number;
+  avatar?: string;
+  intro?: string;
+  specialties: string[];
+  badges: string[];
+};
+
+type Props = {
+  teachers?: Array<Partial<Teacher> | null | undefined>;
+};
+
+const { teachers = [] } = Astro.props as Props;
+
+const safeTeachers: Teacher[] = Array.isArray(teachers)
+  ? teachers
+      .filter((item): item is Partial<Teacher> => !!item && typeof item === "object")
+      .map((item, index) => ({
+        id: String(item.id ?? `teacher-${index + 1}`),
+        name: String(item.name ?? "未命名老师"),
+        title: String(item.title ?? "老师"),
+        order: Number(item.order ?? 999),
+        avatar: String(item.avatar ?? "").trim(),
+        intro: String(item.intro ?? "").trim(),
+        specialties: Array.isArray(item.specialties)
+          ? item.specialties.map((s) => String(s)).filter(Boolean)
+          : [],
+        badges: Array.isArray(item.badges)
+          ? item.badges.map((s) => String(s)).filter(Boolean)
+          : [],
+      }))
+      .sort((a, b) => a.order - b.order)
+  : [];
+---
+
+<section class="container reveal" id="teachers">
+  <div class="section-head">
+    <div>
+      <div class="section-kicker">Teachers</div>
+      <h2 class="section-title">优秀老师展示</h2>
+      <p class="section-desc">后台修改后，这里会立即读取最新老师信息。</p>
+    </div>
+  </div>
+
+  {safeTeachers.length ? (
+    <div class="cards cards--3">
+      {safeTeachers.map((teacher) => (
+        <div class="card card--hover">
+          <div class="teacher-top">
+            {teacher.avatar ? (
+              <img
+                class="avatar"
+                src={teacher.avatar}
+                alt={teacher.name}
+                loading="lazy"
+              />
+            ) : (
+              <div class="avatar avatar--ph">
+                {teacher.name.slice(0, 1)}
+              </div>
+            )}
+
+            <div>
+              <div class="h3">{teacher.name}</div>
+              <div class="muted mt-1">{teacher.title}</div>
+            </div>
+          </div>
+
+          {teacher.intro ? (
+            <p class="lead mt-3">{teacher.intro}</p>
+          ) : null}
+
+          {teacher.specialties.length ? (
+            <div class="tags">
+              {teacher.specialties.map((item) => (
+                <span class="tag">{item}</span>
+              ))}
+            </div>
+          ) : null}
+
+          {teacher.badges.length ? (
+            <div class="tags">
+              {teacher.badges.map((item) => (
+                <span class="badge">{item}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div class="card mt-4">
+      <div class="h3">暂无老师数据</div>
+      <p class="muted mt-2">请先到后台新增老师信息。</p>
+    </div>
+  )}
+</section>

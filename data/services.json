@@ -1,0 +1,78 @@
+[
+  {
+    "id": "toefl",
+    "title": "托福课程",
+    "subtitle": "托福口语 / 写作 / 模考系统提升",
+    "category": "language",
+    "order": 1,
+    "icon": "🎯",
+    "heroImage": "",
+    "officialRegisterUrl": "https://www.ets.org/toefl.html",
+    "summary": "托福课程覆盖词汇、阅读、听力、口语、写作与模考训练，适合有明确提分需求的学生。---",
+    "highlights": [
+      "入学诊断",
+      "阶段测评",
+      "口语写作精修",
+      "模考复盘"
+    ],
+    "faqs": [
+      {
+        "q": "需要基础吗？",
+        "a": "可以先做诊断，再安排对应班型。"
+      },
+      {
+        "q": "可以单科报名吗？",
+        "a": "可以，根据你的需求安排。"
+      }
+    ],
+    "tags": [
+      "TOEFL",
+      "口语",
+      "写作",
+      "模考"
+    ]
+  },
+  {
+    "id": "study-abroad",
+    "title": "留学申请服务",
+    "subtitle": "选校定位、文书、申请、签证一站式服务",
+    "category": "abroad",
+    "order": 2,
+    "icon": "🌍",
+    "heroImage": "/uploads/services/1776050456157-59fa2282-61fa-43fd-a6da-85da9d3f6ec7.png",
+    "officialRegisterUrl": "",
+    "summary": "留学申请服务覆盖选校定位、背景提升建议、文书修改、网申提交与签证辅导，适合希望系统规划申请流程的学生。",
+    "highlights": [
+      "选校定位",
+      "文书修改",
+      "申请递交",
+      "签证辅导"
+    ],
+    "faqs": [
+      {
+        "q": "可以只做文书吗？",
+        "a": "可以，支持按模块提供服务。"
+      }
+    ],
+    "tags": [
+      "留学申请",
+      "文书",
+      "选校",
+      "签证"
+    ]
+  },
+  {
+    "id": "tcf-cannda",
+    "title": "TCF Cannda",
+    "subtitle": "",
+    "category": "language",
+    "order": 3,
+    "icon": "",
+    "heroImage": "/uploads/services/1776050440539-915432ef-eb37-4cc7-83d8-b039cd47e101.png",
+    "officialRegisterUrl": "",
+    "summary": "",
+    "highlights": [],
+    "faqs": [],
+    "tags": []
+  }
+]

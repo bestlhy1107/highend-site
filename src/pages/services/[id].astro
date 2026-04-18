@@ -1,0 +1,120 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { readSiteSettings } from "../../lib/site-store";
+import { readServiceById } from "../../lib/services-store";
+
+const site = await readSiteSettings();
+
+const id = Astro.params.id;
+if (!id) {
+  return Astro.redirect("/services");
+}
+
+const service = await readServiceById(id);
+if (!service) {
+  return Astro.redirect("/services");
+}
+
+const summaryParagraphs = String(service.summary ?? "")
+  .split("\n")
+  .map((s) => s.trim())
+  .filter(Boolean);
+---
+
+<BaseLayout
+  title={`${service.title} - ${site.companyName}`}
+  description={service.subtitle}
+>
+  <main class="container page">
+    <a class="breadcrumb" href="/services">← 返回服务列表</a>
+
+    <div class="detail-hero mt-4">
+      <div>
+        <div class="section-kicker">Service Detail</div>
+        <h1 class="section-title">
+          {service.icon ? `${service.icon} ` : ""}{service.title}
+        </h1>
+        <p class="section-desc">{service.subtitle}</p>
+
+        <div class="tags mt-4">
+          <span class="badge">
+            {service.category === "abroad" ? "留学服务" : "语言服务"}
+          </span>
+          {service.tags.map((tag) => (
+            <span class="tag">{tag}</span>
+          ))}
+        </div>
+
+        {service.officialRegisterUrl ? (
+          <div class="detail-actions">
+            <a
+              class="btn"
+              href={service.officialRegisterUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              官网入口
+            </a>
+          </div>
+        ) : null}
+      </div>
+
+      {service.heroImage ? (
+        <img
+          class="detail-hero-img"
+          src={service.heroImage}
+          alt={service.title}
+          loading="lazy"
+        />
+      ) : (
+        <div class="card">
+          <div class="h3">服务概览</div>
+          <p class="muted mt-2">
+            这里可以在后台填写 heroImage 路径，后续再增加服务图片上传功能。
+          </p>
+        </div>
+      )}
+    </div>
+
+    <div class="detail-grid">
+      <article class="prose">
+        <h2>服务介绍</h2>
+        {summaryParagraphs.length ? (
+          summaryParagraphs.map((item) => <p>{item}</p>)
+        ) : (
+          <p>暂无详细介绍。</p>
+        )}
+
+        {service.highlights.length ? (
+          <>
+            <h2>服务亮点</h2>
+            <ul class="list">
+              {service.highlights.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </article>
+
+      <aside class="card">
+        <div class="h3">常见问题</div>
+
+        {service.faqs.length ? (
+          <div class="mt-3">
+            {service.faqs.map((faq) => (
+              <details class="faq">
+                <summary>{faq.q}</summary>
+                <p class="muted mt-2">{faq.a}</p>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <p class="muted mt-3">暂无常见问题。</p>
+        )}
+      </aside>
+    </div>
+  </main>
+</BaseLayout>

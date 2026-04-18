@@ -1,0 +1,99 @@
+---
+type Service = {
+  id: string;
+  title: string;
+  subtitle: string;
+  category: "language" | "abroad";
+  order: number;
+  icon?: string;
+  heroImage?: string;
+  officialRegisterUrl?: string;
+  summary?: string;
+  highlights: string[];
+  faqs: { q: string; a: string }[];
+  tags: string[];
+};
+
+type Props = {
+  services?: Array<Partial<Service> | null | undefined>;
+};
+
+const { services = [] } = Astro.props as Props;
+
+const safeServices: Service[] = Array.isArray(services)
+  ? services
+      .filter((item): item is Partial<Service> => !!item && typeof item === "object")
+      .map((item, index):Service => ({
+        id: String(item.id ?? `service-${index + 1}`),
+        title: String(item.title ?? "未命名服务"),
+        subtitle: String(item.subtitle ?? ""),
+        category: item.category === "abroad" ? "abroad" : "language",
+        order: Number(item.order ?? 999),
+        icon: String(item.icon ?? "").trim(),
+        heroImage: String(item.heroImage ?? "").trim(),
+        officialRegisterUrl: String(item.officialRegisterUrl ?? "").trim(),
+        summary: String(item.summary ?? "").trim(),
+        highlights: Array.isArray(item.highlights)
+          ? item.highlights.map((s) => String(s)).filter(Boolean)
+          : [],
+        faqs: Array.isArray(item.faqs)
+          ? item.faqs
+              .map((faq) => ({
+                q: String(faq?.q ?? "").trim(),
+                a: String(faq?.a ?? "").trim(),
+              }))
+              .filter((faq) => faq.q && faq.a)
+          : [],
+        tags: Array.isArray(item.tags)
+          ? item.tags.map((s) => String(s)).filter(Boolean)
+          : [],
+      }))
+      .sort((a, b) => a.order - b.order)
+  : [];
+---
+
+<section class="container reveal" id="services">
+  <div class="section-head">
+    <div>
+      <div class="section-kicker">Services</div>
+      <h2 class="section-title">服务模块</h2>
+      <p class="section-desc">后台修改后，这里会立即读取最新服务信息。</p>
+    </div>
+  </div>
+
+  {safeServices.length ? (
+    <div class="cards cards--3">
+      {safeServices.map((service) => (
+        <a class="card card--hover" href={`/services/${service.id}`}>
+          <div class="card-top">
+            <div>
+              <div class="h3">
+                {service.icon ? `${service.icon} ` : ""}{service.title}
+              </div>
+              <div class="muted mt-1">{service.subtitle}</div>
+            </div>
+
+            <div class="badge">
+              {service.category === "abroad" ? "留学" : "语言"}
+            </div>
+          </div>
+
+          {service.tags.length ? (
+            <div class="tags">
+              {service.tags.slice(0, 4).map((tag) => (
+                <span class="tag">{tag}</span>
+              ))}
+            </div>
+          ) : null}
+
+          <div class="card-cta">查看详情 →</div>
+        </a>
+      ))}
+    </div>
+  ) : (
+    <div class="card mt-4">
+      <div class="h3">暂无服务数据</div>
+      <p class="muted mt-2">请先到后台新增服务信息。</p>
+    </div>
+  )}
+</section>
