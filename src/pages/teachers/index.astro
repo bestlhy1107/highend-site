@@ -1,52 +1,66 @@
 ---
+export const prerender = false;
+
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { getCollection, getEntry } from "astro:content";
+import { normalizeImageUrl } from "../../lib/image-url";
+import { readSiteSettings } from "../../lib/site-store";
+import { readTeachers } from "../../lib/teachers-store";
 
-const site = await getEntry("site", "main");
-if (!site) throw new Error("Missing src/content/site/main.json");
-
-const teachers = await getCollection("teachers");
-const items = [...teachers].sort((a, b) => (a.data.order ?? 999) - (b.data.order ?? 999));
+const site = await readSiteSettings();
+const teachers = await readTeachers();
 ---
 
-<BaseLayout title={`师资团队 · ${site.data.companyName ?? ""}`} description="老师介绍与擅长方向">
-  <main class="container">
-    <a class="breadcrumb" href="/#teachers">← 返回首页</a>
+<BaseLayout title={`师资团队 · ${site.companyName}`} description="老师介绍与擅长方向">
+  <main class="container page">
+    <a class="breadcrumb" href="/">← 返回首页</a>
 
-    <header class="detail-hero reveal">
-      <h1 class="text-3xl font-semibold tracking-tight">师资团队</h1>
-      <p class="mt-2 text-slate-600">点击老师卡片进入详情页</p>
+    <header class="page-hero">
+      <div class="section-kicker">Teachers</div>
+      <h1 class="section-title">师资团队</h1>
+      <p class="section-desc">点击老师卡片进入详情页</p>
     </header>
 
-    <section class="mt-8 cards cards--2">
-      {items.map((t) => (
-        <a class="card teacher-card card--hover" href={`/teachers/${t.id}`}>
-          <div class="teacher-top">
-            {t.data.avatar ? (
-              <img class="avatar" src={t.data.avatar} alt={t.data.name ?? "老师头像"} loading="lazy" />
-            ) : (
-              <div class="avatar avatar--ph">{(t.data.name ?? "T").slice(0, 1)}</div>
-            )}
+    {teachers.length ? (
+      <section class="mt-8 cards cards--2">
+        {teachers.map((teacher) => (
+          <a class="card teacher-card card--hover" href={`/teachers/${teacher.id}`}>
+            <div class="teacher-top">
+              {teacher.avatar ? (
+                <img
+                  class="avatar"
+                  src={normalizeImageUrl(teacher.avatar)}
+                  alt={teacher.name}
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : (
+                <div class="avatar avatar--ph">{teacher.name.slice(0, 1)}</div>
+              )}
 
-            <div>
-              <div class="h3">{t.data.name ?? "未命名老师"}</div>
-              <div class="muted">{t.data.title ?? ""}</div>
+              <div>
+                <div class="h3">{teacher.name}</div>
+                <div class="muted">{teacher.title}</div>
+              </div>
             </div>
-          </div>
 
-          {t.data.intro ? <p class="muted mt-3">{t.data.intro}</p> : null}
+            {teacher.intro ? <p class="muted mt-3">{teacher.intro}</p> : null}
 
-          {t.data.specialties?.length ? (
-            <div class="tags mt-3">
-              {(t.data.specialties ?? []).slice(0, 6).map((sp: string) => (
-                <span class="tag">{sp}</span>
-              ))}
-            </div>
-          ) : null}
+            {teacher.specialties.length ? (
+              <div class="tags mt-3">
+                {teacher.specialties.slice(0, 6).map((specialty) => (
+                  <span class="tag">{specialty}</span>
+                ))}
+              </div>
+            ) : null}
 
-          <div class="card-cta mt-4">查看详情 →</div>
-        </a>
-      ))}
-    </section>
+            <div class="card-cta mt-4">查看详情 →</div>
+          </a>
+        ))}
+      </section>
+    ) : (
+      <div class="card mt-4">
+        <div class="h3">暂无老师数据</div>
+      </div>
+    )}
   </main>
 </BaseLayout>

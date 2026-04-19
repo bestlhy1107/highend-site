@@ -10,14 +10,24 @@ type SiteData = {
 
 type Props = {
   site: SiteData;
+  examOptions?: string[];
 };
 
-const { site } = Astro.props as Props;
+const { site, examOptions = [] } = Astro.props as Props;
 
 const result = Astro.getActionResult(actions.contactLead);
 const inputErrors = isInputError(result?.error) ? result.error.fields : {};
 const success = result && !result.error ? result.data : null;
 const hasCommonError = result?.error && !isInputError(result.error);
+
+const fallbackExamOptions = ["TOEFL", "IELTS", "GRE", "DET", "TOEIC", "留学申请"];
+const normalizedExamOptions = Array.from(
+  new Set(
+    (examOptions.length ? examOptions : fallbackExamOptions)
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+  )
+);
 ---
 
 <section id="contact" class="container reveal">
@@ -100,12 +110,9 @@ const hasCommonError = result?.error && !isInputError(result.error);
         <label class="form-label" for="exam-type">考试类型</label>
         <select class="input" id="exam-type" name="examType" required>
           <option value="">请选择</option>
-          <option value="TOEFL">TOEFL</option>
-          <option value="IELTS">IELTS</option>
-          <option value="GRE">GRE</option>
-          <option value="DET">DET</option>
-          <option value="TOEIC">TOEIC</option>
-          <option value="留学申请">留学申请</option>
+          {normalizedExamOptions.map((option) => (
+            <option value={option}>{option}</option>
+          ))}
         </select>
         {inputErrors.examType && (
           <p class="form-error">{inputErrors.examType.join("，")}</p>

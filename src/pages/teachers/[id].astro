@@ -1,61 +1,83 @@
 ---
+export const prerender = false;
+
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { getCollection, getEntry, render } from "astro:content";
 import { normalizeImageUrl } from "../../lib/image-url";
+import { readSiteSettings } from "../../lib/site-store";
+import { readTeacherById } from "../../lib/teachers-store";
 
-export async function getStaticPaths() {
-  const teachers = await getCollection("teachers");
-  return teachers.map((t) => ({ params: { id: t.id } }));
-}
-
-const site = await getEntry("site", "main");
-if (!site) throw new Error("Missing src/content/site/main.json");
+const site = await readSiteSettings();
 
 const id = Astro.params.id;
-if (!id) throw new Error("Missing route param: id");
+if (!id) {
+  return Astro.redirect("/teachers");
+}
 
-const teacher = await getEntry("teachers", id);
-if (!teacher) return Astro.redirect("/teachers");
-
-const { Content } = await render(teacher);
+const teacher = await readTeacherById(id);
+if (!teacher) {
+  return Astro.redirect("/teachers");
+}
 ---
 
 <BaseLayout
-  title={`${teacher.data.name ?? "老师"} · ${site.data.companyName ?? ""}`}
-  description={teacher.data.title ?? ""}
+  title={`${teacher.name} · ${site.companyName}`}
+  description={teacher.title}
 >
-  <main class="container">
+  <main class="container page">
     <a class="breadcrumb" href="/teachers">← 返回师资列表</a>
 
-    <header class="detail-hero reveal">
+    <header class="detail-hero mt-4">
       <div class="teacher-top">
-        {teacher.data.avatar ? (
-<img
-  src={normalizeImageUrl(service.heroImage)}
-  alt={service.title}
-  class="detail-hero-img"
-  width="640"
-  height="420"
-  decoding="async"
-/>
+        {teacher.avatar ? (
+          <img
+            src={normalizeImageUrl(teacher.avatar)}
+            alt={teacher.name}
+            class="avatar"
+            loading="lazy"
+            decoding="async"
+          />
         ) : (
-          <div class="avatar avatar--ph">{(teacher.data.name ?? "T").slice(0, 1)}</div>
+          <div class="avatar avatar--ph">{teacher.name.slice(0, 1)}</div>
         )}
         <div>
-          <h1 class="text-3xl font-semibold tracking-tight">{teacher.data.name ?? "未命名老师"}</h1>
-          <p class="mt-2 text-slate-600">{teacher.data.title ?? ""}</p>
+          <div class="section-kicker">Teacher Detail</div>
+          <h1 class="section-title">{teacher.name}</h1>
+          <p class="section-desc">{teacher.title}</p>
         </div>
       </div>
 
-      {teacher.data.specialties?.length ? (
-        <div class="tags mt-4">
-          {(teacher.data.specialties ?? []).map((sp: string) => <span class="tag">{sp}</span>)}
-        </div>
-      ) : null}
+      <aside class="card">
+        <div class="h3">擅长方向</div>
+        {teacher.specialties.length ? (
+          <div class="tags">
+            {teacher.specialties.map((specialty) => (
+              <span class="tag">{specialty}</span>
+            ))}
+          </div>
+        ) : (
+          <p class="muted mt-2">暂无擅长方向。</p>
+        )}
+      </aside>
     </header>
 
-    <article class="prose mt-8">
-      <Content />
-    </article>
+    <div class="detail-grid">
+      <article class="prose">
+        <h2>老师简介</h2>
+        <p>{teacher.intro || "暂无老师简介。"}</p>
+      </article>
+
+      <aside class="card">
+        <div class="h3">标签</div>
+        {teacher.badges.length ? (
+          <div class="tags">
+            {teacher.badges.map((badge) => (
+              <span class="badge">{badge}</span>
+            ))}
+          </div>
+        ) : (
+          <p class="muted mt-2">暂无标签。</p>
+        )}
+      </aside>
+    </div>
   </main>
 </BaseLayout>

@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { hasAdminSession, unauthorizedJson } from "../../../lib/admin-auth";
 import { saveAdminImage } from "../../../lib/admin-image-upload";
 
 function json(data: unknown, status = 200) {
@@ -8,8 +9,13 @@ function json(data: unknown, status = 200) {
   });
 }
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async (context) => {
+  if (!(await hasAdminSession(context))) {
+    return unauthorizedJson();
+  }
+
   try {
+    const { request } = context;
     const form = await request.formData();
     const file = form.get("file");
 

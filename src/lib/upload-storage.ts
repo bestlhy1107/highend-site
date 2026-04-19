@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 const DEFAULT_UPLOAD_ROOT = resolve(process.cwd(), "public", "uploads");
 
@@ -9,8 +9,9 @@ export const UPLOAD_ROOT =
 export function safeUploadPath(...parts: string[]) {
   const root = resolve(UPLOAD_ROOT);
   const target = resolve(root, ...parts);
+  const pathFromRoot = relative(root, target);
 
-  if (!target.startsWith(root)) {
+  if (pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) {
     throw new Error("非法文件路径");
   }
 

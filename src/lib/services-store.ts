@@ -1,5 +1,16 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  compareByOrder,
+  readJsonArrayFile,
+  writeJsonArrayFile,
+} from "./json-file-store";
+import {
+  normalizeFaqArray,
+  normalizeStringArray,
+  parseFaqLines,
+  slugify,
+  splitCsv,
+  splitLines,
+} from "./text-fields";
 
 export type RuntimeServiceFaq = {
   q: string;
@@ -43,19 +54,6 @@ const DEFAULT_SERVICES: RuntimeService[] = [
   },
 ];
 
-function getServicesFilePath() {
-  return join(process.cwd(), "data", "services.json");
-}
-
-function slugify(input: string) {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 function normalizeService(input: Partial<RuntimeService>): RuntimeService {
   return {
     id: String(input.id ?? "").trim(),
@@ -67,37 +65,24 @@ function normalizeService(input: Partial<RuntimeService>): RuntimeService {
     heroImage: String(input.heroImage ?? "").trim(),
     officialRegisterUrl: String(input.officialRegisterUrl ?? "").trim(),
     summary: String(input.summary ?? "").trim(),
-    highlights: Array.isArray(input.highlights)
-      ? input.highlights.map((s) => String(s)).filter(Boolean)
-      : [],
-    faqs: Array.isArray(input.faqs)
-      ? input.faqs
-          .map((item) => ({
-            q: String(item?.q ?? "").trim(),
-            a: String(item?.a ?? "").trim(),
-          }))
-          .filter((item) => item.q && item.a)
-      : [],
-    tags: Array.isArray(input.tags)
-      ? input.tags.map((s) => String(s)).filter(Boolean)
-      : [],
+    highlights: normalizeStringArray(input.highlights),
+    faqs: normalizeFaqArray(input.faqs),
+    tags: normalizeStringArray(input.tags),
   };
 }
 
+function isValidService(item: RuntimeService) {
+  return Boolean(item.id && item.title);
+}
+
 export async function readServices(): Promise<RuntimeService[]> {
-  try {
-    const raw = await readFile(getServicesFilePath(), "utf8");
-    const parsed = JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) return DEFAULT_SERVICES;
-
-    return parsed
-      .map(normalizeService)
-      .filter((item) => item.id && item.title)
-      .sort((a, b) => a.order - b.order);
-  } catch {
-    return DEFAULT_SERVICES;
-  }
+  return readJsonArrayFile({
+    fileName: "services.json",
+    fallback: DEFAULT_SERVICES,
+    normalize: normalizeService,
+    isValid: isValidService,
+    compare: compareByOrder,
+  });
 }
 
 export async function readServiceById(id: string) {
@@ -106,21 +91,12 @@ export async function readServiceById(id: string) {
 }
 
 export async function writeServices(services: RuntimeService[]) {
-  const dir = join(process.cwd(), "data");
-  await mkdir(dir, { recursive: true });
-
-  const normalized = services
-    .map(normalizeService)
-    .filter((item) => item.id && item.title)
-    .sort((a, b) => a.order - b.order);
-
-  await writeFile(
-    getServicesFilePath(),
-    JSON.stringify(normalized, null, 2),
-    "utf8"
-  );
-
-  return normalized;
+  return writeJsonArrayFile(services, {
+    fileName: "services.json",
+    normalize: normalizeService,
+    isValid: isValidService,
+    compare: compareByOrder,
+  });
 }
 
 export async function upsertService(input: {
@@ -154,26 +130,9 @@ export async function upsertService(input: {
     heroImage: String(input.heroImage ?? "").trim(),
     officialRegisterUrl: String(input.officialRegisterUrl ?? "").trim(),
     summary: String(input.summary ?? "").trim(),
-    highlights: String(input.highlights ?? "")
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    faqs: String(input.faqs ?? "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const parts = line.split("|");
-        return {
-          q: String(parts[0] ?? "").trim(),
-          a: String(parts[1] ?? "").trim(),
-        };
-      })
-      .filter((item) => item.q && item.a),
-    tags: String(input.tags ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
+    highlights: splitLines(input.highlights),
+    faqs: parseFaqLines(input.faqs),
+    tags: splitCsv(input.tags),
   };
 
   const index = services.findIndex((item) => item.id === id);

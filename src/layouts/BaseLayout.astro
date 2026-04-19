@@ -15,6 +15,7 @@ const {
 } = Astro.props as Props;
 
 const site = await readSiteSettings();
+const currentPath = Astro.url.pathname;
 ---
 
 <!doctype html>
@@ -28,7 +29,7 @@ const site = await readSiteSettings();
   <body>
     <a class="skip-link" href="#main">跳到正文</a>
 
-    <SiteHeader brand={site.companyName} />
+    <SiteHeader brand={site.companyName} currentPath={currentPath} />
 
     <div id="main">
       <slot />

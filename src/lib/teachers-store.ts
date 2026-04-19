@@ -1,5 +1,9 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  compareByOrder,
+  readJsonArrayFile,
+  writeJsonArrayFile,
+} from "./json-file-store";
+import { normalizeStringArray, splitCsv } from "./text-fields";
 
 export type RuntimeTeacher = {
   id: string;
@@ -25,10 +29,6 @@ const DEFAULT_TEACHERS: RuntimeTeacher[] = [
   },
 ];
 
-function getTeachersFilePath() {
-  return join(process.cwd(), "data", "teachers.json");
-}
-
 function normalizeTeacher(input: Partial<RuntimeTeacher>): RuntimeTeacher {
   return {
     id: String(input.id ?? "").trim(),
@@ -37,43 +37,37 @@ function normalizeTeacher(input: Partial<RuntimeTeacher>): RuntimeTeacher {
     order: Number(input.order ?? 999),
     avatar: String(input.avatar ?? "").trim(),
     intro: String(input.intro ?? "").trim(),
-    specialties: Array.isArray(input.specialties) ? input.specialties : [],
-    badges: Array.isArray(input.badges) ? input.badges : [],
+    specialties: normalizeStringArray(input.specialties),
+    badges: normalizeStringArray(input.badges),
   };
 }
 
+function isValidTeacher(teacher: RuntimeTeacher) {
+  return Boolean(teacher.id && teacher.name);
+}
+
 export async function readTeachers(): Promise<RuntimeTeacher[]> {
-  try {
-    const raw = await readFile(getTeachersFilePath(), "utf8");
-    const parsed = JSON.parse(raw);
+  return readJsonArrayFile({
+    fileName: "teachers.json",
+    fallback: DEFAULT_TEACHERS,
+    normalize: normalizeTeacher,
+    isValid: isValidTeacher,
+    compare: compareByOrder,
+  });
+}
 
-    if (!Array.isArray(parsed)) return DEFAULT_TEACHERS;
-
-    return parsed
-      .map(normalizeTeacher)
-      .filter((t) => t.id && t.name)
-      .sort((a, b) => a.order - b.order);
-  } catch {
-    return DEFAULT_TEACHERS;
-  }
+export async function readTeacherById(id: string) {
+  const teachers = await readTeachers();
+  return teachers.find((teacher) => teacher.id === id) ?? null;
 }
 
 export async function writeTeachers(teachers: RuntimeTeacher[]) {
-  const dir = join(process.cwd(), "data");
-  await mkdir(dir, { recursive: true });
-
-  const normalized = teachers
-    .map(normalizeTeacher)
-    .filter((t) => t.id && t.name)
-    .sort((a, b) => a.order - b.order);
-
-  await writeFile(
-    getTeachersFilePath(),
-    JSON.stringify(normalized, null, 2),
-    "utf8"
-  );
-
-  return normalized;
+  return writeJsonArrayFile(teachers, {
+    fileName: "teachers.json",
+    normalize: normalizeTeacher,
+    isValid: isValidTeacher,
+    compare: compareByOrder,
+  });
 }
 
 export async function upsertTeacher(input: {
@@ -100,14 +94,8 @@ export async function upsertTeacher(input: {
     order: Number(input.order),
     avatar: String(input.avatar ?? "").trim(),
     intro: String(input.intro ?? "").trim(),
-    specialties: String(input.specialties ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    badges: String(input.badges ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
+    specialties: splitCsv(input.specialties),
+    badges: splitCsv(input.badges),
   };
 
   const index = teachers.findIndex((t) => t.id === id);

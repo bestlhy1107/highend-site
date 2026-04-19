@@ -19,6 +19,16 @@ const teachers = await readTeachers();
 const scores = await getCollection("scores");
 const services = await readServices();
 const exams = await readExams();
+const contactOptions = Array.from(
+  new Set(
+    [
+      ...exams.map((exam) => exam.title),
+      ...services.map((service) => service.title),
+    ]
+      .map((item) => item.trim())
+      .filter(Boolean)
+  )
+);
 ---
 
 <BaseLayout
@@ -138,7 +148,7 @@ const exams = await readExams();
     </section>
 
     <section class="section-block compact-top">
-      <ContactSection site={site} />
+      <ContactSection site={site} examOptions={contactOptions} />
     </section>
   </main>
 </BaseLayout>

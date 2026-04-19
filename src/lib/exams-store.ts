@@ -1,5 +1,16 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  compareByOrder,
+  readJsonArrayFile,
+  writeJsonArrayFile,
+} from "./json-file-store";
+import {
+  normalizeFaqArray,
+  normalizeStringArray,
+  parseFaqLines,
+  slugify,
+  splitCsv,
+  splitLines,
+} from "./text-fields";
 
 export type RuntimeExamFaq = {
   q: string;
@@ -35,19 +46,6 @@ const DEFAULT_EXAMS: RuntimeExam[] = [
   },
 ];
 
-function getExamsFilePath() {
-  return join(process.cwd(), "data", "exams.json");
-}
-
-function slugify(input: string) {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 function normalizeExam(input: Partial<RuntimeExam>): RuntimeExam {
   return {
     id: String(input.id ?? "").trim(),
@@ -55,37 +53,24 @@ function normalizeExam(input: Partial<RuntimeExam>): RuntimeExam {
     subtitle: String(input.subtitle ?? "").trim(),
     order: Number(input.order ?? 999),
     summary: String(input.summary ?? "").trim(),
-    highlights: Array.isArray(input.highlights)
-      ? input.highlights.map((s) => String(s)).filter(Boolean)
-      : [],
-    faqs: Array.isArray(input.faqs)
-      ? input.faqs
-          .map((item) => ({
-            q: String(item?.q ?? "").trim(),
-            a: String(item?.a ?? "").trim(),
-          }))
-          .filter((item) => item.q && item.a)
-      : [],
-    tags: Array.isArray(input.tags)
-      ? input.tags.map((s) => String(s)).filter(Boolean)
-      : [],
+    highlights: normalizeStringArray(input.highlights),
+    faqs: normalizeFaqArray(input.faqs),
+    tags: normalizeStringArray(input.tags),
   };
 }
 
+function isValidExam(item: RuntimeExam) {
+  return Boolean(item.id && item.title);
+}
+
 export async function readExams(): Promise<RuntimeExam[]> {
-  try {
-    const raw = await readFile(getExamsFilePath(), "utf8");
-    const parsed = JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) return DEFAULT_EXAMS;
-
-    return parsed
-      .map(normalizeExam)
-      .filter((item) => item.id && item.title)
-      .sort((a, b) => a.order - b.order);
-  } catch {
-    return DEFAULT_EXAMS;
-  }
+  return readJsonArrayFile({
+    fileName: "exams.json",
+    fallback: DEFAULT_EXAMS,
+    normalize: normalizeExam,
+    isValid: isValidExam,
+    compare: compareByOrder,
+  });
 }
 
 export async function readExamById(id: string) {
@@ -94,16 +79,12 @@ export async function readExamById(id: string) {
 }
 
 export async function writeExams(exams: RuntimeExam[]) {
-  const dir = join(process.cwd(), "data");
-  await mkdir(dir, { recursive: true });
-
-  const normalized = exams
-    .map(normalizeExam)
-    .filter((item) => item.id && item.title)
-    .sort((a, b) => a.order - b.order);
-
-  await writeFile(getExamsFilePath(), JSON.stringify(normalized, null, 2), "utf8");
-  return normalized;
+  return writeJsonArrayFile(exams, {
+    fileName: "exams.json",
+    normalize: normalizeExam,
+    isValid: isValidExam,
+    compare: compareByOrder,
+  });
 }
 
 export async function upsertExam(input: {
@@ -129,26 +110,9 @@ export async function upsertExam(input: {
     subtitle: String(input.subtitle ?? "").trim(),
     order: Number(input.order),
     summary: String(input.summary ?? "").trim(),
-    highlights: String(input.highlights ?? "")
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    faqs: String(input.faqs ?? "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const parts = line.split("|");
-        return {
-          q: String(parts[0] ?? "").trim(),
-          a: String(parts[1] ?? "").trim(),
-        };
-      })
-      .filter((item) => item.q && item.a),
-    tags: String(input.tags ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
+    highlights: splitLines(input.highlights),
+    faqs: parseFaqLines(input.faqs),
+    tags: splitCsv(input.tags),
   };
 
   const index = exams.findIndex((item) => item.id === id);

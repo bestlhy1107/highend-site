@@ -1,269 +1,176 @@
 import type { APIRoute } from "astro";
 import Parser from "rss-parser";
 
+type NewsTag = "toefl" | "ielts" | "gre" | "det" | "toeic";
+
 type NewsItem = {
   title: string;
   link: string;
   pubDate?: string;
   source: string;
   snippet?: string;
-  tag: "all" | "toefl" | "ielts" | "gre" | "det" | "toeic";
+  tag: NewsTag;
 };
-
-type Tag = NewsItem["tag"];
 
 type SourceConfig = {
   source: string;
-  tag: Exclude<Tag, "all">;
+  tag: NewsTag;
   feed: string;
 };
 
 const parser = new Parser();
+const CACHE_TTL = 10 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 4500;
 
-const TTL = 10 * 60 * 1000;
-const cache = new Map<string, { ts: number; items: NewsItem[] }>();
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
-}
+const cache = new Map<string, { time: number; items: NewsItem[] }>();
 
 function googleNewsRss(query: string) {
-  return `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+  const q = `${query} when:90d`;
+  return `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
 }
 
-const SOURCE_CONFIGS: SourceConfig[] = [
+const SOURCES: SourceConfig[] = [
   {
-    source: "TOEFL / ETS",
+    source: "TOEFL News",
     tag: "toefl",
-    feed: googleNewsRss(
-      '(site:ets.org/toefl OR site:toefltest.com OR site:toeflaccess.ets.org) (TOEFL OR "TOEFL iBT")'
-    ),
+    feed: googleNewsRss('TOEFL OR "TOEFL iBT" OR "ETS TOEFL"'),
   },
   {
-    source: "IELTS Official",
+    source: "IELTS News",
     tag: "ielts",
-    feed: googleNewsRss(
-      '(site:ielts.org/news-and-insights OR site:ielts.org) IELTS'
-    ),
+    feed: googleNewsRss('IELTS OR "British Council IELTS" OR "IDP IELTS"'),
   },
   {
-    source: "GRE / ETS",
+    source: "GRE News",
     tag: "gre",
-    feed: googleNewsRss(
-      '(site:ets.org/gre OR site:ets.org/news) GRE'
-    ),
+    feed: googleNewsRss('GRE OR "ETS GRE" OR "Graduate Record Examination"'),
   },
   {
-    source: "DET Official",
+    source: "DET News",
     tag: "det",
-    feed: googleNewsRss(
-      '(site:blog.englishtest.duolingo.com OR site:englishtest.duolingo.com) ("Duolingo English Test" OR DET)'
-    ),
+    feed: googleNewsRss('"Duolingo English Test" OR DET'),
   },
   {
-    source: "TOEIC / ETS Global",
+    source: "TOEIC News",
     tag: "toeic",
-    feed: googleNewsRss(
-      '(site:etsglobal.org OR site:ets.org) TOEIC'
-    ),
+    feed: googleNewsRss('TOEIC OR "ETS TOEIC"'),
   },
 ];
 
-const FALLBACK: Record<Tag, NewsItem[]> = {
-  all: [
-    {
-      title: "考试动态源已重构完成，默认流只展示考试相关资讯",
-      link: "/#news",
-      pubDate: new Date().toISOString(),
-      source: "Wanhe Education",
-      snippet: "当前默认资讯流已经从综合新闻切换为考试垂类流，后续你只需要继续微调来源和排序规则。",
-      tag: "all",
+function json(data: unknown) {
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, max-age=300",
     },
-    {
-      title: "下一步可继续增加：申请截止日期、奖学金、院校语言要求更新",
-      link: "/#news",
-      pubDate: new Date().toISOString(),
-      source: "Wanhe Education",
-      snippet: "这样首页动态会更贴合留学申请咨询场景，而不只是单纯的考试资讯。",
-      tag: "all",
-    },
-  ],
-  toefl: [
-    {
-      title: "TOEFL 分类源已切换为 ETS / TOEFL 相关域名",
-      link: "/#news",
-      pubDate: new Date().toISOString(),
-      source: "Wanhe Education",
-      snippet: "如果当前时段官方结果较少，会先显示这条兜底内容，避免版面空白。",
-      tag: "toefl",
-    },
-  ],
-  ielts: [
-    {
-      title: "IELTS 分类源已切换为 IELTS 官方资讯域名",
-      link: "/#news",
-      pubDate: new Date().toISOString(),
-      source: "Wanhe Education",
-      snippet: "如果当前时段官方结果较少，会先显示这条兜底内容，避免版面空白。",
-      tag: "ielts",
-    },
-  ],
-  gre: [
-    {
-      title: "GRE 分类源已切换为 ETS GRE 相关域名",
-      link: "/#news",
-      pubDate: new Date().toISOString(),
-      source: "Wanhe Education",
-      snippet: "如果当前时段官方结果较少，会先显示这条兜底内容，避免版面空白。",
-      tag: "gre",
-    },
-  ],
-  det: [
-    {
-      title: "DET 分类源已切换为 Duolingo English Test 官方域名",
-      link: "/#news",
-      pubDate: new Date().toISOString(),
-      source: "Wanhe Education",
-      snippet: "如果当前时段官方结果较少，会先显示这条兜底内容，避免版面空白。",
-      tag: "det",
-    },
-  ],
-  toeic: [
-    {
-      title: "TOEIC 分类源已切换为 ETS Global / ETS 相关域名",
-      link: "/#news",
-      pubDate: new Date().toISOString(),
-      source: "Wanhe Education",
-      snippet: "如果当前时段官方结果较少，会先显示这条兜底内容，避免版面空白。",
-      tag: "toeic",
-    },
-  ],
-};
-
-function stripHtml(input?: string) {
-  return (input ?? "")
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeLink(link?: string) {
-  if (!link) return "";
-  try {
-    const url = new URL(link);
-    url.searchParams.delete("utm_source");
-    url.searchParams.delete("utm_medium");
-    url.searchParams.delete("utm_campaign");
-    return url.toString();
-  } catch {
-    return link;
-  }
-}
-
-function dedupe(items: NewsItem[]) {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const key = `${item.title}__${item.link}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
   });
 }
 
-async function fetchSource(config: SourceConfig): Promise<NewsItem[]> {
+function clampLimit(value: string | null) {
+  const parsed = Number(value ?? 6);
+  if (!Number.isFinite(parsed)) return 6;
+  return Math.min(Math.max(Math.trunc(parsed), 1), 12);
+}
+
+function normalizeTag(value: string | null): NewsTag | "all" {
+  const tag = String(value ?? "all").toLowerCase();
+  return tag === "toefl" ||
+    tag === "ielts" ||
+    tag === "gre" ||
+    tag === "det" ||
+    tag === "toeic"
+    ? tag
+    : "all";
+}
+
+function cleanSnippet(input?: string) {
+  return String(input ?? "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
+async function fetchTextWithTimeout(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
-    const feed = await parser.parseURL(config.feed);
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "WanheEducationNewsBot/1.0",
+      },
+    });
 
-    return (feed.items ?? [])
-      .map((raw: any) => {
-        const title = String(raw.title ?? "").trim();
-        const link = normalizeLink(raw.link ?? raw.guid ?? "");
-        const snippet = stripHtml(raw.contentSnippet ?? raw.content ?? raw.summary ?? raw.contentEncoded ?? "");
-        const pubDate = raw.isoDate ?? raw.pubDate ?? undefined;
+    if (!response.ok) {
+      throw new Error(`Feed returned ${response.status}`);
+    }
 
-        return {
-          title,
-          link,
-          pubDate,
-          source: config.source,
-          snippet: snippet ? snippet.slice(0, 180) : undefined,
-          tag: config.tag,
-        } satisfies NewsItem;
-      })
-      .filter((item) => item.title && item.link);
+    return response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchSource(source: SourceConfig): Promise<NewsItem[]> {
+  try {
+    const xml = await fetchTextWithTimeout(source.feed);
+    const feed = await parser.parseString(xml);
+
+    return feed.items.slice(0, 8).map((item) => ({
+      title: item.title ?? "Untitled",
+      link: item.link ?? "#",
+      pubDate: item.pubDate ?? item.isoDate,
+      source: item.creator ?? source.source,
+      snippet: cleanSnippet(item.contentSnippet ?? item.content ?? item.summary),
+      tag: source.tag,
+    }));
   } catch {
     return [];
   }
 }
 
-function sortByDateDesc(items: NewsItem[]) {
-  return [...items].sort((a, b) => {
-    const ta = a.pubDate ? new Date(a.pubDate).getTime() : 0;
-    const tb = b.pubDate ? new Date(b.pubDate).getTime() : 0;
-    return tb - ta;
-  });
+async function fetchTag(tag: NewsTag | "all", limit: number) {
+  const cacheKey = `${tag}:${limit}`;
+  const hit = cache.get(cacheKey);
+
+  if (hit && Date.now() - hit.time < CACHE_TTL) {
+    return { items: hit.items, cached: true };
+  }
+
+  const sources = tag === "all" ? SOURCES : SOURCES.filter((item) => item.tag === tag);
+  const settled = await Promise.allSettled(sources.map(fetchSource));
+  const seen = new Set<string>();
+
+  const items = settled
+    .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+    .filter((item) => {
+      const key = `${item.link}|${item.title}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => {
+      const ta = new Date(a.pubDate ?? 0).getTime();
+      const tb = new Date(b.pubDate ?? 0).getTime();
+      return tb - ta;
+    })
+    .slice(0, limit);
+
+  cache.set(cacheKey, { time: Date.now(), items });
+  return { items, cached: false };
 }
 
 export const GET: APIRoute = async ({ url }) => {
-  const tag = (url.searchParams.get("tag") || "all").toLowerCase() as Tag;
-  const limitRaw = Number(url.searchParams.get("limit") || 6);
-  const limit = Math.min(Math.max(limitRaw, 1), 12);
-
-  const safeTag: Tag = ["all", "toefl", "ielts", "gre", "det", "toeic"].includes(tag)
-    ? tag
-    : "all";
-
-  const cacheKey = `${safeTag}:${limit}`;
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < TTL) {
-    return json({
-      ok: true,
-      tag: safeTag,
-      items: cached.items,
-      cached: true,
-    });
-  }
-
-  const activeSources =
-    safeTag === "all"
-      ? SOURCE_CONFIGS
-      : SOURCE_CONFIGS.filter((s) => s.tag === safeTag);
-
-  const fetchedGroups = await Promise.all(activeSources.map(fetchSource));
-  let items = sortByDateDesc(dedupe(fetchedGroups.flat()));
-
-  if (safeTag !== "all") {
-    items = items.filter((item) => item.tag === safeTag);
-  }
-
-  const finalItems =
-    items.length > 0
-      ? items.slice(0, limit)
-      : (FALLBACK[safeTag] || FALLBACK.all).slice(0, limit);
-
-  cache.set(cacheKey, {
-    ts: Date.now(),
-    items: finalItems,
-  });
+  const tag = normalizeTag(url.searchParams.get("tag"));
+  const limit = clampLimit(url.searchParams.get("limit"));
+  const { items, cached } = await fetchTag(tag, limit);
 
   return json({
     ok: true,
-    tag: safeTag,
-    items: finalItems,
-    cached: false,
-    sourceCount: activeSources.length,
+    tag,
+    items,
+    cached,
   });
 };

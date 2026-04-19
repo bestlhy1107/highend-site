@@ -1,42 +1,50 @@
 ---
+export const prerender = false;
+
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { getCollection, getEntry } from "astro:content";
+import { readSiteSettings } from "../../lib/site-store";
+import { readExams } from "../../lib/exams-store";
 
-const site = await getEntry("site", "main");
-if (!site) throw new Error("Missing src/content/site/main.json");
-
-const exams = await getCollection("exams");
-const items = [...exams].sort((a, b) => (a.data.order ?? 999) - (b.data.order ?? 999));
+const site = await readSiteSettings();
+const exams = await readExams();
 ---
 
-<BaseLayout title={`考试服务 · ${site.data.companyName ?? ""}`} description="TOEFL / IELTS / GRE 等考试服务介绍">
-  <main class="container">
-    <a class="breadcrumb" href="/#exams">← 返回首页</a>
+<BaseLayout title={`考试服务 · ${site.companyName}`} description="TOEFL / IELTS / GRE 等考试服务介绍">
+  <main class="container page">
+    <a class="breadcrumb" href="/">← 返回首页</a>
 
-    <header class="detail-hero reveal">
-      <h1 class="text-3xl font-semibold tracking-tight">考试服务</h1>
-      <p class="mt-2 text-slate-600">选择考试类型进入详情页</p>
+    <header class="page-hero">
+      <div class="section-kicker">Exams</div>
+      <h1 class="section-title">考试服务</h1>
+      <p class="section-desc">选择考试类型进入详情页</p>
     </header>
 
-    <section class="mt-8 cards cards--3">
-      {items.map((e) => (
-        <a class="card card--hover" href={`/exams/${e.id}`}>
-          <div class="card-top">
-            <h3 class="h3">{e.data.title}</h3>
-          </div>
-          <p class="muted">{e.data.subtitle ?? ""}</p>
-
-          {e.data.tags?.length ? (
-            <div class="tags">
-              {(e.data.tags ?? []).slice(0, 4).map((t: string) => (
-                <span class="tag">{t}</span>
-              ))}
+    {exams.length ? (
+      <section class="mt-8 cards cards--3">
+        {exams.map((exam) => (
+          <a class="card card--hover" href={`/exams/${exam.id}`}>
+            <div class="card-top">
+              <h3 class="h3">{exam.title}</h3>
+              <div class="badge">#{exam.order}</div>
             </div>
-          ) : null}
+            {exam.subtitle ? <p class="muted mt-2">{exam.subtitle}</p> : null}
 
-          <div class="card-cta">查看详情 →</div>
-        </a>
-      ))}
-    </section>
+            {exam.tags.length ? (
+              <div class="tags">
+                {exam.tags.slice(0, 4).map((tag) => (
+                  <span class="tag">{tag}</span>
+                ))}
+              </div>
+            ) : null}
+
+            <div class="card-cta">查看详情 →</div>
+          </a>
+        ))}
+      </section>
+    ) : (
+      <div class="card mt-4">
+        <div class="h3">暂无考试服务</div>
+      </div>
+    )}
   </main>
 </BaseLayout>

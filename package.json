@@ -2,21 +2,18 @@
   "name": "highend-site",
   "type": "module",
   "version": "0.0.1",
-"scripts": {
-  "dev": "astro dev",
-  "build": "astro build --remote",
-  "preview": "astro preview",
-  "start": "npx @dotenvx/dotenvx run -- node ./dist/server/entry.mjs"
-},
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build --remote",
+    "preview": "astro preview",
+    "start": "npx @dotenvx/dotenvx run -- node ./dist/server/entry.mjs"
+  },
   "dependencies": {
     "@astrojs/db": "^0.20.1",
     "@astrojs/node": "^9.5.2",
-    "@tailwindcss/vite": "^4.1.18",
     "astro": "^5.16.9",
-    "fast-xml-parser": "^5.5.6",
     "nodemailer": "^7.0.13",
-    "rss-parser": "^3.13.0",
-    "tailwindcss": "^4.1.18"
+    "rss-parser": "^3.13.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^7.0.11"

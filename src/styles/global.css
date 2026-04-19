@@ -291,15 +291,13 @@ button.btn {
   transform: translateY(0);
 }
 
-.btn,
-.btn--primary {
+.btn {
   color: #fff;
   background: linear-gradient(135deg, var(--pink), var(--orange));
   box-shadow: 0 14px 28px rgba(255, 79, 163, 0.22);
 }
 
-.btn:hover,
-.btn--primary:hover {
+.btn:hover {
   box-shadow: 0 18px 32px rgba(255, 79, 163, 0.28);
 }
 
@@ -314,12 +312,6 @@ button.btn {
 .btn-ghost:hover,
 .btn-ghost-dark:hover {
   background: #fff;
-}
-
-.btn--small {
-  min-height: 38px;
-  padding: 0 14px;
-  font-size: 14px;
 }
 
 /* ===== Hero ===== */
@@ -823,8 +815,7 @@ button.btn {
   margin-top: 16px;
 }
 
-.news-card,
-.news-item {
+.news-card {
   display: block;
   padding: 18px;
   border-radius: var(--radius-md);
@@ -834,8 +825,7 @@ button.btn {
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-.news-card:hover,
-.news-item:hover {
+.news-card:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-md);
 }
@@ -849,16 +839,14 @@ button.btn {
   margin-bottom: 8px;
 }
 
-.news-card-title,
-.news-title {
+.news-card-title {
   font-size: 18px;
   line-height: 1.45;
   font-weight: 900;
   color: var(--text);
 }
 
-.news-card-date,
-.news-meta {
+.news-card-date {
   margin-top: 8px;
   font-size: 12px;
   color: var(--muted);
@@ -1137,13 +1125,30 @@ textarea.input {
   }
 }
 
-css .contact-submit-btn[disabled] {
-  cursor: not-allowed;
-  opacity: 0.78;
-  transform: none;
-  box-shadow: none;
+.avatar,
+.detail-hero-img,
+.score-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
 }
 
-.contact-submit-btn.is-loading {
-  position: relative;
+.avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 18px;
+  object-fit: cover;
+}
+
+.detail-hero-img {
+  aspect-ratio: 16 / 10;
+  border-radius: 24px;
+  object-fit: cover;
+}
+
+.score-img {
+  aspect-ratio: 3 / 4;
+  border-radius: 18px;
+  object-fit: cover;
 }
