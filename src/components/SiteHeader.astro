@@ -11,7 +11,7 @@ const nav = [
   { label: "服务", href: "/services", match: (p: string) => p.startsWith("/services") },
   { label: "考试", href: "/exams", match: (p: string) => p.startsWith("/exams") },
   { label: "师资", href: "/teachers", match: (p: string) => p.startsWith("/teachers") },
-  { label: "动态", href: "/#news", match: (p: string) => p === "/" },
+  { label: "动态", href: "/#news", match: (_p: string) => false },
   { label: "联系", href: "/#contact", match: (_p: string) => false },
 ];
 ---

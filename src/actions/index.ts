@@ -83,43 +83,49 @@ contactLead: defineAction({
       source: input.source,
     });
 
+    let emailSent = false;
+
     if (transporter) {
-      await transporter.verify();
+      try {
+        const to = LEAD_TO_EMAIL || SMTP_USER;
+        const from = MAIL_FROM || SMTP_USER;
 
-      const to = LEAD_TO_EMAIL || SMTP_USER;
-      const from = MAIL_FROM || SMTP_USER;
+        const appointmentTypeLabel =
+          input.appointmentType === "trial" ? "预约试听" : "预约咨询";
 
-      const appointmentTypeLabel =
-        input.appointmentType === "trial" ? "预约试听" : "预约咨询";
+        await transporter.sendMail({
+          from,
+          to,
+          subject: `【新预约】${input.name} - ${input.examType} - ${input.contact}`,
+          text: [
+            `线索ID：${savedLead.id}`,
+            `姓名：${input.name}`,
+            `联系方式：${input.contact}`,
+            `预约类型：${appointmentTypeLabel}`,
+            `考试类型：${input.examType}`,
+            `期望时间：${input.preferredTime}`,
+            `需求：${input.need}`,
+            `来源：${input.source ?? "homepage"}`,
+            `提交时间：${submittedAt}`,
+          ].join("\n"),
+          html: `
+            <h2>收到新的预约表单</h2>
+            <p><strong>线索ID：</strong>${savedLead.id}</p>
+            <p><strong>姓名：</strong>${input.name}</p>
+            <p><strong>联系方式：</strong>${input.contact}</p>
+            <p><strong>预约类型：</strong>${appointmentTypeLabel}</p>
+            <p><strong>考试类型：</strong>${input.examType}</p>
+            <p><strong>期望时间：</strong>${input.preferredTime}</p>
+            <p><strong>需求：</strong>${input.need}</p>
+            <p><strong>来源：</strong>${input.source ?? "homepage"}</p>
+            <p><strong>提交时间：</strong>${submittedAt}</p>
+          `,
+        });
 
-      await transporter.sendMail({
-        from,
-        to,
-        subject: `【新预约】${input.name} - ${input.examType} - ${input.contact}`,
-        text: [
-          `线索ID：${savedLead.id}`,
-          `姓名：${input.name}`,
-          `联系方式：${input.contact}`,
-          `预约类型：${appointmentTypeLabel}`,
-          `考试类型：${input.examType}`,
-          `期望时间：${input.preferredTime}`,
-          `需求：${input.need}`,
-          `来源：${input.source ?? "homepage"}`,
-          `提交时间：${submittedAt}`,
-        ].join("\n"),
-        html: `
-          <h2>收到新的预约表单</h2>
-          <p><strong>线索ID：</strong>${savedLead.id}</p>
-          <p><strong>姓名：</strong>${input.name}</p>
-          <p><strong>联系方式：</strong>${input.contact}</p>
-          <p><strong>预约类型：</strong>${appointmentTypeLabel}</p>
-          <p><strong>考试类型：</strong>${input.examType}</p>
-          <p><strong>期望时间：</strong>${input.preferredTime}</p>
-          <p><strong>需求：</strong>${input.need}</p>
-          <p><strong>来源：</strong>${input.source ?? "homepage"}</p>
-          <p><strong>提交时间：</strong>${submittedAt}</p>
-        `,
-      });
+        emailSent = true;
+      } catch (error) {
+        console.error("Failed to send lead notification email", error);
+      }
     }
 
     return {
@@ -128,6 +134,7 @@ contactLead: defineAction({
       submittedAt,
       leadId: savedLead.id,
       source: input.source ?? "homepage",
+      emailSent,
     };
   },
 }),
