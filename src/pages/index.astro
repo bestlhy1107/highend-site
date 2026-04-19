@@ -2,10 +2,10 @@
 export const prerender = false;
 
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { getCollection } from "astro:content";
 import { readSiteSettings } from "../lib/site-store";
 import { readTeachers } from "../lib/teachers-store";
 import { readServices } from "../lib/services-store";
+import { readScores } from "../lib/scores-store";
 
 import ScoreCarousel from "../components/ScoreCarousel.astro";
 import ServiceGrid from "../components/ServiceGrid.astro";
@@ -16,7 +16,7 @@ import { readExams } from "../lib/exams-store";
 const site = await readSiteSettings();
 const teachers = await readTeachers();
 
-const scores = await getCollection("scores");
+const scores = await readScores();
 const services = await readServices();
 const exams = await readExams();
 const contactOptions = Array.from(

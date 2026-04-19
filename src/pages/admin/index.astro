@@ -8,6 +8,7 @@ import { readSiteSettings } from "../../lib/site-store";
 import { readTeachers } from "../../lib/teachers-store";
 import { readServices } from "../../lib/services-store";
 import { readExams } from "../../lib/exams-store";
+import { readScores } from "../../lib/scores-store";
 import { readLeads } from "../../lib/leads-store";
 
 const adminUser = await Astro.session?.get("adminUser");
@@ -20,6 +21,7 @@ const site = await readSiteSettings();
 const teachers = await readTeachers();
 const services = await readServices();
 const exams = await readExams();
+const scores = await readScores();
 const leads = await readLeads();
 
 const updateLeadResult = Astro.getActionResult(actions.updateLead);
@@ -147,6 +149,15 @@ const latestLeads = leads.slice(0, 10);
         <div class="card-cta">进入管理 →</div>
       </a>
 
+      <a class="card card--hover" href="/admin/scores">
+        <div class="card-top">
+          <div class="h3">出分管理</div>
+          <span class="badge">{scores.length}</span>
+        </div>
+        <p class="muted mt-2">新增、修改、删除出分展示，并上传案例图片。</p>
+        <div class="card-cta">进入管理 →</div>
+      </a>
+
       <a class="card card--hover" href="#leads">
         <div class="card-top">
           <div class="h3">咨询管理</div>
@@ -214,6 +225,11 @@ const latestLeads = leads.slice(0, 10);
             <div class="card">
               <div class="muted text-sm">考试数量</div>
               <div class="h2 mt-2">{exams.length}</div>
+            </div>
+
+            <div class="card">
+              <div class="muted text-sm">出分案例</div>
+              <div class="h2 mt-2">{scores.length}</div>
             </div>
           </div>
         </div>

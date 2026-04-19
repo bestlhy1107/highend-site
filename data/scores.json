@@ -1,0 +1,16 @@
+[
+  {
+    "id": "score-1",
+    "exam": "TOEFL",
+    "scoreText": "托福 110（口语 27）",
+    "highlight": "4 周冲刺，口语从 20 → 27",
+    "date": "2026-01",
+    "image": "/scores/toefl-110.svg",
+    "order": 1,
+    "tags": [
+      "TOEFL",
+      "口语",
+      "冲刺"
+    ]
+  }
+]

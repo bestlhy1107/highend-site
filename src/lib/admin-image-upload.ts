@@ -23,7 +23,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 
 export async function saveAdminImage(
   file: File,
-  folder: "teachers" | "services"
+  folder: "teachers" | "services" | "scores"
 ) {
   if (!ALLOWED_TYPES.has(file.type)) {
     throw new Error("仅支持 jpg / png / webp / gif / svg");

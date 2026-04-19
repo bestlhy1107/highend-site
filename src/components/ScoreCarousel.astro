@@ -1,8 +1,8 @@
 ---
-import type { CollectionEntry } from "astro:content";
-type ScoreEntry = CollectionEntry<"scores">;
+import { normalizeImageUrl } from "../lib/image-url";
+import type { RuntimeScore } from "../lib/scores-store";
 
-type Props = { scores: ScoreEntry[] };
+type Props = { scores: RuntimeScore[] };
 const { scores } = Astro.props as Props;
 ---
 
@@ -24,17 +24,17 @@ const { scores } = Astro.props as Props;
                 scores.map((s) => (
                     <div class="card score-card">
                         <div class="muted text-sm">
-                            {s.data.exam}
-                            {s.data.date ? ` · ${s.data.date}` : ""}
+                            {s.exam}
+                            {s.date ? ` · ${s.date}` : ""}
                         </div>
-                        <div class="h3 mt-2">{s.data.scoreText}</div>
-                        {s.data.highlight ? (
-                            <div class="muted mt-1">{s.data.highlight}</div>
+                        <div class="h3 mt-2">{s.scoreText}</div>
+                        {s.highlight ? (
+                            <div class="muted mt-1">{s.highlight}</div>
                         ) : null}
                         <img
                             class="score-img"
-                            src={s.data.image}
-                            alt={String(s.data.scoreText ?? s.data.exam ?? "")}
+                            src={normalizeImageUrl(s.image)}
+                            alt={String(s.scoreText ?? s.exam ?? "")}
                         />
                     </div>
                 ))

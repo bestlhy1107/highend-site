@@ -5,6 +5,7 @@ import { writeSiteSettings } from "../lib/site-store";
 import { upsertTeacher, deleteTeacher } from "../lib/teachers-store";
 import { upsertService, deleteService } from "../lib/services-store";
 import { upsertExam, deleteExam } from "../lib/exams-store";
+import { upsertScore, deleteScore } from "../lib/scores-store";
 import {
   createLead,
   updateLeadById,
@@ -306,6 +307,43 @@ contactLead: defineAction({
       return {
         ok: true,
         message: "考试已删除",
+      };
+    },
+  }),
+
+  saveScore: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().optional(),
+      exam: z.string().optional(),
+      scoreText: z.string().min(2, "请输入出分标题"),
+      highlight: z.string().optional(),
+      date: z.string().optional(),
+      image: z.string().min(1, "请填写或上传图片"),
+      order: z.coerce.number().min(0, "请输入正确排序"),
+      tags: z.string().optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      await upsertScore(input);
+      return {
+        ok: true,
+        message: "出分案例已保存",
+      };
+    },
+  }),
+
+  removeScore: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().min(1, "缺少出分案例 ID"),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      await deleteScore(input.id);
+      return {
+        ok: true,
+        message: "出分案例已删除",
       };
     },
   }),

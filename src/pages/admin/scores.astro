@@ -1,0 +1,264 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions, isInputError } from "astro:actions";
+import { readScores } from "../../lib/scores-store";
+import { normalizeImageUrl } from "../../lib/image-url";
+
+const adminUser = await Astro.session?.get("adminUser");
+if (!adminUser) {
+  return Astro.redirect("/admin/login");
+}
+
+const scores = await readScores();
+
+const saveResult = Astro.getActionResult(actions.saveScore);
+const removeResult = Astro.getActionResult(actions.removeScore);
+
+const inputErrors = isInputError(saveResult?.error) ? saveResult.error.fields : {};
+const saveSuccess = saveResult && !saveResult.error ? saveResult.data : null;
+const removeSuccess = removeResult && !removeResult.error ? removeResult.data : null;
+---
+
+<BaseLayout title="管理员后台 - Scores" description="管理出分展示">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Admin</div>
+        <h1 class="section-title">出分展示后台编辑</h1>
+        <p class="section-desc">修改后首页出分展示会立即读取最新案例。</p>
+      </div>
+
+      <a class="btn btn-ghost" href="/admin">返回后台</a>
+    </div>
+
+    {saveSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {saveSuccess.message}
+      </div>
+    )}
+
+    {removeSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {removeSuccess.message}
+      </div>
+    )}
+
+    <div class="contact-shell mt-4">
+      <div class="h3">新增出分案例</div>
+
+      <form method="POST" action={actions.saveScore} class="mt-4 score-form">
+        <div class="form-grid">
+          <div class="form-item">
+            <label class="form-label">考试类型</label>
+            <input class="input" name="exam" type="text" placeholder="TOEFL / IELTS / GRE" />
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">排序</label>
+            <input class="input" name="order" type="number" value="999" required />
+            {inputErrors.order && <p class="form-error">{inputErrors.order.join("，")}</p>}
+          </div>
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">出分标题</label>
+          <input class="input" name="scoreText" type="text" placeholder="托福 110（口语 27）" required />
+          {inputErrors.scoreText && <p class="form-error">{inputErrors.scoreText.join("，")}</p>}
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label">亮点说明</label>
+            <input class="input" name="highlight" type="text" placeholder="4 周冲刺，口语从 20 → 27" />
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">日期</label>
+            <input class="input" name="date" type="text" placeholder="2026-01" />
+          </div>
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">图片路径</label>
+          <input
+            class="input"
+            name="image"
+            type="text"
+            placeholder="/scores/toefl-110.svg"
+            data-score-image-path
+            required
+          />
+          {inputErrors.image && <p class="form-error">{inputErrors.image.join("，")}</p>}
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">上传出分图片</label>
+          <input class="input" type="file" accept="image/*" data-score-image-upload />
+          <p class="muted mt-2" data-score-upload-status></p>
+          <img
+            class="mt-3"
+            data-score-image-preview
+            style="max-width: 220px; border-radius: 16px; display:none;"
+          />
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">标签（逗号分隔）</label>
+          <input class="input" name="tags" type="text" placeholder="TOEFL, 口语, 冲刺" />
+        </div>
+
+        <div class="mt-4">
+          <button class="btn" type="submit">新增出分案例</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="cards mt-6">
+      {scores.map((score) => (
+        <div class="card">
+          <div class="card-top">
+            <div>
+              <div class="h3">{score.scoreText}</div>
+              <div class="muted mt-1">{score.exam}{score.date ? ` · ${score.date}` : ""}</div>
+            </div>
+            <div class="badge">#{score.order}</div>
+          </div>
+
+          <form method="POST" action={actions.saveScore} class="mt-4 score-form">
+            <input type="hidden" name="id" value={score.id} />
+
+            <div class="form-grid">
+              <div class="form-item">
+                <label class="form-label">考试类型</label>
+                <input class="input" name="exam" type="text" value={score.exam} />
+              </div>
+
+              <div class="form-item">
+                <label class="form-label">排序</label>
+                <input class="input" name="order" type="number" value={score.order} required />
+              </div>
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">出分标题</label>
+              <input class="input" name="scoreText" type="text" value={score.scoreText} required />
+            </div>
+
+            <div class="form-grid mt-4">
+              <div class="form-item">
+                <label class="form-label">亮点说明</label>
+                <input class="input" name="highlight" type="text" value={score.highlight ?? ""} />
+              </div>
+
+              <div class="form-item">
+                <label class="form-label">日期</label>
+                <input class="input" name="date" type="text" value={score.date ?? ""} />
+              </div>
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">图片路径</label>
+              <input
+                class="input"
+                name="image"
+                type="text"
+                value={score.image}
+                data-score-image-path
+                required
+              />
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">上传/替换出分图片</label>
+              <input class="input" type="file" accept="image/*" data-score-image-upload />
+              <p class="muted mt-2" data-score-upload-status></p>
+              {score.image ? (
+                <img
+                  class="mt-3"
+                  src={normalizeImageUrl(score.image)}
+                  data-score-image-preview
+                  style="max-width: 220px; border-radius: 16px;"
+                />
+              ) : (
+                <img
+                  class="mt-3"
+                  data-score-image-preview
+                  style="max-width: 220px; border-radius: 16px; display:none;"
+                />
+              )}
+            </div>
+
+            <div class="form-item mt-4">
+              <label class="form-label">标签（逗号分隔）</label>
+              <input class="input" name="tags" type="text" value={score.tags.join(", ")} />
+            </div>
+
+            <div class="mt-4" style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn" type="submit">保存修改</button>
+            </div>
+          </form>
+
+          <form method="POST" action={actions.removeScore} class="mt-3">
+            <input type="hidden" name="id" value={score.id} />
+            <button class="btn btn-ghost" type="submit">删除出分案例</button>
+          </form>
+        </div>
+      ))}
+    </div>
+  </main>
+
+  <script is:inline>
+    (() => {
+      const forms = document.querySelectorAll(".score-form");
+
+      forms.forEach((form) => {
+        const uploadInput = form.querySelector("[data-score-image-upload]");
+        const pathInput = form.querySelector("[data-score-image-path]");
+        const statusEl = form.querySelector("[data-score-upload-status]");
+        const previewEl = form.querySelector("[data-score-image-preview]");
+
+        if (!(uploadInput instanceof HTMLInputElement)) return;
+        if (!(pathInput instanceof HTMLInputElement)) return;
+
+        uploadInput.addEventListener("change", async () => {
+          const file = uploadInput.files?.[0];
+          if (!file) return;
+
+          if (statusEl) statusEl.textContent = "上传中...";
+
+          const formData = new FormData();
+          formData.append("file", file);
+
+          try {
+            const res = await fetch("/api/admin/upload-score-image", {
+              method: "POST",
+              body: formData,
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || !data?.ok) {
+              throw new Error(data?.message || "上传失败");
+            }
+
+            pathInput.value = data.path;
+
+            if (previewEl instanceof HTMLImageElement) {
+              previewEl.src = data.path;
+              previewEl.style.display = "block";
+            }
+
+            if (statusEl) statusEl.textContent = "上传成功";
+          } catch (error) {
+            if (statusEl) {
+              statusEl.textContent =
+                error instanceof Error ? error.message : "上传失败";
+            }
+          }
+        });
+      });
+    })();
+  </script>
+</BaseLayout>
