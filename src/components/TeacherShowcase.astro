@@ -1,4 +1,5 @@
 ---
+import { normalizeImageUrl } from "../lib/image-url";
 type Teacher = {
   id: string;
   name: string;
@@ -52,12 +53,15 @@ const safeTeachers: Teacher[] = Array.isArray(teachers)
         <div class="card card--hover">
           <div class="teacher-top">
             {teacher.avatar ? (
-              <img
-                class="avatar"
-                src={teacher.avatar}
-                alt={teacher.name}
-                loading="lazy"
-              />
+             <img
+  src={normalizeImageUrl(teacher.avatar)}
+  alt={teacher.name}
+  class="avatar"
+  width="96"
+  height="96"
+  loading="lazy"
+  decoding="async"
+/>
             ) : (
               <div class="avatar avatar--ph">
                 {teacher.name.slice(0, 1)}

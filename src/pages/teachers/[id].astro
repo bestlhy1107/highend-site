@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { getCollection, getEntry, render } from "astro:content";
+import { normalizeImageUrl } from "../../lib/image-url";
 
 export async function getStaticPaths() {
   const teachers = await getCollection("teachers");
@@ -29,7 +30,14 @@ const { Content } = await render(teacher);
     <header class="detail-hero reveal">
       <div class="teacher-top">
         {teacher.data.avatar ? (
-          <img class="avatar" src={teacher.data.avatar} alt={teacher.data.name ?? "老师头像"} loading="lazy" />
+<img
+  src={normalizeImageUrl(service.heroImage)}
+  alt={service.title}
+  class="detail-hero-img"
+  width="640"
+  height="420"
+  decoding="async"
+/>
         ) : (
           <div class="avatar avatar--ph">{(teacher.data.name ?? "T").slice(0, 1)}</div>
         )}
