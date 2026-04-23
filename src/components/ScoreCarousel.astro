@@ -4,67 +4,242 @@ import type { RuntimeScore } from "../lib/scores-store";
 
 type Props = { scores: RuntimeScore[] };
 const { scores } = Astro.props as Props;
+const examTypes = Array.from(
+  new Set(
+    scores
+      .map((score) => score.exam.trim())
+      .filter(Boolean)
+  )
+);
 ---
 
-<section id="scores" class="section container" data-carousel-root>
-    <div class="section-head">
-        <div>
-            <h2 class="h2">出分展示</h2>
-            <p class="muted">真实案例滚动展示（后续换成你的截图即可）</p>
-        </div>
-        <div class="btn-row">
-            <button class="btn" type="button" data-prev>←</button>
-            <button class="btn" type="button" data-next>→</button>
-        </div>
+<section id="scores" class="section container" data-score-browser>
+  <div class="section-head">
+    <div>
+      <h2 class="h2">出分展示</h2>
+      <p class="muted" data-score-summary>
+        按考试类型查看不同出分案例，支持分页浏览和全部展开
+      </p>
+    </div>
+  </div>
+
+  <div class="score-browser">
+    <div class="score-toolbar">
+      <div
+        class="score-filter-row"
+        role="tablist"
+        aria-label="出分考试类型筛选"
+      >
+        <button
+          class="score-filter is-active"
+          type="button"
+          data-score-filter="all"
+          aria-pressed="true"
+        >
+          全部
+        </button>
+        {examTypes.map((exam) => (
+          <button
+            class="score-filter"
+            type="button"
+            data-score-filter={exam}
+            aria-pressed="false"
+          >
+            {exam}
+          </button>
+        ))}
+      </div>
+
+      <div class="score-toolbar-actions">
+        <button class="btn btn-ghost" type="button" data-score-show-all>
+          查看全部
+        </button>
+        <button class="btn btn-ghost" type="button" data-score-prev>
+          上一个
+        </button>
+        <button class="btn btn-ghost" type="button" data-score-next>
+          下一个
+        </button>
+      </div>
     </div>
 
-    <div class="carousel">
-        <div class="carousel-track" data-track>
-            {
-                scores.map((s) => (
-                    <div class="card score-card">
-                        <div class="muted text-sm">
-                            {s.exam}
-                            {s.date ? ` · ${s.date}` : ""}
-                        </div>
-                        <div class="h3 mt-2">{s.scoreText}</div>
-                        {s.highlight ? (
-                            <div class="muted mt-1">{s.highlight}</div>
-                        ) : null}
-                        <img
-                            class="score-img"
-                            src={normalizeImageUrl(s.image)}
-                            alt={String(s.scoreText ?? s.exam ?? "")}
-                        />
-                    </div>
-                ))
-            }
-        </div>
+    <div class="score-grid mt-4" data-score-grid>
+      {scores.map((score) => (
+        <article
+          class="card score-browser-card"
+          data-score-item
+          data-exam={score.exam}
+        >
+          <div class="score-card-kicker">
+            {score.exam}
+            {score.date ? ` · ${score.date}` : ""}
+          </div>
+          <h3 class="score-card-title">{score.scoreText}</h3>
+          {score.highlight ? (
+            <div class="muted mt-2">{score.highlight}</div>
+          ) : null}
+          <div class="score-card-media">
+            <img
+              class="score-card-image"
+              src={normalizeImageUrl(score.image)}
+              alt={String(score.scoreText ?? score.exam ?? "")}
+              loading="lazy"
+            />
+          </div>
+          {score.tags.length ? (
+            <div class="score-card-tags">
+              {score.tags.map((tag) => (
+                <span>{tag}</span>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      ))}
     </div>
 
-    <script is:inline>
-        (() => {
-            const root = document.currentScript?.closest(
-                "[data-carousel-root]",
+    <div class="score-browser-footer">
+      <div class="muted text-sm" data-score-status>
+        {scores.length ? `共 ${scores.length} 条案例` : "暂无出分案例"}
+      </div>
+    </div>
+  </div>
+
+  <script is:inline>
+    (() => {
+      const root = document.currentScript?.closest("[data-score-browser]");
+      if (!root) return;
+
+      const items = Array.from(root.querySelectorAll("[data-score-item]")).filter(
+        (item) => item instanceof HTMLElement,
+      );
+      const filters = Array.from(
+        root.querySelectorAll("[data-score-filter]"),
+      ).filter((item) => item instanceof HTMLButtonElement);
+      const prev = root.querySelector("[data-score-prev]");
+      const next = root.querySelector("[data-score-next]");
+      const showAll = root.querySelector("[data-score-show-all]");
+      const summary = root.querySelector("[data-score-summary]");
+      const status = root.querySelector("[data-score-status]");
+
+      if (!(prev instanceof HTMLButtonElement)) return;
+      if (!(next instanceof HTMLButtonElement)) return;
+      if (!(showAll instanceof HTMLButtonElement)) return;
+
+      let activeExam = "all";
+      let page = 0;
+      let expanded = false;
+
+      const getPageSize = () => {
+        if (window.innerWidth < 720) return 2;
+        if (window.innerWidth < 1100) return 4;
+        return 6;
+      };
+
+      const getFilteredItems = () =>
+        items.filter((item) => {
+          const exam = item.dataset.exam ?? "";
+          return activeExam === "all" || exam === activeExam;
+        });
+
+      const render = () => {
+        const filtered = getFilteredItems();
+        const pageSize = getPageSize();
+        const pageCount = expanded
+          ? 1
+          : Math.max(1, Math.ceil(filtered.length / pageSize));
+
+        if (page >= pageCount) {
+          page = Math.max(0, pageCount - 1);
+        }
+
+        const visible = expanded
+          ? filtered
+          : filtered.slice(page * pageSize, page * pageSize + pageSize);
+
+        items.forEach((item) => {
+          const isVisible = visible.includes(item);
+          item.hidden = !isVisible;
+          item.classList.toggle("is-hidden", !isVisible);
+        });
+
+        filters.forEach((button) => {
+          const isActive = (button.dataset.scoreFilter ?? "all") === activeExam;
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-pressed", String(isActive));
+        });
+
+        const currentLabel = activeExam === "all" ? "全部考试" : activeExam;
+
+        if (summary instanceof HTMLElement) {
+          if (!filtered.length) {
+            summary.textContent = `${currentLabel} 暂无出分案例`;
+          } else if (expanded) {
+            summary.textContent = `${currentLabel} 已展开全部 ${filtered.length} 条案例`;
+          } else {
+            summary.textContent = `${currentLabel} 当前第 ${page + 1} / ${pageCount} 页`;
+          }
+        }
+
+        if (status instanceof HTMLElement) {
+          if (!filtered.length) {
+            status.textContent = "暂无出分案例";
+          } else if (expanded) {
+            status.textContent = `已显示 ${currentLabel} 的全部 ${filtered.length} 条案例`;
+          } else {
+            const start = page * pageSize + 1;
+            const end = Math.min(
+              filtered.length,
+              page * pageSize + visible.length,
             );
-            if (!root) return;
+            status.textContent = `${currentLabel} 显示 ${start}-${end} / ${filtered.length}`;
+          }
+        }
 
-            const track = root.querySelector("[data-track]");
-            if (!(track instanceof HTMLElement)) return;
+        prev.disabled = expanded || page <= 0 || !filtered.length;
+        next.disabled = expanded || page >= pageCount - 1 || !filtered.length;
+        showAll.disabled = !filtered.length;
+        showAll.textContent = expanded ? "恢复分页" : "查看全部";
+      };
 
-            const prev = root.querySelector("[data-prev]");
-            const next = root.querySelector("[data-next]");
+      filters.forEach((button) => {
+        button.addEventListener("click", () => {
+          activeExam = button.dataset.scoreFilter ?? "all";
+          page = 0;
+          expanded = false;
+          render();
+        });
+      });
 
-            const step = () =>
-                Math.max(320, Math.floor(track.clientWidth * 0.9));
+      prev.addEventListener("click", () => {
+        if (page <= 0) return;
+        expanded = false;
+        page -= 1;
+        render();
+      });
 
-            prev?.addEventListener("click", () => {
-                track.scrollBy({ left: -step(), behavior: "smooth" });
-            });
+      next.addEventListener("click", () => {
+        expanded = false;
+        page += 1;
+        render();
+      });
 
-            next?.addEventListener("click", () => {
-                track.scrollBy({ left: step(), behavior: "smooth" });
-            });
-        })();
-    </script>
+      showAll.addEventListener("click", () => {
+        expanded = !expanded;
+        if (!expanded) {
+          page = 0;
+        }
+        render();
+      });
+
+      let frame = 0;
+      window.addEventListener("resize", () => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          render();
+        });
+      });
+
+      render();
+    })();
+  </script>
 </section>

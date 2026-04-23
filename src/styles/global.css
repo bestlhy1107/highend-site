@@ -634,39 +634,114 @@ button.btn {
   color: var(--text-2);
 }
 
-/* ===== Carousel / Scores ===== */
-.carousel {
+/* ===== Scores ===== */
+.score-browser {
   margin-top: 18px;
 }
 
-.carousel-track {
+.score-toolbar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  padding-bottom: 8px;
+  flex-wrap: wrap;
 }
 
-.carousel-track::-webkit-scrollbar {
-  height: 8px;
+.score-filter-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.carousel-track::-webkit-scrollbar-thumb {
-  background: rgba(90, 130, 255, 0.2);
-  border-radius: 999px;
+.score-filter {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-2);
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
-.score-card {
-  min-width: 320px;
-  scroll-snap-align: start;
+.score-filter:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-xs);
 }
 
-.score-img {
+.score-filter.is-active {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--pink), var(--purple));
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(160, 92, 255, 0.2);
+}
+
+.score-toolbar-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.score-browser-card {
+  min-width: 0;
+}
+
+.score-browser-card.is-hidden {
+  display: none;
+}
+
+.score-card-kicker {
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.score-card-title {
+  margin: 8px 0 0;
+  font-size: 22px;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.score-card-media {
   margin-top: 14px;
-  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border-radius: 8px;
   border: 1px solid rgba(70, 86, 145, 0.08);
   background: #fff;
+}
+
+.score-card-image {
+  display: block;
+  width: 100%;
+  height: clamp(180px, 22vw, 240px);
+  object-fit: cover;
+}
+
+.score-card-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.score-card-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(90, 130, 255, 0.12);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.score-browser-footer {
+  margin-top: 18px;
 }
 
 /* ===== Teachers ===== */
@@ -1123,6 +1198,20 @@ textarea.input {
   .form-grid {
     grid-template-columns: 1fr;
   }
+
+  .score-toolbar {
+    align-items: stretch;
+  }
+
+  .score-filter-row,
+  .score-toolbar-actions {
+    width: 100%;
+  }
+
+  .score-toolbar-actions .btn {
+    flex: 1 1 0;
+    justify-content: center;
+  }
 }
 
 .avatar,
@@ -1151,4 +1240,20 @@ textarea.input {
   aspect-ratio: 3 / 4;
   border-radius: 18px;
   object-fit: cover;
+}
+
+@media (max-width: 980px) {
+  .score-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .score-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .score-card-image {
+    height: 220px;
+  }
 }

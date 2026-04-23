@@ -43,7 +43,7 @@ function normalizeScore(input: Partial<RuntimeScore>): RuntimeScore {
 }
 
 function isValidScore(score: RuntimeScore) {
-  return Boolean(score.id && score.scoreText && score.image);
+  return Boolean(score.id && score.exam && score.scoreText && score.image);
 }
 
 export async function readScores(): Promise<RuntimeScore[]> {
@@ -106,4 +106,33 @@ export async function upsertScore(input: {
 export async function deleteScore(id: string) {
   const scores = await readScores();
   return writeScores(scores.filter((score) => score.id !== id));
+}
+
+export function listScoreExamTypes(scores: RuntimeScore[]) {
+  return Array.from(
+    new Set(scores.map((score) => score.exam.trim()).filter(Boolean))
+  );
+}
+
+export function groupScoresByExam(scores: RuntimeScore[]) {
+  return listScoreExamTypes(scores).map((exam) => ({
+    exam,
+    scores: scores.filter((score) => score.exam === exam),
+  }));
+}
+
+export async function renameScoreExamType(fromExam: string, nextExam: string) {
+  const from = fromExam.trim();
+  const next = nextExam.trim();
+
+  if (!from || !next || from === next) {
+    return readScores();
+  }
+
+  const scores = await readScores();
+  const updatedScores = scores.map((score) =>
+    score.exam === from ? { ...score, exam: next } : score
+  );
+
+  return writeScores(updatedScores);
 }

@@ -3,7 +3,11 @@ export const prerender = false;
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { actions, isInputError } from "astro:actions";
-import { readScores } from "../../lib/scores-store";
+import {
+  readScores,
+  listScoreExamTypes,
+  groupScoresByExam,
+} from "../../lib/scores-store";
 import { normalizeImageUrl } from "../../lib/image-url";
 
 const adminUser = await Astro.session?.get("adminUser");
@@ -12,12 +16,17 @@ if (!adminUser) {
 }
 
 const scores = await readScores();
+const scoreExamTypes = listScoreExamTypes(scores);
+const groupedScores = groupScoresByExam(scores);
 
 const saveResult = Astro.getActionResult(actions.saveScore);
+const renameResult = Astro.getActionResult(actions.renameScoreExam);
 const removeResult = Astro.getActionResult(actions.removeScore);
 
 const inputErrors = isInputError(saveResult?.error) ? saveResult.error.fields : {};
+const renameErrors = isInputError(renameResult?.error) ? renameResult.error.fields : {};
 const saveSuccess = saveResult && !saveResult.error ? saveResult.data : null;
+const renameSuccess = renameResult && !renameResult.error ? renameResult.data : null;
 const removeSuccess = removeResult && !removeResult.error ? removeResult.data : null;
 ---
 
@@ -27,7 +36,7 @@ const removeSuccess = removeResult && !removeResult.error ? removeResult.data : 
       <div>
         <div class="section-kicker">Admin</div>
         <h1 class="section-title">出分展示后台编辑</h1>
-        <p class="section-desc">修改后首页出分展示会立即读取最新案例。</p>
+        <p class="section-desc">按考试类型管理案例，首页会立即读取最新结果。</p>
       </div>
 
       <a class="btn btn-ghost" href="/admin">返回后台</a>
@@ -39,11 +48,92 @@ const removeSuccess = removeResult && !removeResult.error ? removeResult.data : 
       </div>
     )}
 
+    {renameSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {renameSuccess.message}
+      </div>
+    )}
+
     {removeSuccess && (
       <div class="contact-notice contact-notice--success mt-4">
         {removeSuccess.message}
       </div>
     )}
+
+    <datalist id="score-exam-options">
+      {scoreExamTypes.map((exam) => (
+        <option value={exam} />
+      ))}
+    </datalist>
+
+    <div class="cards cards--2 mt-4">
+      <div class="card">
+        <div class="card-top">
+          <div class="h3">当前考试类型</div>
+          <div class="badge">{scoreExamTypes.length}</div>
+        </div>
+
+        <p class="muted mt-2">
+          新增案例时填写新的考试类型即可生成新分类；某个分类下没有案例后，它会自动从前台分类里消失。
+        </p>
+
+        {groupedScores.length ? (
+          <div class="card-tags mt-3">
+            {groupedScores.map((group) => (
+              <span>{group.exam} · {group.scores.length}</span>
+            ))}
+          </div>
+        ) : (
+          <p class="muted mt-3">当前还没有出分案例。</p>
+        )}
+      </div>
+
+      <div class="card">
+        <div class="card-top">
+          <div class="h3">批量修改考试类型</div>
+          <div class="badge">分类</div>
+        </div>
+
+        <form method="POST" action={actions.renameScoreExam} class="mt-4">
+          <div class="form-grid">
+            <div class="form-item">
+              <label class="form-label">当前考试类型</label>
+              <input
+                class="input"
+                name="fromExam"
+                type="text"
+                list="score-exam-options"
+                placeholder="例如 TOEFL"
+                required
+              />
+              {renameErrors.fromExam && (
+                <p class="form-error">{renameErrors.fromExam.join("，")}</p>
+              )}
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">新的考试类型</label>
+              <input
+                class="input"
+                name="nextExam"
+                type="text"
+                placeholder="例如 托福"
+                required
+              />
+              {renameErrors.nextExam && (
+                <p class="form-error">{renameErrors.nextExam.join("，")}</p>
+              )}
+            </div>
+          </div>
+
+          <p class="muted mt-2">会同步更新这个分类下的全部出分案例。</p>
+
+          <div class="mt-4">
+            <button class="btn" type="submit">批量改名</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <div class="contact-shell mt-4">
       <div class="h3">新增出分案例</div>
@@ -52,7 +142,15 @@ const removeSuccess = removeResult && !removeResult.error ? removeResult.data : 
         <div class="form-grid">
           <div class="form-item">
             <label class="form-label">考试类型</label>
-            <input class="input" name="exam" type="text" placeholder="TOEFL / IELTS / GRE" />
+            <input
+              class="input"
+              name="exam"
+              type="text"
+              list="score-exam-options"
+              placeholder="TOEFL / IELTS / GRE"
+              required
+            />
+            {inputErrors.exam && <p class="form-error">{inputErrors.exam.join("，")}</p>}
           </div>
 
           <div class="form-item">
@@ -100,7 +198,7 @@ const removeSuccess = removeResult && !removeResult.error ? removeResult.data : 
           <img
             class="mt-3"
             data-score-image-preview
-            style="max-width: 220px; border-radius: 16px; display:none;"
+            style="max-width: 180px; border-radius: 12px; display:none;"
           />
         </div>
 
@@ -115,98 +213,117 @@ const removeSuccess = removeResult && !removeResult.error ? removeResult.data : 
       </form>
     </div>
 
-    <div class="cards mt-6">
-      {scores.map((score) => (
-        <div class="card">
-          <div class="card-top">
-            <div>
-              <div class="h3">{score.scoreText}</div>
-              <div class="muted mt-1">{score.exam}{score.date ? ` · ${score.date}` : ""}</div>
-            </div>
-            <div class="badge">#{score.order}</div>
+    {groupedScores.map((group) => (
+      <section class="mt-8">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Category</div>
+            <h2 class="section-title">{group.exam}</h2>
+            <p class="section-desc">当前分类下共 {group.scores.length} 条出分案例</p>
           </div>
-
-          <form method="POST" action={actions.saveScore} class="mt-4 score-form">
-            <input type="hidden" name="id" value={score.id} />
-
-            <div class="form-grid">
-              <div class="form-item">
-                <label class="form-label">考试类型</label>
-                <input class="input" name="exam" type="text" value={score.exam} />
-              </div>
-
-              <div class="form-item">
-                <label class="form-label">排序</label>
-                <input class="input" name="order" type="number" value={score.order} required />
-              </div>
-            </div>
-
-            <div class="form-item mt-4">
-              <label class="form-label">出分标题</label>
-              <input class="input" name="scoreText" type="text" value={score.scoreText} required />
-            </div>
-
-            <div class="form-grid mt-4">
-              <div class="form-item">
-                <label class="form-label">亮点说明</label>
-                <input class="input" name="highlight" type="text" value={score.highlight ?? ""} />
-              </div>
-
-              <div class="form-item">
-                <label class="form-label">日期</label>
-                <input class="input" name="date" type="text" value={score.date ?? ""} />
-              </div>
-            </div>
-
-            <div class="form-item mt-4">
-              <label class="form-label">图片路径</label>
-              <input
-                class="input"
-                name="image"
-                type="text"
-                value={score.image}
-                data-score-image-path
-                required
-              />
-            </div>
-
-            <div class="form-item mt-4">
-              <label class="form-label">上传/替换出分图片</label>
-              <input class="input" type="file" accept="image/*" data-score-image-upload />
-              <p class="muted mt-2" data-score-upload-status></p>
-              {score.image ? (
-                <img
-                  class="mt-3"
-                  src={normalizeImageUrl(score.image)}
-                  data-score-image-preview
-                  style="max-width: 220px; border-radius: 16px;"
-                />
-              ) : (
-                <img
-                  class="mt-3"
-                  data-score-image-preview
-                  style="max-width: 220px; border-radius: 16px; display:none;"
-                />
-              )}
-            </div>
-
-            <div class="form-item mt-4">
-              <label class="form-label">标签（逗号分隔）</label>
-              <input class="input" name="tags" type="text" value={score.tags.join(", ")} />
-            </div>
-
-            <div class="mt-4" style="display:flex; gap:10px; flex-wrap:wrap;">
-              <button class="btn" type="submit">保存修改</button>
-            </div>
-          </form>
-
-          <form method="POST" action={actions.removeScore} class="mt-3">
-            <input type="hidden" name="id" value={score.id} />
-            <button class="btn btn-ghost" type="submit">删除出分案例</button>
-          </form>
         </div>
-      ))}
-    </div>
+
+        <div class="cards mt-4">
+          {group.scores.map((score) => (
+            <div class="card">
+              <div class="card-top">
+                <div>
+                  <div class="h3">{score.scoreText}</div>
+                  <div class="muted mt-1">{score.date ? `更新日期 · ${score.date}` : "未填写日期"}</div>
+                </div>
+                <div class="badge">#{score.order}</div>
+              </div>
+
+              <form method="POST" action={actions.saveScore} class="mt-4 score-form">
+                <input type="hidden" name="id" value={score.id} />
+
+                <div class="form-grid">
+                  <div class="form-item">
+                    <label class="form-label">考试类型</label>
+                    <input
+                      class="input"
+                      name="exam"
+                      type="text"
+                      list="score-exam-options"
+                      value={score.exam}
+                      required
+                    />
+                  </div>
+
+                  <div class="form-item">
+                    <label class="form-label">排序</label>
+                    <input class="input" name="order" type="number" value={score.order} required />
+                  </div>
+                </div>
+
+                <div class="form-item mt-4">
+                  <label class="form-label">出分标题</label>
+                  <input class="input" name="scoreText" type="text" value={score.scoreText} required />
+                </div>
+
+                <div class="form-grid mt-4">
+                  <div class="form-item">
+                    <label class="form-label">亮点说明</label>
+                    <input class="input" name="highlight" type="text" value={score.highlight ?? ""} />
+                  </div>
+
+                  <div class="form-item">
+                    <label class="form-label">日期</label>
+                    <input class="input" name="date" type="text" value={score.date ?? ""} />
+                  </div>
+                </div>
+
+                <div class="form-item mt-4">
+                  <label class="form-label">图片路径</label>
+                  <input
+                    class="input"
+                    name="image"
+                    type="text"
+                    value={score.image}
+                    data-score-image-path
+                    required
+                  />
+                </div>
+
+                <div class="form-item mt-4">
+                  <label class="form-label">上传/替换出分图片</label>
+                  <input class="input" type="file" accept="image/*" data-score-image-upload />
+                  <p class="muted mt-2" data-score-upload-status></p>
+                  {score.image ? (
+                    <img
+                      class="mt-3"
+                      src={normalizeImageUrl(score.image)}
+                      data-score-image-preview
+                      style="max-width: 180px; border-radius: 12px;"
+                    />
+                  ) : (
+                    <img
+                      class="mt-3"
+                      data-score-image-preview
+                      style="max-width: 180px; border-radius: 12px; display:none;"
+                    />
+                  )}
+                </div>
+
+                <div class="form-item mt-4">
+                  <label class="form-label">标签（逗号分隔）</label>
+                  <input class="input" name="tags" type="text" value={score.tags.join(", ")} />
+                </div>
+
+                <div class="mt-4" style="display:flex; gap:10px; flex-wrap:wrap;">
+                  <button class="btn" type="submit">保存修改</button>
+                </div>
+              </form>
+
+              <form method="POST" action={actions.removeScore} class="mt-3">
+                <input type="hidden" name="id" value={score.id} />
+                <button class="btn btn-ghost" type="submit">删除出分案例</button>
+              </form>
+            </div>
+          ))}
+        </div>
+      </section>
+    ))}
   </main>
 
   <script is:inline>

@@ -5,7 +5,11 @@ import { writeSiteSettings } from "../lib/site-store";
 import { upsertTeacher, deleteTeacher } from "../lib/teachers-store";
 import { upsertService, deleteService } from "../lib/services-store";
 import { upsertExam, deleteExam } from "../lib/exams-store";
-import { upsertScore, deleteScore } from "../lib/scores-store";
+import {
+  upsertScore,
+  deleteScore,
+  renameScoreExamType,
+} from "../lib/scores-store";
 import {
   createLead,
   updateLeadById,
@@ -315,7 +319,7 @@ contactLead: defineAction({
     accept: "form",
     input: z.object({
       id: z.string().optional(),
-      exam: z.string().optional(),
+      exam: z.string().min(1, "请选择或填写考试类型"),
       scoreText: z.string().min(2, "请输入出分标题"),
       highlight: z.string().optional(),
       date: z.string().optional(),
@@ -329,6 +333,22 @@ contactLead: defineAction({
       return {
         ok: true,
         message: "出分案例已保存",
+      };
+    },
+  }),
+
+  renameScoreExam: defineAction({
+    accept: "form",
+    input: z.object({
+      fromExam: z.string().min(1, "请选择当前考试类型"),
+      nextExam: z.string().min(1, "请输入新的考试类型"),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      await renameScoreExamType(input.fromExam, input.nextExam);
+      return {
+        ok: true,
+        message: "考试类型已更新",
       };
     },
   }),
