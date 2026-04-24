@@ -16,6 +16,7 @@ const { anchorId = "school-match", compact = false } = Astro.props as Props;
 
 const finderId = `school-match-${Math.random().toString(36).slice(2, 10)}`;
 const initialResults = STUDY_ABROAD_PROGRAMS.slice(0, compact ? 4 : 6);
+const seedResults = initialResults;
 
 const sameLink = (program: StudyAbroadProgram) =>
   Boolean(program.admissionsUrl) && program.admissionsUrl === program.overviewUrl;
@@ -143,16 +144,11 @@ const sameLink = (program: StudyAbroadProgram) =>
     ))}
   </div>
 
-  <script type="application/json" id={`${finderId}-data`}>
-    {JSON.stringify(initialResults)}
-  </script>
-
-  <script is:inline define:vars={{ finderId }}>
+  <script is:inline define:vars={{ finderId, seedResults }}>
     const root = document.querySelector(`[data-school-match="${finderId}"]`);
-    const dataNode = document.getElementById(`${finderId}-data`);
 
-    if (root && dataNode) {
-      const initialResults = JSON.parse(dataNode.textContent || "[]");
+    if (root) {
+      const initialResults = Array.isArray(seedResults) ? seedResults : [];
       const countrySelect = root.querySelector('[data-role="country"]');
       const majorInput = root.querySelector('[data-role="major"]');
       const degreeSelect = root.querySelector('[data-role="degree"]');
