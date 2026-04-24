@@ -3,5 +3,15 @@
   "slogan": "高分出分 · 名师指导 · 留学申请一站式",
   "phone": "17854553068",
   "email": "bestlhy1107@163.com",
-  "wechat": "bestlhy168"
+  "wechat": "bestlhy168",
+  "consultTeacherName": "周老师",
+  "consultTeacherAvatar": "",
+  "consultStatusText": "正在为您服务",
+  "consultWelcomeMessage": "亲爱的同学 / 家长您好，欢迎来到留学咨询窗口。我们可以先帮您梳理国家方向、申请阶段和准备时间线。",
+  "consultCountryPrompt": "您想了解哪个国家或地区的留学呢？",
+  "consultCountryOptions": "美国,英国,澳洲,加拿大,中国港澳,日本,韩国,新加坡,马来西亚",
+  "consultStagePrompt": "您是想申请哪个阶段留学呢？",
+  "consultStageOptions": "中学,本科,硕士,博士",
+  "consultContactMessage": "您好，如果对留学申请有什么疑问，比如院校选择、申请条件等，可以留下您意向申请的国家 + 电话 / 微信 / 邮箱，我们会安排专属老师尽快联系您。",
+  "consultIdleMessage": "您也可以直接联系我们的微信或者电话，免费获取 1v1 留学规划指导。微信：{{wechat}} 电话：{{phone}}"
 }

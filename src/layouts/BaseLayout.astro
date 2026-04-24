@@ -2,6 +2,7 @@
 import "../styles/global.css";
 import SiteHeader from "../components/SiteHeader.astro";
 import SiteFooter from "../components/SiteFooter.astro";
+import ConsultWidget from "../components/ConsultWidget.astro";
 import { readSiteSettings } from "../lib/site-store";
 
 type Props = {
@@ -36,5 +37,6 @@ const currentPath = Astro.url.pathname;
     </div>
 
     <SiteFooter brand={site.companyName} />
+    <ConsultWidget site={site} currentPath={currentPath} />
   </body>
 </html>

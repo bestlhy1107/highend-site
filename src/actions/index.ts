@@ -1,6 +1,5 @@
 import { defineAction, ActionError } from "astro:actions";
 import { z } from "astro/zod";
-import nodemailer from "nodemailer";
 import { writeSiteSettings } from "../lib/site-store";
 import { upsertTeacher, deleteTeacher } from "../lib/teachers-store";
 import { upsertService, deleteService } from "../lib/services-store";
@@ -16,35 +15,10 @@ import {
   deleteLeadById,
   type LeadStatus,
 } from "../lib/leads-store";
-
-const SMTP_HOST = import.meta.env.SMTP_HOST;
-const SMTP_PORT = import.meta.env.SMTP_PORT;
-const SMTP_SECURE = import.meta.env.SMTP_SECURE;
-const SMTP_USER = import.meta.env.SMTP_USER;
-const SMTP_PASS = import.meta.env.SMTP_PASS;
-const LEAD_TO_EMAIL = import.meta.env.LEAD_TO_EMAIL;
-const MAIL_FROM = import.meta.env.MAIL_FROM;
+import { sendBusinessMail } from "../lib/mail";
 
 const ADMIN_USERNAME = import.meta.env.ADMIN_USERNAME;
 const ADMIN_PASSWORD = import.meta.env.ADMIN_PASSWORD;
-
-const smtpConfigured =
-  !!SMTP_HOST &&
-  !!SMTP_PORT &&
-  !!SMTP_USER &&
-  !!SMTP_PASS;
-
-const transporter = smtpConfigured
-  ? nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: Number(SMTP_PORT),
-      secure: String(SMTP_SECURE).toLowerCase() === "true",
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
-    })
-  : null;
 
 async function requireAdmin(context: {
   session?: {
@@ -90,48 +64,35 @@ contactLead: defineAction({
 
     let emailSent = false;
 
-    if (transporter) {
-      try {
-        const to = LEAD_TO_EMAIL || SMTP_USER;
-        const from = MAIL_FROM || SMTP_USER;
+    const appointmentTypeLabel =
+      input.appointmentType === "trial" ? "预约试听" : "预约咨询";
 
-        const appointmentTypeLabel =
-          input.appointmentType === "trial" ? "预约试听" : "预约咨询";
-
-        await transporter.sendMail({
-          from,
-          to,
-          subject: `【新预约】${input.name} - ${input.examType} - ${input.contact}`,
-          text: [
-            `线索ID：${savedLead.id}`,
-            `姓名：${input.name}`,
-            `联系方式：${input.contact}`,
-            `预约类型：${appointmentTypeLabel}`,
-            `考试类型：${input.examType}`,
-            `期望时间：${input.preferredTime}`,
-            `需求：${input.need}`,
-            `来源：${input.source ?? "homepage"}`,
-            `提交时间：${submittedAt}`,
-          ].join("\n"),
-          html: `
-            <h2>收到新的预约表单</h2>
-            <p><strong>线索ID：</strong>${savedLead.id}</p>
-            <p><strong>姓名：</strong>${input.name}</p>
-            <p><strong>联系方式：</strong>${input.contact}</p>
-            <p><strong>预约类型：</strong>${appointmentTypeLabel}</p>
-            <p><strong>考试类型：</strong>${input.examType}</p>
-            <p><strong>期望时间：</strong>${input.preferredTime}</p>
-            <p><strong>需求：</strong>${input.need}</p>
-            <p><strong>来源：</strong>${input.source ?? "homepage"}</p>
-            <p><strong>提交时间：</strong>${submittedAt}</p>
-          `,
-        });
-
-        emailSent = true;
-      } catch (error) {
-        console.error("Failed to send lead notification email", error);
-      }
-    }
+    emailSent = await sendBusinessMail({
+      subject: `【新预约】${input.name} - ${input.examType} - ${input.contact}`,
+      text: [
+        `线索ID：${savedLead.id}`,
+        `姓名：${input.name}`,
+        `联系方式：${input.contact}`,
+        `预约类型：${appointmentTypeLabel}`,
+        `考试类型：${input.examType}`,
+        `期望时间：${input.preferredTime}`,
+        `需求：${input.need}`,
+        `来源：${input.source ?? "homepage"}`,
+        `提交时间：${submittedAt}`,
+      ].join("\n"),
+      html: `
+        <h2>收到新的预约表单</h2>
+        <p><strong>线索ID：</strong>${savedLead.id}</p>
+        <p><strong>姓名：</strong>${input.name}</p>
+        <p><strong>联系方式：</strong>${input.contact}</p>
+        <p><strong>预约类型：</strong>${appointmentTypeLabel}</p>
+        <p><strong>考试类型：</strong>${input.examType}</p>
+        <p><strong>期望时间：</strong>${input.preferredTime}</p>
+        <p><strong>需求：</strong>${input.need}</p>
+        <p><strong>来源：</strong>${input.source ?? "homepage"}</p>
+        <p><strong>提交时间：</strong>${submittedAt}</p>
+      `,
+    });
 
     return {
       ok: true,
@@ -188,6 +149,16 @@ contactLead: defineAction({
       phone: z.string().min(3, "请输入联系电话"),
       email: z.string().email("请输入正确邮箱"),
       wechat: z.string().min(2, "请输入微信号"),
+      consultTeacherName: z.string().optional(),
+      consultTeacherAvatar: z.string().optional(),
+      consultStatusText: z.string().optional(),
+      consultWelcomeMessage: z.string().optional(),
+      consultCountryPrompt: z.string().optional(),
+      consultCountryOptions: z.string().optional(),
+      consultStagePrompt: z.string().optional(),
+      consultStageOptions: z.string().optional(),
+      consultContactMessage: z.string().optional(),
+      consultIdleMessage: z.string().optional(),
     }),
     handler: async (input, context) => {
       await requireAdmin(context);

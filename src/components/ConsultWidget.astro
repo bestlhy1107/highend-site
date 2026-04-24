@@ -1,0 +1,1015 @@
+---
+import { normalizeImageUrl } from "../lib/image-url";
+import type { RuntimeSiteSettings } from "../lib/site-store";
+
+type Props = {
+  site: Partial<RuntimeSiteSettings>;
+  currentPath?: string;
+};
+
+const { site, currentPath = "/" } = Astro.props as Props;
+
+const widgetConfig = {
+  companyName: String(site.companyName ?? "留学咨询").trim() || "留学咨询",
+  teacherName: String(site.consultTeacherName ?? "周老师").trim() || "周老师",
+  teacherAvatar: normalizeImageUrl(site.consultTeacherAvatar ?? ""),
+  statusText: String(site.consultStatusText ?? "正在为您服务").trim() || "正在为您服务",
+  phone: String(site.phone ?? "").trim(),
+  wechat: String(site.wechat ?? "").trim(),
+  contactHref: currentPath === "/" ? "#contact" : "/#contact",
+  studyHref: currentPath === "/" ? "#study-abroad" : "/#study-abroad",
+  welcomeMessage:
+    String(site.consultWelcomeMessage ?? "").trim() ||
+    "亲爱的同学 / 家长您好，欢迎来到留学咨询窗口。我们可以先帮您梳理国家方向、申请阶段和准备时间线。",
+  countryPrompt:
+    String(site.consultCountryPrompt ?? "").trim() ||
+    "您想了解哪个国家或地区的留学呢？",
+  countryOptions:
+    String(site.consultCountryOptions ?? "").trim() ||
+    "美国,英国,澳洲,加拿大,中国港澳,日本,韩国,新加坡,马来西亚",
+  stagePrompt:
+    String(site.consultStagePrompt ?? "").trim() ||
+    "您是想申请哪个阶段留学呢？",
+  stageOptions:
+    String(site.consultStageOptions ?? "").trim() || "中学,本科,硕士,博士",
+  contactMessage:
+    String(site.consultContactMessage ?? "").trim() ||
+    "您好，如果对留学申请有什么疑问，比如院校选择、申请条件等，可以留下您意向申请的国家 + 电话 / 微信 / 邮箱，我们会安排专属老师尽快联系您。",
+  idleMessage:
+    String(site.consultIdleMessage ?? "").trim() ||
+    "您也可以直接联系我们的微信或者电话，免费获取 1v1 留学规划指导。微信：{{wechat}} 电话：{{phone}}",
+};
+---
+
+<div class="consult-widget" data-consult-widget>
+  <button
+    class="consult-launcher"
+    type="button"
+    aria-label="打开咨询窗口"
+    data-consult-open
+  >
+    在线咨询
+  </button>
+
+  <section class="consult-panel" aria-label="留学咨询窗口" data-consult-panel hidden>
+    <div class="consult-topline"></div>
+
+    <div class="consult-header">
+      <div class="consult-status-pill">
+        {widgetConfig.teacherName} {widgetConfig.statusText}
+      </div>
+
+      <div class="consult-header-actions">
+        <button type="button" aria-label="最小化" data-consult-minimize>
+          −
+        </button>
+        <button type="button" aria-label="关闭" data-consult-close>
+          □
+        </button>
+      </div>
+    </div>
+
+    <div class="consult-body">
+      <div class="consult-messages" data-consult-messages></div>
+    </div>
+
+    <form class="consult-form" data-consult-form>
+      <label class="consult-label" for="consult-input">请输入您要咨询的问题</label>
+      <textarea
+        id="consult-input"
+        class="consult-input"
+        maxlength="500"
+        rows="3"
+        placeholder="例如：我想申请英国硕士，现在大四，应该先准备什么？"
+        data-consult-input
+      ></textarea>
+
+      <div class="consult-form-meta">
+        <span class="consult-count" data-consult-count>0/500</span>
+        <button class="consult-send" type="submit" data-consult-send>
+          发送
+        </button>
+      </div>
+    </form>
+
+    <script type="application/json" data-consult-config>
+      {JSON.stringify(widgetConfig)}
+    </script>
+  </section>
+</div>
+
+<script is:inline>
+  (() => {
+    const root = document.querySelector("[data-consult-widget]");
+    if (!(root instanceof HTMLElement)) return;
+
+    const panel = root.querySelector("[data-consult-panel]");
+    const openButton = root.querySelector("[data-consult-open]");
+    const minimizeButton = root.querySelector("[data-consult-minimize]");
+    const closeButton = root.querySelector("[data-consult-close]");
+    const messagesEl = root.querySelector("[data-consult-messages]");
+    const form = root.querySelector("[data-consult-form]");
+    const input = root.querySelector("[data-consult-input]");
+    const count = root.querySelector("[data-consult-count]");
+    const sendButton = root.querySelector("[data-consult-send]");
+    const configEl = root.querySelector("[data-consult-config]");
+
+    if (!(panel instanceof HTMLElement)) return;
+    if (!(openButton instanceof HTMLButtonElement)) return;
+    if (!(minimizeButton instanceof HTMLButtonElement)) return;
+    if (!(closeButton instanceof HTMLButtonElement)) return;
+    if (!(messagesEl instanceof HTMLElement)) return;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (!(input instanceof HTMLTextAreaElement)) return;
+    if (!(count instanceof HTMLElement)) return;
+    if (!(sendButton instanceof HTMLButtonElement)) return;
+    if (!(configEl instanceof HTMLScriptElement)) return;
+
+    const defaults = {
+      companyName: "留学咨询",
+      teacherName: "周老师",
+      teacherAvatar: "",
+      statusText: "正在为您服务",
+      phone: "",
+      wechat: "",
+      contactHref: "/#contact",
+      studyHref: "/#study-abroad",
+      welcomeMessage:
+        "亲爱的同学 / 家长您好，欢迎来到留学咨询窗口。我们可以先帮您梳理国家方向、申请阶段和准备时间线。",
+      countryPrompt: "您想了解哪个国家或地区的留学呢？",
+      countryOptions:
+        "美国,英国,澳洲,加拿大,中国港澳,日本,韩国,新加坡,马来西亚",
+      stagePrompt: "您是想申请哪个阶段留学呢？",
+      stageOptions: "中学,本科,硕士,博士",
+      contactMessage:
+        "您好，如果对留学申请有什么疑问，比如院校选择、申请条件等，可以留下您意向申请的国家 + 电话 / 微信 / 邮箱，我们会安排专属老师尽快联系您。",
+      idleMessage:
+        "您也可以直接联系我们的微信或者电话，免费获取 1v1 留学规划指导。微信：{{wechat}} 电话：{{phone}}",
+    };
+
+    let config = defaults;
+
+    try {
+      config = {
+        ...defaults,
+        ...JSON.parse(configEl.textContent || "{}"),
+      };
+    } catch {}
+
+    const closedKey = "consult-widget-closed";
+    const sessionKey = "consult-widget-session";
+    const messages = [];
+    let selectedCountry = "";
+    let selectedStage = "";
+    let customerEmail = "";
+    let customerPhone = "";
+    let customerWechat = "";
+    let idleSent = false;
+    let idleTimer = 0;
+    let booted = false;
+
+    const readStorage = (key) => {
+      try {
+        return window.sessionStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    };
+
+    const writeStorage = (key, value) => {
+      try {
+        window.sessionStorage.setItem(key, value);
+      } catch {}
+    };
+
+    const clearStorage = (key) => {
+      try {
+        window.sessionStorage.removeItem(key);
+      } catch {}
+    };
+
+    const sessionId = (() => {
+      const existing = readStorage(sessionKey);
+      if (existing) return existing;
+
+      const next =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `consult-${Date.now()}`;
+
+      writeStorage(sessionKey, next);
+      return next;
+    })();
+
+    const escapeHtml = (value) =>
+      String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+
+    const toOptions = (value) =>
+      String(value || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    const countryOptions = toOptions(config.countryOptions);
+    const stageOptions = toOptions(config.stageOptions);
+
+    const formatTemplate = (template) =>
+      String(template || "")
+        .replaceAll("{{wechat}}", config.wechat || "")
+        .replaceAll("{{phone}}", config.phone || "")
+        .replaceAll("{{teacherName}}", config.teacherName || "")
+        .replaceAll("{{country}}", selectedCountry || "")
+        .replaceAll("{{stage}}", selectedStage || "");
+
+    const currentTime = () => {
+      const now = new Date();
+      return `${String(now.getHours()).padStart(2, "0")}:${String(
+        now.getMinutes(),
+      ).padStart(2, "0")}`;
+    };
+
+    const getTeacherInitial = () =>
+      String(config.teacherName || "顾")
+        .trim()
+        .charAt(0) || "顾";
+
+    const syncComposerState = () => {
+      const hasValue = Boolean(input.value.trim());
+      sendButton.disabled = !hasValue;
+      sendButton.classList.toggle("is-active", hasValue);
+      count.textContent = `${input.value.length}/500`;
+    };
+
+    const clearIdleTimer = () => {
+      if (idleTimer) {
+        window.clearTimeout(idleTimer);
+        idleTimer = 0;
+      }
+    };
+
+    const scheduleIdleMessage = () => {
+      if (idleSent) return;
+      clearIdleTimer();
+      idleTimer = window.setTimeout(() => {
+        idleSent = true;
+        addBotMessage(formatTemplate(config.idleMessage), contactActions());
+      }, 3000);
+    };
+
+    const scrollToBottom = () => {
+      requestAnimationFrame(() => {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      });
+    };
+
+    const renderMessages = () => {
+      messagesEl.innerHTML = messages
+        .map((message) => {
+          const actionsHtml = message.actions.length
+            ? `<div class="consult-message-actions">${message.actions
+                .map((action) => {
+                  const themeClass =
+                    action.theme === "blue"
+                      ? "consult-action-btn consult-action-btn--blue"
+                      : action.theme === "solid"
+                        ? "consult-action-btn consult-action-btn--solid"
+                        : "consult-action-btn";
+
+                  return `<button
+                      type="button"
+                      class="${themeClass}"
+                      data-action-kind="${escapeHtml(action.kind)}"
+                      data-action-value="${escapeHtml(action.value || "")}"
+                      data-action-label="${escapeHtml(action.label)}"
+                    >${escapeHtml(action.label)}</button>`;
+                })
+                .join("")}</div>`
+            : "";
+
+          const avatarHtml =
+            message.role === "bot"
+              ? config.teacherAvatar
+                ? `<img class="consult-avatar-img" src="${escapeHtml(
+                    config.teacherAvatar,
+                  )}" alt="${escapeHtml(config.teacherName)}" />`
+                : `<div class="consult-avatar-fallback">${escapeHtml(
+                    getTeacherInitial(),
+                  )}</div>`
+              : "";
+
+          return `<article class="consult-message consult-message--${message.role}">
+              ${
+                message.role === "bot"
+                  ? `<div class="consult-avatar">${avatarHtml}</div>`
+                  : ""
+              }
+              <div class="consult-message-main">
+                <div class="consult-message-meta">
+                  <strong>${escapeHtml(
+                    message.role === "bot" ? config.teacherName : "您",
+                  )}</strong>
+                  <span>${escapeHtml(message.time)}</span>
+                </div>
+                <div class="consult-bubble consult-bubble--${message.role}">${escapeHtml(
+                  message.text,
+                ).replaceAll("\n", "<br>")}</div>
+                ${actionsHtml}
+              </div>
+            </article>`;
+        })
+        .join("");
+
+      messagesEl.querySelectorAll("[data-action-kind]").forEach((node) => {
+        if (!(node instanceof HTMLButtonElement)) return;
+
+        node.addEventListener("click", async () => {
+          clearIdleTimer();
+          const kind = node.dataset.actionKind || "";
+          const value = node.dataset.actionValue || "";
+          const label = node.dataset.actionLabel || value;
+
+          if (kind === "country") {
+            handleCountrySelection(label);
+            return;
+          }
+
+          if (kind === "stage") {
+            handleStageSelection(label);
+            return;
+          }
+
+          if (kind === "copy") {
+            if (!value) return;
+
+            try {
+              if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(value);
+                addBotMessage(`已复制：${value}，您可以直接去联系老师。`);
+              } else {
+                addBotMessage(`请手动复制：${value}`);
+              }
+            } catch {
+              addBotMessage(`复制失败，请手动记录：${value}`);
+            }
+            return;
+          }
+
+          if (kind === "contact" && value) {
+            writeStorage(closedKey, "1");
+            minimizePanel();
+            window.location.href = value;
+            return;
+          }
+
+          if ((kind === "link" || kind === "call") && value) {
+            window.location.href = value;
+          }
+        });
+      });
+
+      scrollToBottom();
+    };
+
+    const addMessage = (role, text, actions = []) => {
+      const cleanText = String(text || "").trim();
+      if (!cleanText) return;
+
+      messages.push({
+        role,
+        text: cleanText,
+        time: currentTime(),
+        actions: Array.isArray(actions) ? actions : [],
+      });
+
+      renderMessages();
+    };
+
+    const addBotMessage = (text, actions = []) => {
+      addMessage("bot", text, actions);
+    };
+
+    const addUserMessage = (text) => {
+      addMessage("user", text);
+    };
+
+    const captureContact = (text) => {
+      const emailMatch = String(text).match(
+        /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+      );
+      const phoneMatch = String(text)
+        .match(/(?:\+?\d[\d\s-]{6,}\d)/)?.[0]
+        ?.replace(/\s+/g, "");
+      const wechatMatch = String(text).match(
+        /(?:微信|wechat|vx|wx)[:：]?\s*([a-zA-Z][-_a-zA-Z0-9]{4,})/i,
+      );
+
+      if (emailMatch?.[0]) customerEmail = emailMatch[0];
+      if (phoneMatch) customerPhone = phoneMatch;
+      if (wechatMatch?.[1]) customerWechat = wechatMatch[1];
+    };
+
+    const transcript = () =>
+      messages.slice(-12).map((item) => ({
+        role: item.role,
+        text: item.text,
+        time: item.time,
+      }));
+
+    const notifyBusiness = async (messageText) => {
+      try {
+        await fetch("/api/consult/message", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId,
+            currentPath: window.location.pathname,
+            pageHref: window.location.href,
+            message: messageText,
+            customerEmail,
+            customerPhone,
+            wechat: customerWechat,
+            transcript: transcript(),
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to notify consult email", error);
+      }
+    };
+
+    const contactActions = () => {
+      const items = [];
+
+      if (config.wechat) {
+        items.push({
+          label: "微信复制",
+          kind: "copy",
+          value: config.wechat,
+          theme: "blue",
+        });
+      }
+
+      if (config.phone) {
+        items.push({
+          label: "电话咨询",
+          kind: "call",
+          value: `tel:${config.phone}`,
+          theme: "blue",
+        });
+      }
+
+      items.push({
+        label: "预约咨询",
+        kind: "contact",
+        value: config.contactHref,
+        theme: "solid",
+      });
+
+      return items;
+    };
+
+    const countryActions = () =>
+      countryOptions.map((item) => ({
+        label: item,
+        kind: "country",
+        value: item,
+        theme: "",
+      }));
+
+    const stageActions = () =>
+      stageOptions.map((item) => ({
+        label: item,
+        kind: "stage",
+        value: item,
+        theme: "",
+      }));
+
+    const confirmContactMessage = () => {
+      const lines = [];
+
+      if (customerPhone) lines.push(`电话：${customerPhone}`);
+      if (customerWechat) lines.push(`微信：${customerWechat}`);
+      if (customerEmail) lines.push(`邮箱：${customerEmail}`);
+
+      return lines.length
+        ? `好的，已收到您的联系方式。\n${lines.join("\n")}\n老师会尽快联系您。`
+        : formatTemplate(config.contactMessage);
+    };
+
+    const handleCountrySelection = (country) => {
+      selectedCountry = country;
+      captureContact(country);
+      addUserMessage(country);
+      void notifyBusiness(country);
+      addBotMessage(formatTemplate(config.stagePrompt), stageActions());
+    };
+
+    const handleStageSelection = (stage) => {
+      selectedStage = stage;
+      captureContact(stage);
+      addUserMessage(stage);
+      void notifyBusiness(stage);
+      addBotMessage(formatTemplate(config.contactMessage), contactActions());
+    };
+
+    const normalizedIncludes = (value, options) => {
+      const clean = String(value || "").trim().toLowerCase();
+      return options.find((item) => clean === String(item).trim().toLowerCase()) || "";
+    };
+
+    const handleTextMessage = (rawText) => {
+      const text = String(rawText || "").trim();
+      if (!text) return;
+
+      clearIdleTimer();
+      captureContact(text);
+      addUserMessage(text);
+      void notifyBusiness(text);
+      input.value = "";
+      syncComposerState();
+
+      const matchedCountry = normalizedIncludes(text, countryOptions);
+      if (!selectedCountry && matchedCountry) {
+        selectedCountry = matchedCountry;
+        addBotMessage(formatTemplate(config.stagePrompt), stageActions());
+        return;
+      }
+
+      const matchedStage = normalizedIncludes(text, stageOptions);
+      if (selectedCountry && !selectedStage && matchedStage) {
+        selectedStage = matchedStage;
+        addBotMessage(formatTemplate(config.contactMessage), contactActions());
+        return;
+      }
+
+      if (/微信|电话|邮箱|联系|手机号|mail|email/i.test(text)) {
+        addBotMessage(formatTemplate(config.idleMessage), contactActions());
+        return;
+      }
+
+      if (customerPhone || customerWechat || customerEmail) {
+        addBotMessage(confirmContactMessage(), contactActions());
+        return;
+      }
+
+      if (!selectedCountry) {
+        addBotMessage(formatTemplate(config.countryPrompt), countryActions());
+        return;
+      }
+
+      if (!selectedStage) {
+        addBotMessage(formatTemplate(config.stagePrompt), stageActions());
+        return;
+      }
+
+      addBotMessage(formatTemplate(config.contactMessage), contactActions());
+    };
+
+    const bootMessages = () => {
+      if (booted) return;
+      booted = true;
+      addBotMessage(formatTemplate(config.welcomeMessage));
+      addBotMessage(formatTemplate(config.countryPrompt), countryActions());
+    };
+
+    const openPanel = () => {
+      bootMessages();
+      panel.hidden = false;
+      root.classList.add("is-open");
+      openButton.hidden = true;
+      clearStorage(closedKey);
+      scheduleIdleMessage();
+      scrollToBottom();
+    };
+
+    const minimizePanel = () => {
+      clearIdleTimer();
+      root.classList.remove("is-open");
+      panel.hidden = true;
+      openButton.hidden = false;
+    };
+
+    const closePanel = () => {
+      minimizePanel();
+      writeStorage(closedKey, "1");
+    };
+
+    openButton.addEventListener("click", openPanel);
+    minimizeButton.addEventListener("click", minimizePanel);
+    closeButton.addEventListener("click", closePanel);
+
+    input.addEventListener("input", () => {
+      clearIdleTimer();
+      syncComposerState();
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        handleTextMessage(input.value);
+      }
+    });
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      handleTextMessage(input.value);
+    });
+
+    syncComposerState();
+
+    if (readStorage(closedKey) === "1") {
+      minimizePanel();
+    } else {
+      window.setTimeout(openPanel, 700);
+    }
+  })();
+</script>
+
+<style>
+  .consult-widget {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 120;
+  }
+
+  .consult-launcher {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 120px;
+    min-height: 52px;
+    padding: 0 20px;
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    border-radius: 999px;
+    background: linear-gradient(135deg, #ff6849, #ff4d4f);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 800;
+    box-shadow: 0 18px 42px rgba(255, 95, 77, 0.24);
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  }
+
+  .consult-launcher::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.16);
+  }
+
+  .consult-panel {
+    width: min(420px, calc(100vw - 24px));
+    height: min(720px, calc(100vh - 24px));
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgba(70, 86, 145, 0.12);
+    box-shadow: 0 28px 72px rgba(45, 57, 120, 0.18);
+  }
+
+  .consult-topline {
+    height: 4px;
+    background: linear-gradient(90deg, #ff6849, #ff4d4f);
+  }
+
+  .consult-header {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 68px;
+    padding: 14px 18px 10px;
+    background: #fff;
+  }
+
+  .consult-status-pill {
+    padding: 12px 24px;
+    border-radius: 999px;
+    background: #f3f1fb;
+    color: #8993b1;
+    font-size: 16px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .consult-header-actions {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    display: flex;
+    gap: 8px;
+  }
+
+  .consult-header-actions button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(70, 86, 145, 0.08);
+    border-radius: 999px;
+    background: #f7f8fd;
+    color: #8e96b1;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  }
+
+  .consult-header-actions button:hover {
+    background: #eef1fa;
+    color: #5d688c;
+    transform: translateY(-1px);
+  }
+
+  .consult-body {
+    height: calc(100% - 184px);
+    padding: 0 16px;
+    background: #fff;
+  }
+
+  .consult-messages {
+    height: 100%;
+    overflow-y: auto;
+    padding: 8px 0 18px;
+  }
+
+  .consult-message {
+    display: grid;
+    gap: 10px;
+  }
+
+  .consult-message + .consult-message {
+    margin-top: 18px;
+  }
+
+  .consult-message--bot {
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .consult-message--user {
+    justify-items: end;
+  }
+
+  .consult-avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .consult-avatar-img,
+  .consult-avatar-fallback {
+    display: block;
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    object-fit: cover;
+    background: linear-gradient(135deg, #ffd9d2, #ffb9ae);
+    box-shadow: 0 8px 22px rgba(45, 57, 120, 0.08);
+  }
+
+  .consult-avatar-fallback {
+    display: grid;
+    place-items: center;
+    color: #ff5f4d;
+    font-size: 20px;
+    font-weight: 900;
+  }
+
+  .consult-message-main {
+    min-width: 0;
+  }
+
+  .consult-message-meta {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 8px;
+    color: #2e3240;
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .consult-message-meta strong {
+    font-size: 18px;
+    font-weight: 900;
+  }
+
+  .consult-message-meta span {
+    color: #434855;
+    font-weight: 700;
+  }
+
+  .consult-message--user .consult-message-meta {
+    justify-content: flex-end;
+  }
+
+  .consult-bubble {
+    max-width: min(92%, 320px);
+    padding: 18px 20px;
+    border-radius: 8px;
+    font-size: 17px;
+    line-height: 1.72;
+    box-shadow: 0 10px 24px rgba(45, 57, 120, 0.1);
+  }
+
+  .consult-bubble--bot {
+    background: #f3f2fb;
+    color: #222632;
+  }
+
+  .consult-bubble--user {
+    background: linear-gradient(135deg, #ff6749, #ff4d4f);
+    color: #fff;
+    margin-left: auto;
+  }
+
+  .consult-message-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .consult-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 16px;
+    border: 1px solid rgba(255, 131, 78, 0.35);
+    border-radius: 999px;
+    background: linear-gradient(180deg, #fffdf8, #fff5ef);
+    color: #ff7836;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+    box-shadow: 0 10px 22px rgba(45, 57, 120, 0.06);
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+  }
+
+  .consult-action-btn--blue {
+    border-color: rgba(110, 160, 255, 0.32);
+    background: linear-gradient(180deg, #fbfdff, #eef5ff);
+    color: #5f89ff;
+  }
+
+  .consult-action-btn--solid {
+    border-color: transparent;
+    background: linear-gradient(135deg, #ff6849, #ff4d4f);
+    color: #fff;
+    box-shadow: 0 14px 24px rgba(255, 95, 77, 0.18);
+  }
+
+  .consult-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 26px rgba(45, 57, 120, 0.1);
+  }
+
+  .consult-action-btn--solid:hover {
+    box-shadow: 0 16px 28px rgba(255, 95, 77, 0.22);
+  }
+
+  .consult-form {
+    padding: 16px 16px 18px;
+    border-top: 1px solid rgba(70, 86, 145, 0.08);
+    background: #fff;
+  }
+
+  .consult-label {
+    display: block;
+    margin-bottom: 12px;
+    color: #a5adc4;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .consult-input {
+    width: 100%;
+    min-height: 108px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    resize: none;
+    background: transparent;
+    color: #1f2552;
+    font-size: 16px;
+    line-height: 1.75;
+  }
+
+  .consult-input::placeholder {
+    color: #b0b7cd;
+  }
+
+  .consult-form-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .consult-count {
+    color: #a3abc3;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .consult-send {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 110px;
+    min-height: 50px;
+    padding: 0 20px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #e4e8f3, #d5dbe9);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease, background 0.16s ease;
+  }
+
+  .consult-send::after {
+    content: "➤";
+    font-size: 13px;
+    transform: translateY(-0.5px);
+  }
+
+  .consult-send.is-active {
+    background: linear-gradient(135deg, #ff6849, #ff4d4f);
+    box-shadow: 0 14px 28px rgba(255, 95, 77, 0.22);
+  }
+
+  .consult-send:disabled {
+    cursor: not-allowed;
+  }
+
+  .consult-launcher:hover,
+  .consult-send.is-active:hover,
+  .consult-action-btn:hover {
+    opacity: 0.94;
+  }
+
+  .consult-launcher:hover,
+  .consult-send.is-active:hover {
+    transform: translateY(-1px);
+  }
+
+  @media (max-width: 720px) {
+    .consult-widget {
+      right: 12px;
+      left: 12px;
+      bottom: 12px;
+    }
+
+    .consult-launcher {
+      width: 100%;
+    }
+
+    .consult-panel {
+      width: 100%;
+      height: min(680px, calc(100vh - 24px));
+    }
+
+    .consult-body {
+      height: calc(100% - 176px);
+    }
+
+    .consult-status-pill {
+      width: calc(100% - 76px);
+      padding-left: 16px;
+      padding-right: 16px;
+      font-size: 14px;
+    }
+
+    .consult-message-meta {
+      gap: 12px;
+      font-size: 16px;
+    }
+
+    .consult-bubble {
+      max-width: 100%;
+      font-size: 16px;
+    }
+
+    .consult-message-actions {
+      gap: 10px;
+    }
+
+    .consult-action-btn {
+      min-height: 40px;
+      padding: 0 14px;
+    }
+  }
+</style>
