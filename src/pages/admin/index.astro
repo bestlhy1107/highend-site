@@ -10,6 +10,7 @@ import { readServices } from "../../lib/services-store";
 import { readExams } from "../../lib/exams-store";
 import { readScores } from "../../lib/scores-store";
 import { readLeads } from "../../lib/leads-store";
+import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
 
 const adminUser = await Astro.session?.get("adminUser");
 
@@ -23,6 +24,7 @@ const services = await readServices();
 const exams = await readExams();
 const scores = await readScores();
 const leads = await readLeads();
+const schoolSearchQueue = await readStudyAbroadReviewQueue();
 
 const updateLeadResult = Astro.getActionResult(actions.updateLead);
 const deleteLeadResult = Astro.getActionResult(actions.deleteLead);
@@ -165,6 +167,15 @@ const latestLeads = leads.slice(0, 10);
         </div>
         <p class="muted mt-2">修改咨询状态、填写备注、删除无效记录。</p>
         <div class="card-cta">查看管理 ↓</div>
+      </a>
+
+      <a class="card card--hover" href="/admin/school-search">
+        <div class="card-top">
+          <div class="h3">选校候选</div>
+          <span class="badge">{schoolSearchQueue.filter((item) => item.status === "pending").length}</span>
+        </div>
+        <p class="muted mt-2">查看搜索器补抓到的候选官网页，作为后续人工核验线索。</p>
+        <div class="card-cta">查看候选 →</div>
       </a>
 
       <a class="card card--hover" href="/">

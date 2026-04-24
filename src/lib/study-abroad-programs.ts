@@ -28,6 +28,67 @@ export const POPULAR_MAJOR_HINTS = [
   "商业分析 / 数据",
 ] as const;
 
+export const MAJOR_FAMILIES: Record<string, string[]> = {
+  "计算机 / AI": [
+    "计算机",
+    "computer science",
+    "cs",
+    "software",
+    "programming",
+    "ai",
+    "人工智能",
+    "machine learning",
+    "cybersecurity",
+    "information technology",
+    "it",
+    "ux",
+    "hci",
+    "数据科学",
+  ],
+  金融: [
+    "金融",
+    "finance",
+    "investment",
+    "banking",
+    "wealth",
+    "risk",
+    "quant",
+    "fintech",
+  ],
+  "商科 / 管理": [
+    "商科",
+    "business",
+    "management",
+    "commerce",
+    "mba",
+    "strategy",
+    "consulting",
+    "商业分析",
+  ],
+  "市场营销 / 传媒": [
+    "市场",
+    "营销",
+    "marketing",
+    "communications",
+    "advertising",
+    "media",
+    "brand",
+    "imc",
+    "传媒",
+  ],
+  教育: ["教育", "education", "teaching", "policy", "pedagogy", "research"],
+  "商业分析 / 数据": [
+    "数据",
+    "data",
+    "analytics",
+    "analysis",
+    "business analytics",
+    "sql",
+    "python",
+    "information systems",
+  ],
+};
+
 export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
   {
     id: "cmu-mscs",

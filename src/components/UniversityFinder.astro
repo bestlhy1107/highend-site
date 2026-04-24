@@ -29,9 +29,9 @@ const sameLink = (program: StudyAbroadProgram) =>
   <div class="school-match-head">
     <div>
       <div class="section-kicker">Official School Finder</div>
-      <h3 class="school-match-title">输入国家和专业，先把院校项目池筛出来</h3>
+      <h3 class="school-match-title">先填条件，再点击开始搜索</h3>
       <p class="school-match-desc">
-        结果页直达院校官网的项目简介与申请要求页面，先筛出方向，再决定要不要进入精细选校。
+        搜索会优先返回已核验的官方项目；如果结果不够，系统会把候选官网页送进后台审核，不直接把未核验页面推给学生。
       </p>
     </div>
 
@@ -86,8 +86,17 @@ const sameLink = (program: StudyAbroadProgram) =>
     </div>
   </div>
 
+  <div class="school-match-toolbar">
+    <button class="btn" type="button" data-role="search-button">
+      开始搜索
+    </button>
+    <button class="btn btn-ghost" type="button" data-role="reset-button">
+      恢复精选
+    </button>
+  </div>
+
   <div class="school-match-status" data-role="status">
-    先看一轮精选项目。输入国家和专业后，结果会即时更新。
+    当前展示 {initialResults.length} 个精选项目。填好国家和专业后，点击“开始搜索”获取已核验结果。
   </div>
 
   <div class="school-match-results" data-role="results">
@@ -135,135 +144,44 @@ const sameLink = (program: StudyAbroadProgram) =>
   </div>
 
   <script type="application/json" id={`${finderId}-data`}>
-    {JSON.stringify(STUDY_ABROAD_PROGRAMS)}
+    {JSON.stringify(initialResults)}
   </script>
 
-  <script is:inline define:vars={{ finderId, compact }}>
+  <script is:inline define:vars={{ finderId }}>
     const root = document.querySelector(`[data-school-match="${finderId}"]`);
     const dataNode = document.getElementById(`${finderId}-data`);
 
     if (root && dataNode) {
-      const programs = JSON.parse(dataNode.textContent || "[]");
+      const initialResults = JSON.parse(dataNode.textContent || "[]");
       const countrySelect = root.querySelector('[data-role="country"]');
       const majorInput = root.querySelector('[data-role="major"]');
       const degreeSelect = root.querySelector('[data-role="degree"]');
+      const searchButton = root.querySelector('[data-role="search-button"]');
+      const resetButton = root.querySelector('[data-role="reset-button"]');
       const statusNode = root.querySelector('[data-role="status"]');
       const resultsNode = root.querySelector('[data-role="results"]');
       const hintButtons = Array.from(root.querySelectorAll("[data-major-hint]"));
-      const defaultCount = compact ? 4 : 6;
 
-      const majorFamilies = {
-        "计算机 / AI": [
-          "计算机",
-          "computer science",
-          "cs",
-          "software",
-          "programming",
-          "ai",
-          "人工智能",
-          "machine learning",
-          "cybersecurity",
-          "information technology",
-          "it",
-          "ux",
-          "hci",
-          "数据科学",
-        ],
-        金融: [
-          "金融",
-          "finance",
-          "investment",
-          "banking",
-          "wealth",
-          "risk",
-          "quant",
-          "fintech",
-        ],
-        "商科 / 管理": [
-          "商科",
-          "business",
-          "management",
-          "commerce",
-          "mba",
-          "strategy",
-          "consulting",
-          "商业分析",
-        ],
-        "市场营销 / 传媒": [
-          "市场",
-          "营销",
-          "marketing",
-          "communications",
-          "advertising",
-          "media",
-          "brand",
-          "imc",
-          "传媒",
-        ],
-        教育: ["教育", "education", "teaching", "policy", "pedagogy", "research"],
-        "商业分析 / 数据": [
-          "数据",
-          "data",
-          "analytics",
-          "analysis",
-          "business analytics",
-          "sql",
-          "python",
-          "information systems",
-        ],
-      };
-
-      const normalize = (value) =>
+      const escapeHtml = (value) =>
         String(value || "")
-          .toLowerCase()
-          .trim()
-          .replace(/[()]/g, " ")
-          .replace(/[.,/\\-]+/g, " ")
-          .replace(/\s+/g, " ");
-
-      const expandQuery = (value) => {
-        const query = normalize(value);
-        if (!query) return [];
-
-        const expanded = new Set(query.split(" ").filter(Boolean));
-
-        Object.entries(majorFamilies).forEach(([label, keywords]) => {
-          const labelText = normalize(label);
-          const hasFamilyMatch =
-            query.includes(labelText) ||
-            keywords.some((keyword) => query.includes(normalize(keyword)));
-
-          if (hasFamilyMatch) {
-            expanded.add(labelText);
-            keywords.forEach((keyword) => expanded.add(normalize(keyword)));
-          }
-        });
-
-        return Array.from(expanded);
-      };
-
-      const describeFilters = (country, major, degree) => {
-        const parts = [];
-
-        if (country) parts.push(country);
-        if (major) parts.push(`专业：${major}`);
-        if (degree) parts.push(`学位：${degree}`);
-
-        return parts.length ? parts.join(" / ") : "精选推荐";
-      };
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
 
       const cardHtml = (program) => {
         const facts = [
-          program.duration ? `<span>学制：${program.duration}</span>` : "",
-          program.intake ? `<span>入学：${program.intake}</span>` : "",
-          `<span>核对：${program.checkedAt}</span>`,
+          program.duration ? `<span>学制：${escapeHtml(program.duration)}</span>` : "",
+          program.intake ? `<span>入学：${escapeHtml(program.intake)}</span>` : "",
+          `<span>核对：${escapeHtml(program.checkedAt)}</span>`,
         ]
           .filter(Boolean)
           .join("");
 
         const admissionsLink =
           program.admissionsUrl && program.admissionsUrl !== program.overviewUrl
-            ? `<a href="${program.admissionsUrl}" target="_blank" rel="noreferrer">申请要求</a>`
+            ? `<a href="${escapeHtml(program.admissionsUrl)}" target="_blank" rel="noreferrer">申请要求</a>`
             : "";
 
         return `
@@ -271,136 +189,157 @@ const sameLink = (program: StudyAbroadProgram) =>
             <div class="school-card-top">
               <div>
                 <div class="school-card-meta">
-                  <span>${program.country}</span>
-                  <span>${program.city}</span>
-                  <span>${program.degree}</span>
+                  <span>${escapeHtml(program.country)}</span>
+                  <span>${escapeHtml(program.city)}</span>
+                  <span>${escapeHtml(program.degree)}</span>
                 </div>
-                <h4>${program.schoolName}</h4>
-                <p class="school-card-program">${program.programName}</p>
+                <h4>${escapeHtml(program.schoolName)}</h4>
+                <p class="school-card-program">${escapeHtml(program.programName)}</p>
               </div>
-              <div class="school-card-discipline">${program.discipline}</div>
+              <div class="school-card-discipline">${escapeHtml(program.discipline)}</div>
             </div>
 
-            <p class="school-card-summary">${program.summary}</p>
+            <p class="school-card-summary">${escapeHtml(program.summary)}</p>
 
             <div class="school-card-tags">
-              ${program.tags.map((tag) => `<span>${tag}</span>`).join("")}
+              ${(program.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
             </div>
 
             <div class="school-card-facts">${facts}</div>
 
             <div class="school-card-actions">
-              <a href="${program.overviewUrl}" target="_blank" rel="noreferrer">招生简介</a>
+              <a href="${escapeHtml(program.overviewUrl)}" target="_blank" rel="noreferrer">招生简介</a>
               ${admissionsLink}
             </div>
           </article>
         `;
       };
 
-      const renderResults = () => {
-        const country = countrySelect instanceof HTMLSelectElement ? countrySelect.value : "";
-        const degree = degreeSelect instanceof HTMLSelectElement ? degreeSelect.value : "";
-        const major = majorInput instanceof HTMLInputElement ? majorInput.value.trim() : "";
-        const queryTokens = expandQuery(major);
-
-        const matched = programs
-          .map((program) => {
-            if (country && program.country !== country) {
-              return null;
-            }
-
-            if (degree && program.degree !== degree) {
-              return null;
-            }
-
-            const searchText = normalize(
-              [
-                program.schoolName,
-                program.programName,
-                program.discipline,
-                program.summary,
-                ...(program.keywords || []),
-                ...(program.tags || []),
-              ].join(" ")
-            );
-
-            let score = program.priority || 0;
-
-            if (major) {
-              const rawQuery = normalize(major);
-              let majorMatched = searchText.includes(rawQuery);
-
-              queryTokens.forEach((token) => {
-                if (searchText.includes(token)) {
-                  majorMatched = true;
-                  score += token.length > 2 ? 9 : 4;
-                }
-              });
-
-              if (!majorMatched) {
-                return null;
-              }
-            }
-
-            if (country) {
-              score += 12;
-            }
-
-            if (degree) {
-              score += 6;
-            }
-
-            return { program, score };
-          })
-          .filter(Boolean)
-          .sort((left, right) => right.score - left.score)
-          .map((entry) => entry.program);
-
-        const fallback = !country && !major && !degree;
-        const visible = fallback ? matched.slice(0, defaultCount) : matched.slice(0, 12);
-
-        if (statusNode) {
-          statusNode.textContent = fallback
-            ? `当前展示 ${visible.length} 个精选项目。输入国家和专业后，会按匹配度重排。`
-            : visible.length
-              ? `已找到 ${visible.length} 个匹配项目：${describeFilters(country, major, degree)}`
-              : `没有找到完全匹配的项目：${describeFilters(country, major, degree)}。建议把专业词放宽到“计算机”“金融”“商科”“教育”等大方向。`;
-        }
-
+      const renderResults = (items, emptyText) => {
         if (!resultsNode) {
           return;
         }
 
-        if (!visible.length) {
+        if (!Array.isArray(items) || !items.length) {
           resultsNode.innerHTML = `
             <div class="school-match-empty">
               <strong>这轮没有筛到合适结果</strong>
-              <p>可以先缩短国家条件，或者把专业从“量化金融”“人机交互”放宽到“金融”“计算机 / AI”。</p>
+              <p>${escapeHtml(
+                emptyText ||
+                  "可以先缩短国家条件，或者把专业从“量化金融”“人机交互”放宽到“金融”“计算机 / AI”。"
+              )}</p>
             </div>
           `;
           return;
         }
 
-        resultsNode.innerHTML = visible.map(cardHtml).join("");
+        resultsNode.innerHTML = items.map(cardHtml).join("");
       };
 
-      [countrySelect, majorInput, degreeSelect].forEach((node) => {
-        if (!node) return;
+      const setStatus = (text) => {
+        if (statusNode) {
+          statusNode.textContent = text;
+        }
+      };
 
-        node.addEventListener("input", renderResults);
-        node.addEventListener("change", renderResults);
+      const setBusy = (busy) => {
+        const label = busy ? "搜索中..." : "开始搜索";
+
+        if (searchButton instanceof HTMLButtonElement) {
+          searchButton.disabled = busy;
+          searchButton.textContent = label;
+        }
+
+        if (resetButton instanceof HTMLButtonElement) {
+          resetButton.disabled = busy;
+        }
+      };
+
+      const collectPayload = () => ({
+        country: countrySelect instanceof HTMLSelectElement ? countrySelect.value : "",
+        major: majorInput instanceof HTMLInputElement ? majorInput.value.trim() : "",
+        degree: degreeSelect instanceof HTMLSelectElement ? degreeSelect.value : "",
       });
+
+      const resetToFeatured = () => {
+        if (countrySelect instanceof HTMLSelectElement) countrySelect.value = "";
+        if (majorInput instanceof HTMLInputElement) majorInput.value = "";
+        if (degreeSelect instanceof HTMLSelectElement) degreeSelect.value = "";
+
+        setStatus(
+          `当前展示 ${initialResults.length} 个精选项目。填好国家和专业后，点击“开始搜索”获取已核验结果。`
+        );
+        renderResults(initialResults);
+      };
+
+      const runSearch = async () => {
+        const payload = collectPayload();
+
+        if (!payload.country && !payload.major && !payload.degree) {
+          resetToFeatured();
+          return;
+        }
+
+        setBusy(true);
+        setStatus("正在搜索已核验项目，并评估是否需要补充官网候选结果...");
+
+        try {
+          const response = await fetch("/api/study-abroad/search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data?.ok) {
+            throw new Error(data?.message || "搜索失败");
+          }
+
+          setStatus(
+            data.message || `已找到 ${Array.isArray(data.verifiedResults) ? data.verifiedResults.length : 0} 条结果。`
+          );
+          renderResults(
+            Array.isArray(data.verifiedResults) ? data.verifiedResults : [],
+            "当前没有找到完全匹配的已核验项目。建议先放宽国家或专业方向。"
+          );
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : "搜索失败，请稍后重试。");
+          renderResults([], "接口暂时不可用，请稍后重试。");
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      if (searchButton instanceof HTMLButtonElement) {
+        searchButton.addEventListener("click", runSearch);
+      }
+
+      if (resetButton instanceof HTMLButtonElement) {
+        resetButton.addEventListener("click", resetToFeatured);
+      }
+
+      if (majorInput instanceof HTMLInputElement) {
+        majorInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            runSearch();
+          }
+        });
+      }
 
       hintButtons.forEach((button) => {
         button.addEventListener("click", () => {
           const hint = button.getAttribute("data-major-hint");
+
           if (!(majorInput instanceof HTMLInputElement) || !hint) {
             return;
           }
 
           majorInput.value = hint;
           majorInput.focus();
-          renderResults();
         });
       });
     }

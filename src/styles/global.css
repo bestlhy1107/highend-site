@@ -853,6 +853,13 @@ button.btn {
   color: var(--muted);
 }
 
+.school-match-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .school-match-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -888,6 +895,14 @@ button.btn {
   font-size: 14px;
   line-height: 1.7;
   color: var(--text-2);
+}
+
+.school-match .btn:disabled,
+.school-match button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  transform: none;
+  box-shadow: none;
 }
 
 .school-match-results {
@@ -1711,6 +1726,7 @@ textarea.input {
   }
 
   .study-abroad-actions .btn,
+  .school-match-toolbar .btn,
   .school-card-actions a {
     width: 100%;
   }

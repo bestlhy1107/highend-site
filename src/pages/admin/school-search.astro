@@ -1,0 +1,91 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
+
+const adminUser = await Astro.session?.get("adminUser");
+if (!adminUser) {
+  return Astro.redirect("/admin/login");
+}
+
+const queue = await readStudyAbroadReviewQueue();
+const pendingItems = queue.filter((item) => item.status === "pending");
+---
+
+<BaseLayout title="管理员后台 - 选校候选" description="查看待核验选校候选结果">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Admin</div>
+        <h1 class="section-title">选校候选审核</h1>
+        <p class="section-desc">
+          这里展示“开始搜索”后由系统抓到的候选官网页。当前只建议把它们当成待核验线索，不要直接当成前台推荐结果。
+        </p>
+      </div>
+
+      <a class="btn btn-ghost" href="/admin">返回后台</a>
+    </div>
+
+    <div class="cards cards--3 mt-4">
+      <div class="card">
+        <div class="muted text-sm">待核验搜索任务</div>
+        <div class="h2 mt-2">{pendingItems.length}</div>
+      </div>
+
+      <div class="card">
+        <div class="muted text-sm">全部候选任务</div>
+        <div class="h2 mt-2">{queue.length}</div>
+      </div>
+
+      <div class="card">
+        <div class="muted text-sm">当前逻辑</div>
+        <div class="mt-2">先返回已核验项目，再把全网候选结果送进后台。</div>
+      </div>
+    </div>
+
+    {pendingItems.length ? (
+      <div class="cards mt-6">
+        {pendingItems.map((item) => (
+          <article class="card">
+            <div class="card-top">
+              <div>
+                <div class="h3">
+                  {item.country || "不限国家"}
+                  {item.major ? ` / ${item.major}` : ""}
+                  {item.degree ? ` / ${item.degree}` : ""}
+                </div>
+                <div class="muted mt-1">
+                  创建时间：{new Date(item.createdAt).toLocaleString("zh-CN")}
+                </div>
+              </div>
+              <span class="badge">{item.candidates.length} 条候选</span>
+            </div>
+
+            <div class="mt-4">
+              {item.candidates.map((candidate) => (
+                <div class="faq">
+                  <div class="h3">{candidate.title}</div>
+                  <div class="muted mt-1">{candidate.displayLink || candidate.provider}</div>
+                  {candidate.snippet ? <p class="muted mt-2">{candidate.snippet}</p> : null}
+                  <div class="detail-actions mt-3">
+                    <a class="btn btn-ghost" href={candidate.link} target="_blank" rel="noreferrer">
+                      打开候选官网页
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <div class="card mt-6">
+        <div class="h3">目前还没有待核验候选</div>
+        <p class="muted mt-2">
+          当前搜索主要命中站内已核验项目库；当结果较少且服务器配置了全网扩搜 API 后，新候选会出现在这里。
+        </p>
+      </div>
+    )}
+  </main>
+</BaseLayout>
