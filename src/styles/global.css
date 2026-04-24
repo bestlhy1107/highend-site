@@ -905,11 +905,55 @@ button.btn {
   box-shadow: none;
 }
 
+.school-match-stack {
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.school-match-block {
+  display: grid;
+  gap: 14px;
+}
+
+.school-match-block-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.school-match-block-head strong {
+  display: block;
+  font-size: 18px;
+  color: var(--text);
+}
+
+.school-match-block-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.school-match-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 216, 77, 0.16);
+  border: 1px solid rgba(255, 216, 77, 0.2);
+  color: #8a5b00;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .school-match-results {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  margin-top: 16px;
 }
 
 .school-card {
@@ -919,6 +963,82 @@ button.btn {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(70, 86, 145, 0.08);
+  box-shadow: var(--shadow-xs);
+}
+
+.school-match-candidates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.candidate-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 8px;
+  background: rgba(255, 252, 248, 0.96);
+  border: 1px solid rgba(255, 139, 66, 0.14);
+  box-shadow: var(--shadow-xs);
+}
+
+.candidate-card-top {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.candidate-card-site {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.candidate-card h4 {
+  margin: 8px 0 0;
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.candidate-card-date {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.candidate-card-summary {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+
+.candidate-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.candidate-card-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-weight: 800;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 139, 66, 0.16);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.candidate-card-actions a:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 79, 163, 0.18);
   box-shadow: var(--shadow-xs);
 }
 
@@ -1727,7 +1847,8 @@ textarea.input {
 
   .study-abroad-actions .btn,
   .school-match-toolbar .btn,
-  .school-card-actions a {
+  .school-card-actions a,
+  .candidate-card-actions a {
     width: 100%;
   }
 
@@ -1786,7 +1907,8 @@ textarea.input {
 
   .study-abroad-journey,
   .school-match-controls,
-  .school-match-results {
+  .school-match-results,
+  .school-match-candidates {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1804,7 +1926,8 @@ textarea.input {
   .study-abroad-picks-grid,
   .study-abroad-journey,
   .school-match-controls,
-  .school-match-results {
+  .school-match-results,
+  .school-match-candidates {
     grid-template-columns: 1fr;
   }
 
@@ -1815,6 +1938,10 @@ textarea.input {
 
   .school-match {
     padding: 18px;
+  }
+
+  .school-match-block-head {
+    flex-direction: column;
   }
 
   .score-grid {

@@ -32,7 +32,7 @@ const sameLink = (program: StudyAbroadProgram) =>
       <div class="section-kicker">Official School Finder</div>
       <h3 class="school-match-title">先填条件，再点击开始搜索</h3>
       <p class="school-match-desc">
-        搜索会优先返回已核验的官方项目；如果结果不够，系统会把候选官网页送进后台审核，不直接把未核验页面推给学生。
+        搜索会先返回已核验的官方项目，再补充一层全网候选官网页。候选页会先经过官网规则筛选，并同步进入后台审核，不会直接替代正式推荐。
       </p>
     </div>
 
@@ -100,48 +100,71 @@ const sameLink = (program: StudyAbroadProgram) =>
     当前展示 {initialResults.length} 个精选项目。填好国家和专业后，点击“开始搜索”获取已核验结果。
   </div>
 
-  <div class="school-match-results" data-role="results">
-    {initialResults.map((program) => (
-      <article class="school-card">
-        <div class="school-card-top">
-          <div>
-            <div class="school-card-meta">
-              <span>{program.country}</span>
-              <span>{program.city}</span>
-              <span>{program.degree}</span>
+  <div class="school-match-stack">
+    <section class="school-match-block">
+      <div class="school-match-block-head">
+        <div>
+          <strong>已核验官方项目</strong>
+          <p>这些项目已经整理进项目库，适合直接给学生展示和做顾问推荐。</p>
+        </div>
+      </div>
+
+      <div class="school-match-results" data-role="verified-results">
+        {initialResults.map((program) => (
+          <article class="school-card">
+            <div class="school-card-top">
+              <div>
+                <div class="school-card-meta">
+                  <span>{program.country}</span>
+                  <span>{program.city}</span>
+                  <span>{program.degree}</span>
+                </div>
+                <h4>{program.schoolName}</h4>
+                <p class="school-card-program">{program.programName}</p>
+              </div>
+              <div class="school-card-discipline">{program.discipline}</div>
             </div>
-            <h4>{program.schoolName}</h4>
-            <p class="school-card-program">{program.programName}</p>
-          </div>
-          <div class="school-card-discipline">{program.discipline}</div>
-        </div>
 
-        <p class="school-card-summary">{program.summary}</p>
+            <p class="school-card-summary">{program.summary}</p>
 
-        <div class="school-card-tags">
-          {program.tags.map((tag) => (
-            <span>{tag}</span>
-          ))}
-        </div>
+            <div class="school-card-tags">
+              {program.tags.map((tag) => (
+                <span>{tag}</span>
+              ))}
+            </div>
 
-        <div class="school-card-facts">
-          {program.duration ? <span>学制：{program.duration}</span> : null}
-          {program.intake ? <span>入学：{program.intake}</span> : null}
-          <span>核对：{program.checkedAt}</span>
-        </div>
+            <div class="school-card-facts">
+              {program.duration ? <span>学制：{program.duration}</span> : null}
+              {program.intake ? <span>入学：{program.intake}</span> : null}
+              <span>核对：{program.checkedAt}</span>
+            </div>
 
-        <div class="school-card-actions">
-          <a href={program.overviewUrl} target="_blank" rel="noreferrer">
-            招生简介
-          </a>
-          {!sameLink(program) && program.admissionsUrl ? (
-            <a href={program.admissionsUrl} target="_blank" rel="noreferrer">
-              申请要求
-            </a>
-          ) : null}
+            <div class="school-card-actions">
+              <a href={program.overviewUrl} target="_blank" rel="noreferrer">
+                招生简介
+              </a>
+              {!sameLink(program) && program.admissionsUrl ? (
+                <a href={program.admissionsUrl} target="_blank" rel="noreferrer">
+                  申请要求
+                </a>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="school-match-block school-match-block--candidate" data-role="candidate-section" hidden>
+      <div class="school-match-block-head">
+        <div>
+          <strong>全网候选官网页</strong>
+          <p>这些页面来自百度全网搜索后筛出来的疑似官网页，会同步进入后台审核。</p>
         </div>
-      </article>
-    ))}
+        <span class="school-match-badge" data-role="candidate-count"></span>
+      </div>
+
+      <div class="school-match-candidates" data-role="candidate-results"></div>
+    </section>
   </div>
 
   <script is:inline define:vars={{ finderId, seedResults }}>
@@ -155,7 +178,10 @@ const sameLink = (program: StudyAbroadProgram) =>
       const searchButton = root.querySelector('[data-role="search-button"]');
       const resetButton = root.querySelector('[data-role="reset-button"]');
       const statusNode = root.querySelector('[data-role="status"]');
-      const resultsNode = root.querySelector('[data-role="results"]');
+      const verifiedResultsNode = root.querySelector('[data-role="verified-results"]');
+      const candidateSection = root.querySelector('[data-role="candidate-section"]');
+      const candidateResultsNode = root.querySelector('[data-role="candidate-results"]');
+      const candidateCountNode = root.querySelector('[data-role="candidate-count"]');
       const hintButtons = Array.from(root.querySelectorAll("[data-major-hint]"));
 
       const escapeHtml = (value) =>
@@ -211,13 +237,35 @@ const sameLink = (program: StudyAbroadProgram) =>
         `;
       };
 
-      const renderResults = (items, emptyText) => {
-        if (!resultsNode) {
+      const candidateCardHtml = (candidate) => `
+        <article class="candidate-card">
+          <div class="candidate-card-top">
+            <div>
+              <div class="candidate-card-site">${escapeHtml(candidate.displayLink || candidate.provider || "候选官网页")}</div>
+              <h4>${escapeHtml(candidate.title)}</h4>
+            </div>
+            ${candidate.date ? `<span class="candidate-card-date">${escapeHtml(candidate.date)}</span>` : ""}
+          </div>
+
+          <p class="candidate-card-summary">${escapeHtml(
+            String(
+              candidate.snippet || "该页面已通过规则初筛，建议优先查看院校官网中的招生和申请说明。"
+            ).slice(0, 280)
+          )}</p>
+
+          <div class="candidate-card-actions">
+            <a href="${escapeHtml(candidate.link)}" target="_blank" rel="noreferrer">打开官网页</a>
+          </div>
+        </article>
+      `;
+
+      const renderVerifiedResults = (items, emptyText) => {
+        if (!verifiedResultsNode) {
           return;
         }
 
         if (!Array.isArray(items) || !items.length) {
-          resultsNode.innerHTML = `
+          verifiedResultsNode.innerHTML = `
             <div class="school-match-empty">
               <strong>这轮没有筛到合适结果</strong>
               <p>${escapeHtml(
@@ -229,7 +277,31 @@ const sameLink = (program: StudyAbroadProgram) =>
           return;
         }
 
-        resultsNode.innerHTML = items.map(cardHtml).join("");
+        verifiedResultsNode.innerHTML = items.map(cardHtml).join("");
+      };
+
+      const renderCandidateResults = (items) => {
+        if (!(candidateSection instanceof HTMLElement) || !candidateResultsNode) {
+          return;
+        }
+
+        if (!Array.isArray(items) || !items.length) {
+          candidateSection.hidden = true;
+          candidateResultsNode.innerHTML = "";
+
+          if (candidateCountNode instanceof HTMLElement) {
+            candidateCountNode.textContent = "";
+          }
+
+          return;
+        }
+
+        candidateSection.hidden = false;
+        candidateResultsNode.innerHTML = items.map(candidateCardHtml).join("");
+
+        if (candidateCountNode instanceof HTMLElement) {
+          candidateCountNode.textContent = `${items.length} 条`;
+        }
       };
 
       const setStatus = (text) => {
@@ -265,7 +337,8 @@ const sameLink = (program: StudyAbroadProgram) =>
         setStatus(
           `当前展示 ${initialResults.length} 个精选项目。填好国家和专业后，点击“开始搜索”获取已核验结果。`
         );
-        renderResults(initialResults);
+        renderVerifiedResults(initialResults);
+        renderCandidateResults([]);
       };
 
       const runSearch = async () => {
@@ -277,7 +350,7 @@ const sameLink = (program: StudyAbroadProgram) =>
         }
 
         setBusy(true);
-        setStatus("正在搜索已核验项目，并评估是否需要补充官网候选结果...");
+        setStatus("正在搜索已核验项目，并从全网筛选候选官网页...");
 
         try {
           const response = await fetch("/api/study-abroad/search", {
@@ -297,13 +370,17 @@ const sameLink = (program: StudyAbroadProgram) =>
           setStatus(
             data.message || `已找到 ${Array.isArray(data.verifiedResults) ? data.verifiedResults.length : 0} 条结果。`
           );
-          renderResults(
+          renderVerifiedResults(
             Array.isArray(data.verifiedResults) ? data.verifiedResults : [],
-            "当前没有找到完全匹配的已核验项目。建议先放宽国家或专业方向。"
+            Array.isArray(data.candidateResults) && data.candidateResults.length
+              ? "当前没有找到完全匹配的已核验项目，可以先参考下方全网候选官网页。"
+              : "当前没有找到完全匹配的已核验项目。建议先放宽国家或专业方向。"
           );
+          renderCandidateResults(Array.isArray(data.candidateResults) ? data.candidateResults : []);
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "搜索失败，请稍后重试。");
-          renderResults([], "接口暂时不可用，请稍后重试。");
+          renderVerifiedResults([], "接口暂时不可用，请稍后重试。");
+          renderCandidateResults([]);
         } finally {
           setBusy(false);
         }

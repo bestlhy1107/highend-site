@@ -90,6 +90,14 @@ export const MAJOR_FAMILIES: Record<string, string[]> = {
     "传媒",
   ],
   教育: ["教育", "education", "teaching", "policy", "pedagogy", "research"],
+  心理学: [
+    "心理学",
+    "psychology",
+    "clinical psychology",
+    "counseling psychology",
+    "behavioral science",
+    "mental health",
+  ],
   "商业分析 / 数据": [
     "数据",
     "data",
@@ -113,7 +121,20 @@ export const COUNTRY_QUERY_ALIASES: Record<string, string[]> = {
 };
 
 export const DEGREE_QUERY_ALIASES: Record<string, string[]> = {
-  硕士: ["硕士", "master", "masters", "graduate", "MS", "MSc", "MFin", "MSF", "MFE"],
+  硕士: [
+    "硕士",
+    "master",
+    "masters",
+    "graduate",
+    "MS",
+    "MSc",
+    "MA",
+    "master of science",
+    "master of arts",
+    "MFin",
+    "MSF",
+    "MFE",
+  ],
   MBA: ["MBA", "business school", "management"],
 };
 
@@ -149,6 +170,14 @@ export const MAJOR_QUERY_ALIASES: Record<string, string[]> = {
     "brand management",
   ],
   教育: ["教育", "education", "education policy", "teaching"],
+  心理学: [
+    "心理学",
+    "psychology",
+    "clinical psychology",
+    "counseling psychology",
+    "behavioral science",
+    "mental health",
+  ],
   "商业分析 / 数据": [
     "商业分析",
     "business analytics",

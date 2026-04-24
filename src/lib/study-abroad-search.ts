@@ -19,28 +19,29 @@ export type StudyAbroadSearchInput = {
 
 export type StudyAbroadSearchResult = {
   verifiedResults: StudyAbroadProgram[];
+  candidateResults: StudyAbroadReviewCandidate[];
   expansionEnabled: boolean;
   expansionAttempted: boolean;
   pendingReviewCount: number;
   message: string;
 };
 
-type SearchWebCandidate = StudyAbroadReviewCandidate;
+type SearchWebCandidate = StudyAbroadReviewCandidate & {
+  date?: string;
+  authorityScore?: number;
+  rerankScore?: number;
+  score?: number;
+};
 
 const BAIDU_SEARCH_ENDPOINT =
-  "https://qianfan.baidubce.com/v2/ai_search/chat/completions";
+  "https://qianfan.baidubce.com/v2/ai_search/web_search";
 const SEARCH_TIMEOUT_MS = 4500;
-const BAIDU_DEFAULT_MODEL = "ernie-4.5-turbo-32k";
 const BAIDU_APPBUILDER_API_KEY =
   import.meta.env.BAIDU_APPBUILDER_API_KEY ||
   import.meta.env.BAIDU_SEARCH_API_KEY ||
   process.env.BAIDU_APPBUILDER_API_KEY ||
   process.env.BAIDU_SEARCH_API_KEY ||
   "";
-const BAIDU_SEARCH_MODEL =
-  import.meta.env.BAIDU_SEARCH_MODEL ||
-  process.env.BAIDU_SEARCH_MODEL ||
-  BAIDU_DEFAULT_MODEL;
 
 const OFFICIAL_HOST_HINTS = [
   ".edu",
@@ -79,6 +80,91 @@ const OFFICIAL_PATH_HINTS = [
   "study",
   "course",
 ];
+
+const BLOCKED_WEBSITES = [
+  "zhihu.com",
+  "zhuanlan.zhihu.com",
+  "xiaohongshu.com",
+  "baijiahao.baidu.com",
+  "sohu.com",
+  "163.com",
+  "sina.com.cn",
+  "qq.com",
+  "mp.weixin.qq.com",
+  "thegradcafe.com",
+  "reddit.com",
+  "gter.net",
+  "applysquare.com",
+  "liuxue86.com",
+  "xdf.cn",
+  "gaodun.com",
+  "yuloo.com",
+  "jjl.cn",
+  "coursera.org",
+  "mba.com",
+  "topsedu.com",
+  "eduei.com",
+  "jianshu.com",
+  "douban.com",
+];
+
+const UNIVERSITY_HOST_WORDS = [
+  "university",
+  "college",
+  "school",
+  "institute",
+  "polytechnic",
+  "business",
+];
+
+const OFFICIAL_TEXT_HINTS = [
+  "admissions",
+  "admission",
+  "apply",
+  "application",
+  "graduate",
+  "master",
+  "programme",
+  "program",
+  "prospective",
+];
+
+const LOW_QUALITY_TEXT_HINTS = [
+  "排名",
+  "攻略",
+  "经验",
+  "留学中介",
+  "论坛",
+  "问答",
+  "百科",
+  "news",
+  "ranking",
+  "forum",
+  "blog",
+  "知乎",
+  "小红书",
+];
+
+const DEGREE_CONFLICT_HINTS: Record<string, string[]> = {
+  硕士: [
+    "phd",
+    "doctor",
+    "doctoral",
+    "bachelor",
+    "undergraduate",
+    "minor",
+    "major",
+    "mba",
+    "mpa",
+    "certificate",
+    "specialization",
+    "concentration",
+  ],
+  MBA: ["phd", "doctor", "doctoral", "bachelor", "undergraduate"],
+};
+
+const MIN_CANDIDATE_SCORE = 42;
+const MAX_CANDIDATE_RESULTS = 8;
 
 export function normalizeStudyAbroadQuery(input: StudyAbroadSearchInput) {
   return {
@@ -229,10 +315,12 @@ export async function searchStudyAbroadPrograms(
   const expansionEnabled = canUseExternalSearch();
   let pendingReviewCount = 0;
   let expansionAttempted = false;
+  let candidateResults: SearchWebCandidate[] = [];
 
   if (shouldRunExternalSearch(query, verifiedResults) && expansionEnabled) {
     expansionAttempted = true;
-    const candidates = await searchExternalOfficialCandidates(query);
+    const candidates = await searchExternalOfficialCandidates(query, verifiedResults);
+    candidateResults = candidates;
 
     if (candidates.length) {
       const queued = await enqueueStudyAbroadReview({
@@ -248,12 +336,14 @@ export async function searchStudyAbroadPrograms(
 
   return {
     verifiedResults,
+    candidateResults,
     expansionEnabled,
     expansionAttempted,
     pendingReviewCount,
     message: buildSearchMessage({
       query,
       verifiedCount: verifiedResults.length,
+      candidateCount: candidateResults.length,
       expansionEnabled,
       expansionAttempted,
       pendingReviewCount,
@@ -263,42 +353,57 @@ export async function searchStudyAbroadPrograms(
 
 function shouldRunExternalSearch(
   query: ReturnType<typeof normalizeStudyAbroadQuery>,
-  verifiedResults: StudyAbroadProgram[]
+  _verifiedResults: StudyAbroadProgram[]
 ) {
-  return Boolean(query.major) && verifiedResults.length < 5;
+  return Boolean(query.major);
 }
 
 function buildSearchMessage(params: {
   query: ReturnType<typeof normalizeStudyAbroadQuery>;
   verifiedCount: number;
+  candidateCount: number;
   expansionEnabled: boolean;
   expansionAttempted: boolean;
   pendingReviewCount: number;
 }) {
-  const { verifiedCount, expansionEnabled, expansionAttempted, pendingReviewCount } = params;
+  const {
+    verifiedCount,
+    candidateCount,
+    expansionEnabled,
+    expansionAttempted,
+    pendingReviewCount,
+  } = params;
 
   if (verifiedCount) {
-    if (pendingReviewCount) {
-      return `先返回 ${verifiedCount} 条已核验官方项目；另外发现 ${pendingReviewCount} 条候选官网结果，已进入后台核验。`;
+    if (candidateCount) {
+      if (pendingReviewCount) {
+        return `已返回 ${verifiedCount} 条已核验官方项目，并补充 ${candidateCount} 条全网候选官网页；候选结果也已同步到后台审核。`;
+      }
+
+      return `已返回 ${verifiedCount} 条已核验官方项目，并补充 ${candidateCount} 条全网候选官网页。候选页仅作扩展参考，不会替代正式推荐。`;
     }
 
     if (expansionAttempted) {
-      return `先返回 ${verifiedCount} 条已核验官方项目；后台没有补充到更高质量的候选官网页。`;
+      return `已返回 ${verifiedCount} 条已核验官方项目；本轮全网搜索没有补充到更高质量的候选官网页。`;
     }
 
     if (!expansionEnabled) {
-      return `已返回 ${verifiedCount} 条已核验官方项目。当前站点未配置百度智能搜索 API，所以不会实时补抓新院校。`;
+      return `已返回 ${verifiedCount} 条已核验官方项目。当前站点未配置百度搜索 API，所以不会实时补抓新院校。`;
     }
 
     return `已返回 ${verifiedCount} 条已核验官方项目。`;
   }
 
   if (!expansionEnabled) {
-    return "当前项目库里没有完全匹配结果，且站点还未配置百度智能搜索 API。建议先放宽专业词，或补充百度 AppBuilder API Key。";
+    return "当前项目库里没有完全匹配结果，且站点还未配置百度搜索 API。建议先放宽专业词，或补充百度 AppBuilder API Key。";
   }
 
-  if (pendingReviewCount) {
-    return `项目库里暂时没有完全匹配结果，但已抓到 ${pendingReviewCount} 条候选官网页，后台核验后可补入结果池。`;
+  if (candidateCount) {
+    if (pendingReviewCount) {
+      return `当前没有命中已核验项目，但已从全网筛出 ${candidateCount} 条候选官网页，并已送入后台审核。`;
+    }
+
+    return `当前没有命中已核验项目，但已从全网筛出 ${candidateCount} 条候选官网页。建议先参考这些官网页，再由后台补入正式项目库。`;
   }
 
   return "当前没有匹配到已核验项目，后台也没有抓到足够可靠的候选官网页。建议先放宽国家或专业方向。";
@@ -309,19 +414,28 @@ function canUseExternalSearch() {
 }
 
 async function searchExternalOfficialCandidates(
-  query: ReturnType<typeof normalizeStudyAbroadQuery>
+  query: ReturnType<typeof normalizeStudyAbroadQuery>,
+  verifiedResults: StudyAbroadProgram[]
 ) {
   const queries = buildExternalQueries(query);
-  const candidates: SearchWebCandidate[] = [];
   const baiduApiKey = getBaiduSearchApiKey();
+  const verifiedLinks = new Set(
+    verifiedResults.flatMap((program) =>
+      [program.overviewUrl, program.admissionsUrl].filter(Boolean)
+    )
+  );
 
-  if (baiduApiKey) {
-    for (const item of queries) {
-      candidates.push(...(await searchBaiduCandidates(item, baiduApiKey)));
-    }
+  if (!baiduApiKey) {
+    return [];
   }
 
-  return dedupeCandidates(candidates).slice(0, 12);
+  const resultSets = await Promise.all(
+    queries.map((item) => searchBaiduCandidates(item, baiduApiKey, query))
+  );
+
+  return dedupeCandidates(resultSets.flat())
+    .filter((candidate) => !verifiedLinks.has(candidate.link))
+    .slice(0, MAX_CANDIDATE_RESULTS);
 }
 
 function buildExternalQueries(query: ReturnType<typeof normalizeStudyAbroadQuery>) {
@@ -349,15 +463,18 @@ function buildExternalQueries(query: ReturnType<typeof normalizeStudyAbroadQuery
   const englishDegree = degreeAliases.find((item) => /[a-z]/i.test(item)) || degreeAliases[0];
 
   const phrases = [
-    `${chineseLocation} ${chineseMajor} ${chineseDegree} 官网 招生 简介 申请 条件`,
-    `${englishLocation} ${englishMajor} ${englishDegree} official admissions program overview university website`,
-    `${englishLocation} ${englishMajor} ${englishDegree} graduate admissions official site`,
+    `${chineseLocation} ${chineseMajor} ${chineseDegree} 官网 招生 项目 申请 条件`,
+    `${englishLocation} ${englishMajor} ${englishDegree} university official admissions program`,
   ];
 
   return Array.from(new Set(phrases.filter(Boolean)));
 }
 
-async function searchBaiduCandidates(searchQuery: string, apiKey: string) {
+async function searchBaiduCandidates(
+  searchQuery: string,
+  apiKey: string,
+  query: ReturnType<typeof normalizeStudyAbroadQuery>
+) {
   const response = await fetchJsonWithTimeout(BAIDU_SEARCH_ENDPOINT, {
     method: "POST",
     headers: {
@@ -372,15 +489,9 @@ async function searchBaiduCandidates(searchQuery: string, apiKey: string) {
           content: searchQuery,
         },
       ],
-      stream: false,
-      model: BAIDU_SEARCH_MODEL,
       search_source: "baidu_search_v2",
-      resource_type_filter: [{ type: "web", top_k: 8 }],
-      enable_corner_markers: false,
-      enable_deep_search: false,
-      enable_followup_queries: false,
-      search_mode: "auto",
-      enable_web_page_safety: true,
+      resource_type_filter: [{ type: "web", top_k: 20 }],
+      block_websites: BLOCKED_WEBSITES,
     }),
   });
 
@@ -388,14 +499,24 @@ async function searchBaiduCandidates(searchQuery: string, apiKey: string) {
 
   return items
     .filter((item) => item?.type === "web")
-    .map((item) => ({
+    .map((item) => {
+      const candidate = {
       title: String(item.title ?? "").trim(),
       link: String(item.url ?? "").trim(),
       displayLink: String(item.website ?? item.web_anchor ?? "").trim(),
       snippet: String(item.content ?? "").trim(),
-      provider: "Baidu AI Search",
-    }))
-    .filter(isOfficialCandidate);
+      provider: "Baidu Web Search",
+      date: String(item.date ?? "").trim(),
+      authorityScore: Number(item.authority_score ?? 0) || 0,
+      rerankScore: Number(item.rerank_score ?? 0) || 0,
+    } satisfies SearchWebCandidate;
+
+      return {
+        ...candidate,
+        score: scoreCandidate(candidate, query),
+      };
+    })
+    .filter((candidate) => candidate.score >= MIN_CANDIDATE_SCORE);
 }
 
 async function fetchJsonWithTimeout(url: string, init?: RequestInit) {
@@ -447,13 +568,135 @@ function isOfficialCandidate(candidate: SearchWebCandidate) {
   return officialHost && officialPath;
 }
 
+function hostLooksAcademic(host: string) {
+  return UNIVERSITY_HOST_WORDS.some((item) => host.includes(item));
+}
+
+function guessCountryFromHost(host: string) {
+  if (host.endsWith(".ac.uk")) return "英国";
+  if (host.endsWith(".edu.au") || host.endsWith("unimelb.edu.au") || host.endsWith("unsw.edu.au")) {
+    return "澳大利亚";
+  }
+  if (host.endsWith(".edu.sg") || host.endsWith("nus.edu.sg") || host.endsWith("smu.edu.sg")) {
+    return "新加坡";
+  }
+  if (
+    host.endsWith(".edu.hk") ||
+    host.endsWith("hku.hk") ||
+    host.endsWith("hkust.edu.hk") ||
+    host.endsWith("cuhk.edu.hk")
+  ) {
+    return "中国香港";
+  }
+  if (host.endsWith(".edu")) return "美国";
+
+  return "";
+}
+
+function textHasAlias(text: string, rawValue: string, aliasGroups: Record<string, string[]>) {
+  if (!rawValue) return false;
+
+  const tokenSet = tokenizeText(text);
+
+  return expandQueryAliases(rawValue, aliasGroups, [rawValue])
+    .some((item) => matchNormalizedKeyword(text, tokenSet, item));
+}
+
+function scoreCandidate(
+  candidate: SearchWebCandidate,
+  query: ReturnType<typeof normalizeStudyAbroadQuery>
+) {
+  if (!candidate.link) return 0;
+
+  let url: URL;
+  try {
+    url = new URL(candidate.link);
+  } catch {
+    return 0;
+  }
+
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname.toLowerCase();
+  const text = normalizeText(
+    [candidate.title, candidate.displayLink, candidate.snippet, path].join(" ")
+  );
+  const guessedCountry = guessCountryFromHost(host);
+  const countryMatched = textHasAlias(text, query.country, COUNTRY_QUERY_ALIASES);
+
+  if (BLOCKED_WEBSITES.some((item) => host === item || host.endsWith(`.${item}`))) {
+    return 0;
+  }
+
+  let score = 0;
+
+  if (isOfficialCandidate(candidate)) {
+    score += 34;
+  } else if (hostLooksAcademic(host)) {
+    score += 12;
+  }
+
+  if (OFFICIAL_TEXT_HINTS.some((item) => text.includes(item))) {
+    score += 12;
+  }
+
+  const majorMatched = textHasAlias(text, query.major, MAJOR_QUERY_ALIASES);
+  const degreeMatched = textHasAlias(text, query.degree, DEGREE_QUERY_ALIASES);
+
+  if (query.major && !majorMatched) {
+    return 0;
+  }
+
+  if (query.degree && DEGREE_CONFLICT_HINTS[query.degree]?.some((item) => text.includes(item))) {
+    return 0;
+  }
+
+  if (majorMatched) {
+    score += 22;
+  }
+
+  if (degreeMatched) {
+    score += 9;
+  } else if (query.degree) {
+    score -= 14;
+
+    if (query.degree === "硕士" && text.includes("graduate")) {
+      score += 6;
+    }
+  }
+
+  if (countryMatched) {
+    score += 6;
+  }
+
+  if (query.country && guessedCountry && guessedCountry !== query.country) {
+    return 0;
+  }
+
+  if (query.country && !guessedCountry && !countryMatched) {
+    return 0;
+  }
+
+  if (LOW_QUALITY_TEXT_HINTS.some((item) => text.includes(normalizeText(item)))) {
+    score -= 18;
+  }
+
+  score += Math.round((candidate.authorityScore ?? 0) * 14);
+  score += Math.round((candidate.rerankScore ?? 0) * 12);
+
+  return score;
+}
+
 function dedupeCandidates(items: SearchWebCandidate[]) {
   const map = new Map<string, SearchWebCandidate>();
 
   items.forEach((item) => {
     if (!item.link) return;
-    map.set(item.link, item);
+    const existing = map.get(item.link);
+
+    if (!existing || (item.score ?? 0) > (existing.score ?? 0)) {
+      map.set(item.link, item);
+    }
   });
 
-  return Array.from(map.values());
+  return Array.from(map.values()).sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
 }
