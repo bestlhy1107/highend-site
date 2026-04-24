@@ -24,9 +24,10 @@ export type StudyAbroadSearchResult = {
 
 type SearchWebCandidate = StudyAbroadReviewCandidate;
 
-const GOOGLE_SEARCH_ENDPOINT = "https://www.googleapis.com/customsearch/v1";
-const BING_SEARCH_ENDPOINT = "https://api.bing.microsoft.com/v7.0/search";
+const BAIDU_SEARCH_ENDPOINT =
+  "https://qianfan.baidubce.com/v2/ai_search/chat/completions";
 const SEARCH_TIMEOUT_MS = 4500;
+const BAIDU_DEFAULT_MODEL = "ernie-4.5-turbo-32k";
 
 const OFFICIAL_HOST_HINTS = [
   ".edu",
@@ -247,14 +248,14 @@ function buildSearchMessage(params: {
     }
 
     if (!expansionEnabled) {
-      return `已返回 ${verifiedCount} 条已核验官方项目。当前站点未配置全网扩搜 API，所以不会实时补抓新院校。`;
+      return `已返回 ${verifiedCount} 条已核验官方项目。当前站点未配置百度智能搜索 API，所以不会实时补抓新院校。`;
     }
 
     return `已返回 ${verifiedCount} 条已核验官方项目。`;
   }
 
   if (!expansionEnabled) {
-    return "当前项目库里没有完全匹配结果，且站点还未配置 Google/Bing 官方搜索 API。建议先放宽专业词，或补充扩搜配置。";
+    return "当前项目库里没有完全匹配结果，且站点还未配置百度智能搜索 API。建议先放宽专业词，或补充百度 AppBuilder API Key。";
   }
 
   if (pendingReviewCount) {
@@ -265,11 +266,7 @@ function buildSearchMessage(params: {
 }
 
 function canUseExternalSearch() {
-  return Boolean(
-    (process.env.GOOGLE_CUSTOM_SEARCH_API_KEY &&
-      process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID) ||
-      process.env.BING_SEARCH_API_KEY
-  );
+  return Boolean(getBaiduSearchApiKey());
 }
 
 async function searchExternalOfficialCandidates(
@@ -277,21 +274,11 @@ async function searchExternalOfficialCandidates(
 ) {
   const queries = buildExternalQueries(query);
   const candidates: SearchWebCandidate[] = [];
+  const baiduApiKey = getBaiduSearchApiKey();
 
-  if (process.env.GOOGLE_CUSTOM_SEARCH_API_KEY && process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID) {
+  if (baiduApiKey) {
     for (const item of queries) {
-      candidates.push(
-        ...(await searchGoogleCandidates(item, {
-          apiKey: process.env.GOOGLE_CUSTOM_SEARCH_API_KEY,
-          engineId: process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID,
-        }))
-      );
-    }
-  } else if (process.env.BING_SEARCH_API_KEY) {
-    for (const item of queries) {
-      candidates.push(
-        ...(await searchBingCandidates(item, process.env.BING_SEARCH_API_KEY))
-      );
+      candidates.push(...(await searchBaiduCandidates(item, baiduApiKey)));
     }
   }
 
@@ -299,65 +286,55 @@ async function searchExternalOfficialCandidates(
 }
 
 function buildExternalQueries(query: ReturnType<typeof normalizeStudyAbroadQuery>) {
-  const major = query.major || "graduate program";
-  const location = query.country || "university";
-  const degree = query.degree || "master";
+  const major = query.major || "研究生项目";
+  const location = query.country || "大学";
+  const degree = query.degree || "硕士";
 
   const phrases = [
-    `${location} ${major} ${degree} official admissions`,
-    `${location} ${major} ${degree} site:edu OR site:ac.uk OR site:edu.au OR site:edu.sg OR site:edu.hk`,
+    `${location} ${major} ${degree} 官网 招生 简介 申请 条件`,
+    `${location} ${major} ${degree} official admissions program overview`,
   ];
 
   return Array.from(new Set(phrases));
 }
 
-async function searchGoogleCandidates(
-  searchQuery: string,
-  config: { apiKey: string; engineId: string }
-) {
-  const url = new URL(GOOGLE_SEARCH_ENDPOINT);
-  url.searchParams.set("key", config.apiKey);
-  url.searchParams.set("cx", config.engineId);
-  url.searchParams.set("q", searchQuery);
-  url.searchParams.set("num", "8");
-
-  const response = await fetchJsonWithTimeout(url.toString());
-  const items = Array.isArray(response?.items) ? response.items : [];
-
-  return items
-    .map((item) => ({
-      title: String(item.title ?? "").trim(),
-      link: String(item.link ?? "").trim(),
-      displayLink: String(item.displayLink ?? "").trim(),
-      snippet: String(item.snippet ?? "").trim(),
-      provider: "Google Programmable Search",
-    }))
-    .filter(isOfficialCandidate);
-}
-
-async function searchBingCandidates(searchQuery: string, apiKey: string) {
-  const url = new URL(BING_SEARCH_ENDPOINT);
-  url.searchParams.set("q", searchQuery);
-  url.searchParams.set("count", "8");
-  url.searchParams.set("responseFilter", "Webpages");
-
-  const response = await fetchJsonWithTimeout(url.toString(), {
+async function searchBaiduCandidates(searchQuery: string, apiKey: string) {
+  const response = await fetchJsonWithTimeout(BAIDU_SEARCH_ENDPOINT, {
+    method: "POST",
     headers: {
-      "Ocp-Apim-Subscription-Key": apiKey,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "X-Appbuilder-Authorization": `Bearer ${apiKey}`,
     },
+    body: JSON.stringify({
+      messages: [
+        {
+          role: "user",
+          content: searchQuery,
+        },
+      ],
+      stream: false,
+      model: process.env.BAIDU_SEARCH_MODEL || BAIDU_DEFAULT_MODEL,
+      search_source: "baidu_search_v2",
+      resource_type_filter: [{ type: "web", top_k: 8 }],
+      enable_corner_markers: false,
+      enable_deep_search: false,
+      enable_followup_queries: false,
+      search_mode: "auto",
+      enable_web_page_safety: true,
+    }),
   });
 
-  const items = Array.isArray(response?.webPages?.value)
-    ? response.webPages.value
-    : [];
+  const items = Array.isArray(response?.references) ? response.references : [];
 
   return items
+    .filter((item) => item?.type === "web")
     .map((item) => ({
-      title: String(item.name ?? "").trim(),
+      title: String(item.title ?? "").trim(),
       link: String(item.url ?? "").trim(),
-      displayLink: String(item.displayUrl ?? "").trim(),
-      snippet: String(item.snippet ?? "").trim(),
-      provider: "Bing Web Search",
+      displayLink: String(item.website ?? item.web_anchor ?? "").trim(),
+      snippet: String(item.content ?? "").trim(),
+      provider: "Baidu AI Search",
     }))
     .filter(isOfficialCandidate);
 }
@@ -386,6 +363,14 @@ async function fetchJsonWithTimeout(url: string, init?: RequestInit) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function getBaiduSearchApiKey() {
+  return (
+    process.env.BAIDU_APPBUILDER_API_KEY ||
+    process.env.BAIDU_SEARCH_API_KEY ||
+    ""
+  ).trim();
 }
 
 function isOfficialCandidate(candidate: SearchWebCandidate) {
