@@ -1,4 +1,7 @@
 import {
+  COUNTRY_QUERY_ALIASES,
+  DEGREE_QUERY_ALIASES,
+  MAJOR_QUERY_ALIASES,
   MAJOR_FAMILIES,
   STUDY_ABROAD_PROGRAMS,
   type StudyAbroadProgram,
@@ -137,6 +140,32 @@ function expandQueryTokens(major: string) {
   });
 
   return Array.from(expanded);
+}
+
+function expandQueryAliases(
+  rawValue: string,
+  aliasGroups: Record<string, string[]>,
+  fallback: string[]
+) {
+  const value = normalizeText(rawValue);
+  if (!value) return fallback;
+
+  const expanded = new Set<string>(fallback.filter(Boolean));
+
+  Object.entries(aliasGroups).forEach(([label, aliases]) => {
+    const normalizedLabel = normalizeText(label);
+    const hit =
+      value.includes(normalizedLabel) ||
+      aliases.some((alias) => value.includes(normalizeText(alias)));
+
+    if (hit) {
+      expanded.add(label);
+      aliases.forEach((alias) => expanded.add(alias));
+    }
+  });
+
+  expanded.add(rawValue);
+  return Array.from(expanded).filter(Boolean);
 }
 
 export function searchVerifiedStudyAbroadPrograms(input: StudyAbroadSearchInput) {
@@ -296,16 +325,36 @@ async function searchExternalOfficialCandidates(
 }
 
 function buildExternalQueries(query: ReturnType<typeof normalizeStudyAbroadQuery>) {
-  const major = query.major || "研究生项目";
-  const location = query.country || "大学";
-  const degree = query.degree || "硕士";
+  const majorAliases = expandQueryAliases(
+    query.major,
+    MAJOR_QUERY_ALIASES,
+    [query.major || "研究生项目"]
+  ).slice(0, 4);
+  const locationAliases = expandQueryAliases(
+    query.country,
+    COUNTRY_QUERY_ALIASES,
+    [query.country || "大学"]
+  ).slice(0, 4);
+  const degreeAliases = expandQueryAliases(
+    query.degree,
+    DEGREE_QUERY_ALIASES,
+    [query.degree || "硕士"]
+  ).slice(0, 4);
+
+  const chineseLocation = locationAliases.find((item) => /[\u4e00-\u9fff]/.test(item)) || locationAliases[0];
+  const englishLocation = locationAliases.find((item) => /[a-z]/i.test(item)) || locationAliases[0];
+  const chineseMajor = majorAliases.find((item) => /[\u4e00-\u9fff]/.test(item)) || majorAliases[0];
+  const englishMajor = majorAliases.find((item) => /[a-z]/i.test(item)) || majorAliases[0];
+  const chineseDegree = degreeAliases.find((item) => /[\u4e00-\u9fff]/.test(item)) || degreeAliases[0];
+  const englishDegree = degreeAliases.find((item) => /[a-z]/i.test(item)) || degreeAliases[0];
 
   const phrases = [
-    `${location} ${major} ${degree} 官网 招生 简介 申请 条件`,
-    `${location} ${major} ${degree} official admissions program overview`,
+    `${chineseLocation} ${chineseMajor} ${chineseDegree} 官网 招生 简介 申请 条件`,
+    `${englishLocation} ${englishMajor} ${englishDegree} official admissions program overview university website`,
+    `${englishLocation} ${englishMajor} ${englishDegree} graduate admissions official site`,
   ];
 
-  return Array.from(new Set(phrases));
+  return Array.from(new Set(phrases.filter(Boolean)));
 }
 
 async function searchBaiduCandidates(searchQuery: string, apiKey: string) {
