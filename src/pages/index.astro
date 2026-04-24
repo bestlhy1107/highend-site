@@ -9,6 +9,7 @@ import { readScores } from "../lib/scores-store";
 
 import ScoreCarousel from "../components/ScoreCarousel.astro";
 import ServiceGrid from "../components/ServiceGrid.astro";
+import StudyAbroadSection from "../components/StudyAbroadSection.astro";
 import TeacherShowcase from "../components/TeacherShowcase.astro";
 import NewsFeed from "../components/NewsFeed.astro";
 import ContactSection from "../components/ContactSection.astro";
@@ -19,6 +20,7 @@ const teachers = await readTeachers();
 const scores = await readScores();
 const services = await readServices();
 const exams = await readExams();
+const abroadServices = services.filter((service) => service.category === "abroad");
 const contactOptions = Array.from(
   new Set(
     [
@@ -128,6 +130,12 @@ const contactOptions = Array.from(
             ))}
           </div>
         </div>
+      </section>
+    ) : null}
+
+    {abroadServices.length ? (
+      <section class="section-block compact-top">
+        <StudyAbroadSection services={services} />
       </section>
     ) : null}
 

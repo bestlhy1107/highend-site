@@ -7,6 +7,8 @@ import { readServices } from "../../lib/services-store";
 
 const site = await readSiteSettings();
 const services = await readServices();
+const abroadServices = services.filter((service) => service.category === "abroad");
+const languageServices = services.filter((service) => service.category !== "abroad");
 ---
 
 <BaseLayout title={`服务 - ${site.companyName}`} description="查看全部服务">
@@ -15,42 +17,90 @@ const services = await readServices();
       <div>
         <div class="section-kicker">Services</div>
         <h1 class="section-title">全部服务</h1>
-        <p class="section-desc">这里展示当前后台维护的全部服务模块。</p>
+        <p class="section-desc">按业务线查看语言培训和留学申请服务，方便学生快速找到对应入口。</p>
       </div>
     </div>
 
-    {services.length ? (
-      <div class="cards cards--3 mt-4">
-        {services.map((service) => (
-          <a class="card card--hover" href={`/services/${service.id}`}>
-            <div class="card-top">
-              <div>
-                <div class="h3">
-                  {service.icon ? `${service.icon} ` : ""}{service.title}
+    {abroadServices.length ? (
+      <section class="mt-6">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Abroad</div>
+            <h2 class="section-title">留学申请服务</h2>
+            <p class="section-desc">适合需要选校、文书、申请递交和签证辅导的一站式客户。</p>
+          </div>
+        </div>
+
+        <div class="cards cards--3 mt-4">
+          {abroadServices.map((service) => (
+            <a class="card card--hover" href={`/services/${service.id}`}>
+              <div class="card-top">
+                <div>
+                  <div class="h3">
+                    {service.icon ? `${service.icon} ` : ""}{service.title}
+                  </div>
+                  <div class="muted mt-1">{service.subtitle}</div>
                 </div>
-                <div class="muted mt-1">{service.subtitle}</div>
+                <div class="badge">留学</div>
               </div>
-              <div class="badge">
-                {service.category === "abroad" ? "留学" : "语言"}
-              </div>
-            </div>
 
-            {service.tags.length ? (
-              <div class="tags">
-                {service.tags.map((tag) => (
-                  <span class="tag">{tag}</span>
-                ))}
-              </div>
-            ) : null}
+              {service.tags.length ? (
+                <div class="tags">
+                  {service.tags.map((tag) => (
+                    <span class="tag">{tag}</span>
+                  ))}
+                </div>
+              ) : null}
 
-            <div class="card-cta">查看详情 →</div>
-          </a>
-        ))}
-      </div>
-    ) : (
+              <div class="card-cta">查看详情 →</div>
+            </a>
+          ))}
+        </div>
+      </section>
+    ) : null}
+
+    {languageServices.length ? (
+      <section class="mt-8">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Language</div>
+            <h2 class="section-title">语言培训服务</h2>
+            <p class="section-desc">托福、雅思等考试培训继续放在这一组，和留学申请形成清晰分工。</p>
+          </div>
+        </div>
+
+        <div class="cards cards--3 mt-4">
+          {languageServices.map((service) => (
+            <a class="card card--hover" href={`/services/${service.id}`}>
+              <div class="card-top">
+                <div>
+                  <div class="h3">
+                    {service.icon ? `${service.icon} ` : ""}{service.title}
+                  </div>
+                  <div class="muted mt-1">{service.subtitle}</div>
+                </div>
+                <div class="badge">语言</div>
+              </div>
+
+              {service.tags.length ? (
+                <div class="tags">
+                  {service.tags.map((tag) => (
+                    <span class="tag">{tag}</span>
+                  ))}
+                </div>
+              ) : null}
+
+              <div class="card-cta">查看详情 →</div>
+            </a>
+          ))}
+        </div>
+      </section>
+    ) : null}
+
+    {!abroadServices.length && !languageServices.length ? (
       <div class="card mt-4">
         <div class="h3">暂无服务</div>
       </div>
-    )}
+    ) : null}
   </main>
 </BaseLayout>

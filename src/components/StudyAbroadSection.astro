@@ -1,0 +1,167 @@
+---
+import { normalizeImageUrl } from "../lib/image-url";
+import type { RuntimeService } from "../lib/services-store";
+
+type Props = {
+  services?: RuntimeService[];
+};
+
+const { services = [] } = Astro.props as Props;
+
+const abroadServices = Array.isArray(services)
+  ? services
+      .filter((service) => service?.category === "abroad")
+      .sort((a, b) => a.order - b.order)
+  : [];
+
+const featuredService = abroadServices[0] ?? null;
+const otherServices = abroadServices.slice(1, 4);
+
+const summaryParagraphs = String(featuredService?.summary ?? "")
+  .split("\n")
+  .map((item) => item.trim())
+  .filter(Boolean);
+
+const fallbackSteps = [
+  "选校定位",
+  "背景诊断",
+  "文书打磨",
+  "申请递交",
+];
+
+const stepDescriptions = [
+  "根据成绩、专业方向、预算和时间线，先把申请路径定清楚。",
+  "梳理软硬背景，明确还需要补什么经历和材料。",
+  "围绕目标项目打磨简历、文书和推荐信表达。",
+  "统一推进网申、补件、面试和签证准备。",
+];
+
+const processSteps =
+  featuredService?.highlights.length
+    ? featuredService.highlights.slice(0, 4)
+    : fallbackSteps;
+---
+
+{
+  featuredService ? (
+    <section class="container reveal" id="study-abroad">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Study Abroad</div>
+          <h2 class="section-title">留学申请</h2>
+          <p class="section-desc">
+            把选校、文书、递交和签证拆成可执行流程，让学生知道每一步该怎么推进。
+          </p>
+        </div>
+
+        <a class="section-link" href={`/services/${featuredService.id}`}>
+          查看完整服务 →
+        </a>
+      </div>
+
+      <div class="abroad-showcase">
+        <div class="abroad-copy">
+          <div class="card-tags">
+            <span>留学申请</span>
+            {featuredService.tags.slice(0, 3).map((tag) => (
+              <span>{tag}</span>
+            ))}
+          </div>
+
+          <h3 class="abroad-title">
+            {featuredService.icon ? `${featuredService.icon} ` : ""}
+            {featuredService.title}
+          </h3>
+
+          {featuredService.subtitle ? (
+            <p class="abroad-subtitle">{featuredService.subtitle}</p>
+          ) : null}
+
+          <div class="abroad-summary">
+            {(summaryParagraphs.length ? summaryParagraphs : ["后台可继续补充留学申请服务介绍。"])
+              .slice(0, 2)
+              .map((item) => <p>{item}</p>)}
+          </div>
+
+          <div class="abroad-actions">
+            <a class="btn" href={`/services/${featuredService.id}`}>
+              查看申请方案
+            </a>
+            <a class="btn btn-ghost" href="/#contact">
+              预约留学咨询
+            </a>
+          </div>
+        </div>
+
+        {featuredService.heroImage ? (
+          <div class="abroad-media">
+            <img
+              class="abroad-image"
+              src={normalizeImageUrl(featuredService.heroImage)}
+              alt={featuredService.title}
+              loading="lazy"
+            />
+          </div>
+        ) : (
+          <div class="abroad-media-placeholder">
+            <div>
+              <div class="abroad-placeholder-kicker">留学申请</div>
+              <div class="abroad-placeholder-title">从规划到递交，一路有人带</div>
+              <p class="abroad-placeholder-copy">
+                在后台给留学服务上传图片后，这里会自动显示最新主图。
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div class="abroad-process">
+        {processSteps.map((step, index) => (
+          <article class="abroad-step">
+            <div class="abroad-step-index">STEP {index + 1}</div>
+            <h3>{step}</h3>
+            <p>{stepDescriptions[index] ?? "根据学生阶段推进具体申请任务。"}</p>
+          </article>
+        ))}
+      </div>
+
+      {otherServices.length ? (
+        <div class="mt-6">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">More</div>
+              <h3 class="h2">更多留学服务</h3>
+            </div>
+          </div>
+
+          <div class="cards cards--3">
+            {otherServices.map((service) => (
+              <a class="card card--hover" href={`/services/${service.id}`}>
+                <div class="card-top">
+                  <div>
+                    <div class="h3">
+                      {service.icon ? `${service.icon} ` : ""}
+                      {service.title}
+                    </div>
+                    <div class="muted mt-1">{service.subtitle}</div>
+                  </div>
+                  <div class="badge">留学</div>
+                </div>
+
+                {service.tags.length ? (
+                  <div class="tags">
+                    {service.tags.slice(0, 4).map((tag) => (
+                      <span class="tag">{tag}</span>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div class="card-cta">查看详情 →</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  ) : null
+}
