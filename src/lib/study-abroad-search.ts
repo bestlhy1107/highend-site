@@ -28,6 +28,16 @@ const BAIDU_SEARCH_ENDPOINT =
   "https://qianfan.baidubce.com/v2/ai_search/chat/completions";
 const SEARCH_TIMEOUT_MS = 4500;
 const BAIDU_DEFAULT_MODEL = "ernie-4.5-turbo-32k";
+const BAIDU_APPBUILDER_API_KEY =
+  import.meta.env.BAIDU_APPBUILDER_API_KEY ||
+  import.meta.env.BAIDU_SEARCH_API_KEY ||
+  process.env.BAIDU_APPBUILDER_API_KEY ||
+  process.env.BAIDU_SEARCH_API_KEY ||
+  "";
+const BAIDU_SEARCH_MODEL =
+  import.meta.env.BAIDU_SEARCH_MODEL ||
+  process.env.BAIDU_SEARCH_MODEL ||
+  BAIDU_DEFAULT_MODEL;
 
 const OFFICIAL_HOST_HINTS = [
   ".edu",
@@ -314,7 +324,7 @@ async function searchBaiduCandidates(searchQuery: string, apiKey: string) {
         },
       ],
       stream: false,
-      model: process.env.BAIDU_SEARCH_MODEL || BAIDU_DEFAULT_MODEL,
+      model: BAIDU_SEARCH_MODEL,
       search_source: "baidu_search_v2",
       resource_type_filter: [{ type: "web", top_k: 8 }],
       enable_corner_markers: false,
@@ -366,11 +376,7 @@ async function fetchJsonWithTimeout(url: string, init?: RequestInit) {
 }
 
 function getBaiduSearchApiKey() {
-  return (
-    process.env.BAIDU_APPBUILDER_API_KEY ||
-    process.env.BAIDU_SEARCH_API_KEY ||
-    ""
-  ).trim();
+  return BAIDU_APPBUILDER_API_KEY.trim();
 }
 
 function isOfficialCandidate(candidate: SearchWebCandidate) {

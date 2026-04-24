@@ -12,6 +12,10 @@ interface ImportMetaEnv {
 
   readonly CONTACT_TO?: string;
   readonly CONTACT_FROM?: string;
+
+  readonly BAIDU_APPBUILDER_API_KEY?: string;
+  readonly BAIDU_SEARCH_API_KEY?: string;
+  readonly BAIDU_SEARCH_MODEL?: string;
 }
 
 interface ImportMeta {
