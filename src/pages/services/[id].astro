@@ -2,6 +2,7 @@
 export const prerender = false;
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import UniversityFinder from "../../components/UniversityFinder.astro";
 import { readSiteSettings } from "../../lib/site-store";
 import { readServiceById } from "../../lib/services-store";
 
@@ -116,5 +117,11 @@ const summaryParagraphs = String(service.summary ?? "")
         )}
       </aside>
     </div>
+
+    {service.category === "abroad" ? (
+      <section class="mt-8">
+        <UniversityFinder anchorId="study-abroad-finder" compact />
+      </section>
+    ) : null}
   </main>
 </BaseLayout>

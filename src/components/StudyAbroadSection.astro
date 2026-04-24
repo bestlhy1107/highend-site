@@ -1,6 +1,12 @@
 ---
+import UniversityFinder from "./UniversityFinder.astro";
 import { normalizeImageUrl } from "../lib/image-url";
 import type { RuntimeService } from "../lib/services-store";
+import {
+  POPULAR_MAJOR_HINTS,
+  STUDY_ABROAD_COUNTRIES,
+  STUDY_ABROAD_PROGRAMS,
+} from "../lib/study-abroad-programs";
 
 type Props = {
   services?: RuntimeService[];
@@ -22,24 +28,40 @@ const summaryParagraphs = String(featuredService?.summary ?? "")
   .map((item) => item.trim())
   .filter(Boolean);
 
-const fallbackSteps = [
-  "选校定位",
-  "背景诊断",
-  "文书打磨",
-  "申请递交",
+const sectionStats = [
+  {
+    value: `${STUDY_ABROAD_PROGRAMS.length}+`,
+    label: "精选官网项目",
+  },
+  {
+    value: `${STUDY_ABROAD_COUNTRIES.length}`,
+    label: "国家 / 地区",
+  },
+  {
+    value: `${POPULAR_MAJOR_HINTS.length}`,
+    label: "热门方向",
+  },
 ];
 
-const stepDescriptions = [
-  "根据成绩、专业方向、预算和时间线，先把申请路径定清楚。",
-  "梳理软硬背景，明确还需要补什么经历和材料。",
-  "围绕目标项目打磨简历、文书和推荐信表达。",
-  "统一推进网申、补件、面试和签证准备。",
+const journeySteps = [
+  {
+    step: "01",
+    title: "先定国家与专业",
+    body: "把目标国家、专业方向、预算和准备时间一起框住，第一轮项目池才不会发散。",
+  },
+  {
+    step: "02",
+    title: "再看学校与项目匹配",
+    body: "同一所学校里，不同项目的课程、申请要求和职业出口往往差别很大，要逐项拆开看。",
+  },
+  {
+    step: "03",
+    title: "最后进入背景规划",
+    body: "把语言、实习、科研、文书和推荐信按时间线推进，申请动作才会真正落地。",
+  },
 ];
 
-const processSteps =
-  featuredService?.highlights.length
-    ? featuredService.highlights.slice(0, 4)
-    : fallbackSteps;
+const featuredPrograms = STUDY_ABROAD_PROGRAMS.slice(0, 4);
 ---
 
 {
@@ -50,7 +72,7 @@ const processSteps =
           <div class="section-kicker">Study Abroad</div>
           <h2 class="section-title">留学申请</h2>
           <p class="section-desc">
-            把选校、文书、递交和签证拆成可执行流程，让学生知道每一步该怎么推进。
+            不是只讲“服务流程”，而是先把学校项目池筛出来，再决定选校、文书和递交流程怎么走。
           </p>
         </div>
 
@@ -59,74 +81,114 @@ const processSteps =
         </a>
       </div>
 
-      <div class="abroad-showcase">
-        <div class="abroad-copy">
-          <div class="card-tags">
-            <span>留学申请</span>
-            {featuredService.tags.slice(0, 3).map((tag) => (
-              <span>{tag}</span>
-            ))}
+      <div class="study-abroad-band">
+        <div class="study-abroad-hero">
+          <div class="study-abroad-copy">
+            <div class="card-tags">
+              <span>留学申请</span>
+              {featuredService.tags.slice(0, 3).map((tag) => (
+                <span>{tag}</span>
+              ))}
+            </div>
+
+            <h3 class="study-abroad-title">
+              {featuredService.icon ? `${featuredService.icon} ` : ""}
+              用真实项目池做第一轮留学筛选
+            </h3>
+
+            <p class="study-abroad-subtitle">
+              {featuredService.subtitle || "选校定位、文书、申请、签证一站式服务"}
+            </p>
+
+            <div class="study-abroad-summary">
+              {(summaryParagraphs.length
+                ? summaryParagraphs
+                : [
+                    "后台继续补充国家、专业和学生画像后，这个模块会更适合做分层转化。",
+                  ]
+              )
+                .slice(0, 2)
+                .map((item) => <p>{item}</p>)}
+            </div>
+
+            <div class="study-abroad-actions">
+              <a class="btn" href={`/services/${featuredService.id}`}>
+                查看申请方案
+              </a>
+              <a class="btn btn-ghost" href="#contact">
+                预约留学咨询
+              </a>
+            </div>
+
+            <div class="study-abroad-stats">
+              {sectionStats.map((stat) => (
+                <div class="study-abroad-stat">
+                  <strong>{stat.value}</strong>
+                  <span>{stat.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <h3 class="abroad-title">
-            {featuredService.icon ? `${featuredService.icon} ` : ""}
-            {featuredService.title}
-          </h3>
+          <div class="study-abroad-visual">
+            {featuredService.heroImage ? (
+              <img
+                class="study-abroad-image"
+                src={normalizeImageUrl(featuredService.heroImage)}
+                alt={featuredService.title}
+                loading="lazy"
+              />
+            ) : (
+              <div class="study-abroad-placeholder">
+                <div>
+                  <div class="study-abroad-placeholder-kicker">Study Abroad</div>
+                  <div class="study-abroad-placeholder-title">把项目、国家和专业放在一张图里看</div>
+                  <p class="study-abroad-placeholder-copy">
+                    这里会显示后台上传的留学申请主图，建议换成更能体现国家和校园氛围的实拍图。
+                  </p>
+                </div>
+              </div>
+            )}
 
-          {featuredService.subtitle ? (
-            <p class="abroad-subtitle">{featuredService.subtitle}</p>
-          ) : null}
+            <div class="study-abroad-picks">
+              <div class="study-abroad-picks-head">
+                <span>热门匹配方向</span>
+                <strong>直达官网项目页</strong>
+              </div>
 
-          <div class="abroad-summary">
-            {(summaryParagraphs.length ? summaryParagraphs : ["后台可继续补充留学申请服务介绍。"])
-              .slice(0, 2)
-              .map((item) => <p>{item}</p>)}
-          </div>
-
-          <div class="abroad-actions">
-            <a class="btn" href={`/services/${featuredService.id}`}>
-              查看申请方案
-            </a>
-            <a class="btn btn-ghost" href="/#contact">
-              预约留学咨询
-            </a>
+              <div class="study-abroad-picks-grid">
+                {featuredPrograms.map((program) => (
+                  <a
+                    class="study-abroad-pick"
+                    href={program.overviewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <small>{program.country}</small>
+                    <strong>{program.schoolName}</strong>
+                    <span>{program.programName}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
-        {featuredService.heroImage ? (
-          <div class="abroad-media">
-            <img
-              class="abroad-image"
-              src={normalizeImageUrl(featuredService.heroImage)}
-              alt={featuredService.title}
-              loading="lazy"
-            />
-          </div>
-        ) : (
-          <div class="abroad-media-placeholder">
-            <div>
-              <div class="abroad-placeholder-kicker">留学申请</div>
-              <div class="abroad-placeholder-title">从规划到递交，一路有人带</div>
-              <p class="abroad-placeholder-copy">
-                在后台给留学服务上传图片后，这里会自动显示最新主图。
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+        <div class="study-abroad-journey">
+          {journeySteps.map((item) => (
+            <article class="study-abroad-step">
+              <div class="study-abroad-step-number">STEP {item.step}</div>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </article>
+          ))}
+        </div>
 
-      <div class="abroad-process">
-        {processSteps.map((step, index) => (
-          <article class="abroad-step">
-            <div class="abroad-step-index">STEP {index + 1}</div>
-            <h3>{step}</h3>
-            <p>{stepDescriptions[index] ?? "根据学生阶段推进具体申请任务。"}</p>
-          </article>
-        ))}
+        <UniversityFinder />
       </div>
 
       {otherServices.length ? (
-        <div class="mt-6">
+        <div class="mt-8">
           <div class="section-head">
             <div>
               <div class="section-kicker">More</div>
