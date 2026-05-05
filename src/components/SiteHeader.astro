@@ -8,6 +8,7 @@ const { brand = "Highend Site", currentPath = "/" } = Astro.props as Props;
 
 const nav = [
   { label: "首页", href: "/" , match: (p: string) => p === "/" },
+  { label: "选校", href: "/school-finder", match: (p: string) => p.startsWith("/school-finder") },
   { label: "服务", href: "/services", match: (p: string) => p.startsWith("/services") },
   { label: "考试", href: "/exams", match: (p: string) => p.startsWith("/exams") },
   { label: "师资", href: "/teachers", match: (p: string) => p.startsWith("/teachers") },

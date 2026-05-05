@@ -3,27 +3,69 @@ import {
   DEGREE_QUERY_ALIASES,
   MAJOR_QUERY_ALIASES,
   MAJOR_FAMILIES,
-  STUDY_ABROAD_PROGRAMS,
-  type StudyAbroadProgram,
+  SPECIALIZATION_QUERY_ALIASES,
 } from "./study-abroad-programs";
+import {
+  readStudyAbroadCatalogUniversities,
+  readStudyAbroadFinderPrograms,
+  type StudyAbroadFinderProgram,
+} from "./study-abroad-catalog-store";
 import {
   enqueueStudyAbroadReview,
   type StudyAbroadReviewCandidate,
 } from "./study-abroad-review-queue";
+import { readStudyAbroadCachedAdmissionsInsights } from "./study-abroad-admissions";
+import {
+  buildStudyAbroadFitPreviewFromInsight,
+  type StudyAbroadFitPreview,
+} from "./study-abroad-fit";
 
 export type StudyAbroadSearchInput = {
   country?: string;
   major?: string;
+  specialization?: string;
   degree?: string;
+  budgetTier?: string;
+  intake?: string;
+  gpaProfile?: string;
+  languageProfile?: string;
+  fitMode?: string;
+  snapshotQuality?: string;
+  universityId?: string;
 };
 
 export type StudyAbroadSearchResult = {
-  verifiedResults: StudyAbroadProgram[];
+  verifiedResults: StudyAbroadFinderProgram[];
+  totalVerifiedCount: number;
+  displayedVerifiedCount: number;
+  universityMatches: StudyAbroadUniversityMatch[];
+  totalUniversityCount: number;
   candidateResults: StudyAbroadReviewCandidate[];
   expansionEnabled: boolean;
   expansionAttempted: boolean;
   pendingReviewCount: number;
   message: string;
+};
+
+export type StudyAbroadUniversityMatch = {
+  universityId: string;
+  schoolName: string;
+  schoolNameZh: string;
+  country: string;
+  city: string;
+  stateOrProvince: string;
+  officialWebsite: string;
+  qsRank: number | null;
+  qsRankingYear: number | null;
+  rankingSource: string;
+  programCount: number;
+  featuredScore: number;
+  topDisciplines: string[];
+  featuredPrograms: string[];
+  tuitionProjectCount: number;
+  tuitionMin: number | null;
+  tuitionMax: number | null;
+  tuitionCurrency: string;
 };
 
 type SearchWebCandidate = StudyAbroadReviewCandidate & {
@@ -37,8 +79,8 @@ const BAIDU_SEARCH_ENDPOINT =
   "https://qianfan.baidubce.com/v2/ai_search/web_search";
 const SEARCH_TIMEOUT_MS = 4500;
 const BAIDU_APPBUILDER_API_KEY =
-  import.meta.env.BAIDU_APPBUILDER_API_KEY ||
-  import.meta.env.BAIDU_SEARCH_API_KEY ||
+  import.meta.env?.BAIDU_APPBUILDER_API_KEY ||
+  import.meta.env?.BAIDU_SEARCH_API_KEY ||
   process.env.BAIDU_APPBUILDER_API_KEY ||
   process.env.BAIDU_SEARCH_API_KEY ||
   "";
@@ -146,6 +188,16 @@ const LOW_QUALITY_TEXT_HINTS = [
 ];
 
 const DEGREE_CONFLICT_HINTS: Record<string, string[]> = {
+  本科: [
+    "master",
+    "masters",
+    "graduate",
+    "msc",
+    "mba",
+    "phd",
+    "doctor",
+    "doctoral",
+  ],
   硕士: [
     "phd",
     "doctor",
@@ -154,24 +206,261 @@ const DEGREE_CONFLICT_HINTS: Record<string, string[]> = {
     "undergraduate",
     "minor",
     "major",
-    "mba",
     "mpa",
     "certificate",
     "specialization",
     "concentration",
   ],
-  MBA: ["phd", "doctor", "doctoral", "bachelor", "undergraduate"],
+  博士: ["bachelor", "undergraduate", "master", "masters", "msc", "mba"],
 };
 
 const MIN_CANDIDATE_SCORE = 42;
 const MAX_CANDIDATE_RESULTS = 8;
+const MAX_VERIFIED_RESULTS = 60;
+
+function hasStructuredFitInput(query: ReturnType<typeof normalizeStudyAbroadQuery>) {
+  return Boolean(query.gpaProfile || query.languageProfile);
+}
+
+function normalizeFitMode(value: string) {
+  return value === "exclude-risk" || value === "match-only" ? value : "prefer";
+}
+
+function fitStatusWeight(status: StudyAbroadFitPreview["status"]) {
+  if (status === "match") return 3;
+  if (status === "review") return 2;
+  return 1;
+}
+
+async function prioritizeVerifiedResultsByCachedFit(
+  results: StudyAbroadFinderProgram[],
+  query: ReturnType<typeof normalizeStudyAbroadQuery>
+) {
+  const fitMode = normalizeFitMode(query.fitMode);
+
+  if (!hasStructuredFitInput(query) || !results.length) {
+    return {
+      results,
+      cachedFitCount: 0,
+      fitMode,
+      filteredByFitModeCount: 0,
+      fitSummary: {
+        match: 0,
+        review: 0,
+        risk: 0,
+      },
+    };
+  }
+
+  const previewMap = new Map<string, StudyAbroadFitPreview>();
+
+  results.forEach((program) => {
+    if (!program.admissionsSnapshot?.extractedAt) {
+      return;
+    }
+
+    previewMap.set(
+      program.id,
+      buildStudyAbroadFitPreviewFromInsight(
+        {
+          programId: program.id,
+          admissionsProfile: {
+            gpaMin: program.admissionsSnapshot.gpaMin,
+            gpaScale: program.admissionsSnapshot.gpaScale,
+            ieltsMin: program.admissionsSnapshot.ieltsMin,
+            toeflMin: program.admissionsSnapshot.toeflMin,
+            duolingoMin: program.admissionsSnapshot.duolingoMin,
+            pteMin: program.admissionsSnapshot.pteMin,
+            greStatus: program.admissionsSnapshot.greStatus,
+            gmatStatus: program.admissionsSnapshot.gmatStatus,
+            workExperienceYears: program.admissionsSnapshot.workExperienceYears,
+            academicSignals: [],
+            languageSignals: [],
+            testSignals: [],
+          },
+          extractionStatus: program.admissionsSnapshot.extractionStatus,
+        },
+        {
+          gpaProfile: query.gpaProfile,
+          languageProfile: query.languageProfile,
+        }
+      )
+    );
+  });
+
+  const missingProgramIds = results
+    .filter((program) => !previewMap.has(program.id))
+    .map((program) => program.id);
+
+  if (missingProgramIds.length) {
+    const cachedInsights = await readStudyAbroadCachedAdmissionsInsights(missingProgramIds);
+    cachedInsights.forEach((insight) => {
+      previewMap.set(
+        insight.programId,
+        buildStudyAbroadFitPreviewFromInsight(insight, {
+          gpaProfile: query.gpaProfile,
+          languageProfile: query.languageProfile,
+        })
+      );
+    });
+  }
+
+  if (!previewMap.size) {
+    return {
+      results,
+      cachedFitCount: 0,
+      fitMode,
+      filteredByFitModeCount: 0,
+      fitSummary: {
+        match: 0,
+        review: 0,
+        risk: 0,
+      },
+    };
+  }
+
+  const fitSummary = {
+    match: 0,
+    review: 0,
+    risk: 0,
+  };
+
+  previewMap.forEach((preview) => {
+    fitSummary[preview.status] += 1;
+  });
+
+  const reordered = [...results].sort((left, right) => {
+    const leftPreview = previewMap.get(left.id);
+    const rightPreview = previewMap.get(right.id);
+    const leftWeight = leftPreview ? fitStatusWeight(leftPreview.status) : 0;
+    const rightWeight = rightPreview ? fitStatusWeight(rightPreview.status) : 0;
+
+    if (leftWeight !== rightWeight) {
+      return rightWeight - leftWeight;
+    }
+
+    if (leftPreview && rightPreview && leftPreview.status !== rightPreview.status) {
+      return fitStatusWeight(rightPreview.status) - fitStatusWeight(leftPreview.status);
+    }
+
+    return 0;
+  });
+
+  const fitFiltered = reordered.filter((program) => {
+    const preview = previewMap.get(program.id);
+
+    if (fitMode === "exclude-risk") {
+      return preview?.status !== "risk";
+    }
+
+    if (fitMode === "match-only") {
+      return preview?.status === "match";
+    }
+
+    return true;
+  });
+
+  return {
+    results: fitFiltered,
+    cachedFitCount: previewMap.size,
+    fitMode,
+    filteredByFitModeCount: Math.max(0, reordered.length - fitFiltered.length),
+    fitSummary,
+  };
+}
 
 export function normalizeStudyAbroadQuery(input: StudyAbroadSearchInput) {
   return {
     country: String(input.country ?? "").trim(),
     major: String(input.major ?? "").trim(),
+    specialization: String(input.specialization ?? "").trim(),
     degree: String(input.degree ?? "").trim(),
+    budgetTier: String(input.budgetTier ?? "").trim(),
+    intake: String(input.intake ?? "").trim(),
+    gpaProfile: String(input.gpaProfile ?? "").trim(),
+    languageProfile: String(input.languageProfile ?? "").trim(),
+    fitMode: String(input.fitMode ?? "").trim(),
+    snapshotQuality: String(input.snapshotQuality ?? "").trim(),
+    universityId: String(input.universityId ?? "").trim(),
   };
+}
+
+function hasStructuredSnapshot(program: StudyAbroadFinderProgram) {
+  const snapshot = program.admissionsSnapshot;
+  if (!snapshot?.extractedAt) return false;
+
+  return Boolean(
+    snapshot.gpaMin ||
+      snapshot.ieltsMin ||
+      snapshot.toeflMin ||
+      snapshot.duolingoMin ||
+      snapshot.pteMin ||
+      snapshot.greStatus !== "unknown" ||
+      snapshot.gmatStatus !== "unknown" ||
+      snapshot.workExperienceYears
+  );
+}
+
+function matchesSnapshotQuality(
+  program: StudyAbroadFinderProgram,
+  snapshotQuality: string
+) {
+  if (!snapshotQuality) return true;
+
+  const snapshot = program.admissionsSnapshot;
+  if (snapshotQuality === "ready-only") {
+    return snapshot?.extractionStatus === "ok";
+  }
+
+  if (snapshotQuality === "synced-only") {
+    return Boolean(snapshot?.extractedAt);
+  }
+
+  if (snapshotQuality === "structured-only") {
+    return hasStructuredSnapshot(program);
+  }
+
+  return true;
+}
+
+function matchesBudgetTier(tuitionAmount: string, budgetTier: string) {
+  if (!budgetTier) return true;
+
+  const amount = Number(tuitionAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return false;
+  }
+
+  switch (budgetTier) {
+    case "under-30000":
+      return amount <= 30000;
+    case "under-50000":
+      return amount <= 50000;
+    case "under-70000":
+      return amount <= 70000;
+    case "under-90000":
+      return amount <= 90000;
+    default:
+      return true;
+  }
+}
+
+function matchesIntake(intakeText: string, intakeFilter: string) {
+  if (!intakeFilter) return true;
+
+  const normalized = normalizeText(intakeText);
+  if (!normalized) return false;
+
+  const intakeHints: Record<string, string[]> = {
+    spring: ["春", "spring", "january", "jan", "february", "feb"],
+    summer: ["夏", "summer", "may", "june", "jun", "july", "jul"],
+    fall: ["秋", "fall", "autumn", "september", "sep", "august", "aug"],
+    winter: ["冬", "winter", "december", "dec", "november", "nov"],
+    rolling: ["滚动", "rolling"],
+  };
+
+  const hints = intakeHints[intakeFilter] ?? [];
+  return hints.some((hint) => normalized.includes(normalizeText(hint)));
 }
 
 function normalizeText(value: string) {
@@ -207,22 +496,31 @@ function matchNormalizedKeyword(
   return tokenSet.has(keyword);
 }
 
-function expandQueryTokens(major: string) {
-  const query = normalizeText(major);
-  if (!query) return [];
+function expandQueryTokens(...values: string[]) {
+  const normalizedValues = values
+    .map((value) => normalizeText(value))
+    .filter(Boolean);
 
-  const expanded = new Set(query.split(" ").filter(Boolean));
+  if (!normalizedValues.length) return [];
 
-  Object.entries(MAJOR_FAMILIES).forEach(([label, keywords]) => {
-    const normalizedLabel = normalizeText(label);
-    const hasFamilyMatch =
-      query.includes(normalizedLabel) ||
-      keywords.some((keyword) => query.includes(normalizeText(keyword)));
+  const expanded = new Set(
+    normalizedValues.flatMap((value) => value.split(" ").filter(Boolean))
+  );
 
-    if (hasFamilyMatch) {
-      expanded.add(normalizedLabel);
-      keywords.forEach((keyword) => expanded.add(normalizeText(keyword)));
-    }
+  [MAJOR_FAMILIES, SPECIALIZATION_QUERY_ALIASES].forEach((aliasGroup) => {
+    Object.entries(aliasGroup).forEach(([label, keywords]) => {
+      const normalizedLabel = normalizeText(label);
+      const hasFamilyMatch = normalizedValues.some(
+        (query) =>
+          query.includes(normalizedLabel) ||
+          keywords.some((keyword) => query.includes(normalizeText(keyword)))
+      );
+
+      if (hasFamilyMatch) {
+        expanded.add(normalizedLabel);
+        keywords.forEach((keyword) => expanded.add(normalizeText(keyword)));
+      }
+    });
   });
 
   return Array.from(expanded);
@@ -254,16 +552,36 @@ function expandQueryAliases(
   return Array.from(expanded).filter(Boolean);
 }
 
-export function searchVerifiedStudyAbroadPrograms(input: StudyAbroadSearchInput) {
+export async function searchVerifiedStudyAbroadPrograms(
+  input: StudyAbroadSearchInput,
+  programs?: StudyAbroadFinderProgram[]
+) {
   const query = normalizeStudyAbroadQuery(input);
-  const queryTokens = expandQueryTokens(query.major);
+  const queryTokens = expandQueryTokens(query.major, query.specialization);
+  const sourcePrograms = programs ?? (await readStudyAbroadFinderPrograms());
 
-  return STUDY_ABROAD_PROGRAMS.map((program) => {
+  return sourcePrograms.map((program) => {
+    if (query.universityId && program.universityId !== query.universityId) {
+      return null;
+    }
+
     if (query.country && program.country !== query.country) {
       return null;
     }
 
     if (query.degree && program.degree !== query.degree) {
+      return null;
+    }
+
+    if (!matchesSnapshotQuality(program, query.snapshotQuality)) {
+      return null;
+    }
+
+    if (!matchesBudgetTier(program.tuitionAmount, query.budgetTier)) {
+      return null;
+    }
+
+    if (!matchesIntake(program.intake, query.intake)) {
       return null;
     }
 
@@ -281,20 +599,48 @@ export function searchVerifiedStudyAbroadPrograms(input: StudyAbroadSearchInput)
 
     let score = program.priority;
 
-    if (query.major) {
-      const rawQuery = normalizeText(query.major);
-      let majorMatched = matchNormalizedKeyword(searchText, tokenSet, rawQuery);
+    if (query.major || query.specialization) {
+      const terms = [
+        {
+          value: query.major,
+          aliases: MAJOR_QUERY_ALIASES,
+          scoreLong: 9,
+          scoreShort: 4,
+        },
+        {
+          value: query.specialization,
+          aliases: SPECIALIZATION_QUERY_ALIASES,
+          scoreLong: 12,
+          scoreShort: 6,
+        },
+      ].filter((item) => item.value);
+
+      for (const term of terms) {
+        const rawQuery = normalizeText(term.value ?? "");
+        const aliases = expandQueryAliases(term.value ?? "", term.aliases, [
+          term.value ?? "",
+        ]).map((item) => normalizeText(item));
+
+        let termMatched =
+          Boolean(rawQuery) && matchNormalizedKeyword(searchText, tokenSet, rawQuery);
+
+        aliases.forEach((alias) => {
+          if (matchNormalizedKeyword(searchText, tokenSet, alias)) {
+            termMatched = true;
+            score += alias.length > 2 ? term.scoreLong : term.scoreShort;
+          }
+        });
+
+        if (!termMatched) {
+          return null;
+        }
+      }
 
       queryTokens.forEach((token) => {
         if (matchNormalizedKeyword(searchText, tokenSet, token)) {
-          majorMatched = true;
-          score += token.length > 2 ? 9 : 4;
+          score += token.length > 2 ? 4 : 2;
         }
       });
-
-      if (!majorMatched) {
-        return null;
-      }
     }
 
     if (query.country) score += 12;
@@ -302,16 +648,134 @@ export function searchVerifiedStudyAbroadPrograms(input: StudyAbroadSearchInput)
 
     return { program, score };
   })
-    .filter((item): item is { program: StudyAbroadProgram; score: number } => Boolean(item))
+    .filter((item): item is { program: StudyAbroadFinderProgram; score: number } => Boolean(item))
     .sort((left, right) => right.score - left.score)
     .map((item) => item.program);
+}
+
+async function buildCountryCatalogUniversityMatches(
+  country: string,
+  programs: StudyAbroadFinderProgram[]
+) {
+  const universities = await readStudyAbroadCatalogUniversities();
+  const programStats = new Map<
+    string,
+    {
+      programCount: number;
+      featuredScore: number;
+      topDisciplines: string[];
+      featuredPrograms: string[];
+      tuitionProjectCount: number;
+      tuitionMin: number | null;
+      tuitionMax: number | null;
+      tuitionCurrency: string;
+    }
+  >();
+
+  programs.forEach((program) => {
+    const key = program.universityId || program.schoolName;
+    const current = programStats.get(key);
+
+    if (!current) {
+      const tuitionAmount = Number(program.tuitionAmount);
+      programStats.set(key, {
+        programCount: 1,
+        featuredScore: Number(program.priority ?? 0),
+        topDisciplines: [program.discipline].filter(Boolean),
+        featuredPrograms: [program.programName].filter(Boolean),
+        tuitionProjectCount:
+          Number.isFinite(tuitionAmount) && tuitionAmount > 0 ? 1 : 0,
+        tuitionMin:
+          Number.isFinite(tuitionAmount) && tuitionAmount > 0 ? tuitionAmount : null,
+        tuitionMax:
+          Number.isFinite(tuitionAmount) && tuitionAmount > 0 ? tuitionAmount : null,
+        tuitionCurrency:
+          Number.isFinite(tuitionAmount) && tuitionAmount > 0 ? program.tuitionCurrency || "" : "",
+      });
+      return;
+    }
+
+    current.programCount += 1;
+    current.featuredScore = Math.max(current.featuredScore, Number(program.priority ?? 0));
+
+    if (program.discipline && !current.topDisciplines.includes(program.discipline)) {
+      current.topDisciplines = [...current.topDisciplines, program.discipline].slice(0, 3);
+    }
+
+    if (program.programName && !current.featuredPrograms.includes(program.programName)) {
+      current.featuredPrograms = [...current.featuredPrograms, program.programName].slice(0, 2);
+    }
+
+    const tuitionAmount = Number(program.tuitionAmount);
+    if (Number.isFinite(tuitionAmount) && tuitionAmount > 0) {
+      current.tuitionProjectCount += 1;
+      current.tuitionMin =
+        current.tuitionMin === null ? tuitionAmount : Math.min(current.tuitionMin, tuitionAmount);
+      current.tuitionMax =
+        current.tuitionMax === null ? tuitionAmount : Math.max(current.tuitionMax, tuitionAmount);
+
+      if (!current.tuitionCurrency && program.tuitionCurrency) {
+        current.tuitionCurrency = program.tuitionCurrency;
+      }
+    }
+  });
+
+  return universities
+    .filter((university) => university.country === country)
+    .map((university) => {
+      const stats = programStats.get(university.id);
+
+      return {
+        universityId: university.id,
+        schoolName: university.name,
+        schoolNameZh: university.nameZh || "",
+        country: university.country,
+        city: university.city,
+        stateOrProvince: university.stateOrProvince,
+        officialWebsite: university.officialWebsite,
+        qsRank: university.qsRank ?? null,
+        qsRankingYear: university.qsRankingYear ?? null,
+        rankingSource: university.rankingSource ?? "",
+        programCount: stats?.programCount ?? 0,
+        featuredScore: stats?.featuredScore ?? 0,
+        topDisciplines: stats?.topDisciplines ?? [],
+        featuredPrograms: stats?.featuredPrograms ?? [],
+        tuitionProjectCount: stats?.tuitionProjectCount ?? 0,
+        tuitionMin: stats?.tuitionMin ?? null,
+        tuitionMax: stats?.tuitionMax ?? null,
+        tuitionCurrency: stats?.tuitionCurrency ?? "",
+      } satisfies StudyAbroadUniversityMatch;
+    })
+    .sort(compareUniversityMatches);
 }
 
 export async function searchStudyAbroadPrograms(
   input: StudyAbroadSearchInput
 ): Promise<StudyAbroadSearchResult> {
   const query = normalizeStudyAbroadQuery(input);
-  const verifiedResults = searchVerifiedStudyAbroadPrograms(query).slice(0, 12);
+  const sourcePrograms = await readStudyAbroadFinderPrograms();
+  const searchedVerifiedResults = await searchVerifiedStudyAbroadPrograms(query, sourcePrograms);
+  const {
+    results: allVerifiedResults,
+    cachedFitCount,
+    fitMode,
+    filteredByFitModeCount,
+    fitSummary,
+  } = await prioritizeVerifiedResultsByCachedFit(searchedVerifiedResults, query);
+  const verifiedResults = query.universityId
+    ? allVerifiedResults
+    : allVerifiedResults.slice(0, MAX_VERIFIED_RESULTS);
+  const allUniversityMatches =
+    query.country &&
+    !query.major &&
+    !query.specialization &&
+    !query.degree &&
+    !query.budgetTier &&
+    !query.intake &&
+    !query.universityId
+      ? await buildCountryCatalogUniversityMatches(query.country, sourcePrograms)
+      : buildUniversityMatches(allVerifiedResults);
+  const universityMatches = allUniversityMatches;
   const expansionEnabled = canUseExternalSearch();
   let pendingReviewCount = 0;
   let expansionAttempted = false;
@@ -336,77 +800,321 @@ export async function searchStudyAbroadPrograms(
 
   return {
     verifiedResults,
+    totalVerifiedCount: allVerifiedResults.length,
+    displayedVerifiedCount: verifiedResults.length,
+    universityMatches,
+    totalUniversityCount: allUniversityMatches.length,
     candidateResults,
     expansionEnabled,
     expansionAttempted,
     pendingReviewCount,
     message: buildSearchMessage({
       query,
-      verifiedCount: verifiedResults.length,
+      displayedVerifiedCount: verifiedResults.length,
+      totalVerifiedCount: allVerifiedResults.length,
+      universityCount: allUniversityMatches.length,
       candidateCount: candidateResults.length,
       expansionEnabled,
       expansionAttempted,
       pendingReviewCount,
+      cachedFitCount,
+      fitMode,
+      filteredByFitModeCount,
+      fitSummary,
     }),
   };
 }
 
 function shouldRunExternalSearch(
   query: ReturnType<typeof normalizeStudyAbroadQuery>,
-  _verifiedResults: StudyAbroadProgram[]
+  _verifiedResults: StudyAbroadFinderProgram[]
 ) {
-  return Boolean(query.major);
+  return Boolean(query.major || query.specialization) && !query.universityId;
 }
 
 function buildSearchMessage(params: {
   query: ReturnType<typeof normalizeStudyAbroadQuery>;
-  verifiedCount: number;
+  displayedVerifiedCount: number;
+  totalVerifiedCount: number;
+  universityCount: number;
   candidateCount: number;
   expansionEnabled: boolean;
   expansionAttempted: boolean;
   pendingReviewCount: number;
+  cachedFitCount: number;
+  fitMode: string;
+  filteredByFitModeCount: number;
+  fitSummary: {
+    match: number;
+    review: number;
+    risk: number;
+  };
 }) {
   const {
-    verifiedCount,
+    query,
+    displayedVerifiedCount,
+    totalVerifiedCount,
+    universityCount,
     candidateCount,
     expansionEnabled,
     expansionAttempted,
     pendingReviewCount,
+    cachedFitCount,
+    fitMode,
+    filteredByFitModeCount,
+    fitSummary,
   } = params;
+  const hardFilters = [
+    query.budgetTier ? "预算" : "",
+    query.intake ? "入学季" : "",
+  ].filter(Boolean);
+  const advisoryFilters = [
+    query.gpaProfile ? "GPA" : "",
+    query.languageProfile ? "语言成绩" : "",
+  ].filter(Boolean);
+  const snapshotNote =
+    query.snapshotQuality === "ready-only"
+      ? " 当前只保留门槛已完整入库的项目。"
+      : query.snapshotQuality === "structured-only"
+        ? " 当前只保留已经抓到结构化门槛字段的项目。"
+        : query.snapshotQuality === "synced-only"
+          ? " 当前只保留已经同步过官网门槛快照的项目。"
+          : "";
+  const advisoryNote = advisoryFilters.length
+    ? fitMode === "prefer"
+      ? ` 当前 ${advisoryFilters.join(" / ")} 只作为背景参考，不做硬过滤，建议继续查看要求摘要核对。`
+      : ` 当前 ${advisoryFilters.join(" / ")} 只会对已抓到官网门槛字段的项目应用背景筛选，其余项目仍建议结合要求摘要继续判断。`
+    : "";
+  const prefetchNote =
+    displayedVerifiedCount > 0
+      ? " 系统也会在后台继续补抓前排项目的官网门槛，后续搜索会越来越完整。"
+      : "";
+  const fitModeNote =
+    advisoryFilters.length && fitMode === "exclude-risk"
+      ? ` 当前背景策略为“排除明显偏紧”，已额外排除 ${filteredByFitModeCount} 个偏紧项目。`
+      : advisoryFilters.length && fitMode === "match-only"
+        ? ` 当前背景策略为“只看已确认匹配”，仅保留已抓到官网门槛且判断为匹配的项目。`
+        : "";
+  const fitCacheNote =
+    cachedFitCount && advisoryFilters.length
+      ? ` 已按 ${cachedFitCount} 个已抓取官网要求的项目做背景优先排序，其中更匹配 ${fitSummary.match} 个、待核对 ${fitSummary.review} 个、偏紧 ${fitSummary.risk} 个。`
+      : advisoryFilters.length
+        ? " 当前还没有足够多的官网要求缓存，背景匹配提示会随着后续查看逐步补齐。"
+        : "";
+  const hardFilterNote = hardFilters.length
+    ? ` 已按${hardFilters.join("、")}做硬筛。`
+    : "";
 
-  if (verifiedCount) {
-    if (candidateCount) {
-      if (pendingReviewCount) {
-        return `已返回 ${verifiedCount} 条已核验官方项目，并补充 ${candidateCount} 条全网候选官网页；候选结果也已同步到后台审核。`;
-      }
+  if (query.universityId && totalVerifiedCount) {
+    const projectText =
+      totalVerifiedCount > displayedVerifiedCount
+        ? `${totalVerifiedCount} 个项目，当前展示前 ${displayedVerifiedCount} 个`
+        : `${totalVerifiedCount} 个项目`;
+    return `已切换到当前学校，找到 ${projectText}。${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim();
+  }
 
-      return `已返回 ${verifiedCount} 条已核验官方项目，并补充 ${candidateCount} 条全网候选官网页。候选页仅作扩展参考，不会替代正式推荐。`;
+  if (query.universityId && !totalVerifiedCount) {
+    if (advisoryFilters.length && fitMode !== "prefer" && filteredByFitModeCount > 0) {
+      return `这所学校原本有项目命中，但当前背景策略把它们筛掉了。建议先切回“推荐排序”，或放宽 GPA / 语言条件后再看。${hardFilterNote}${fitCacheNote}${advisoryNote}`.trim();
     }
 
-    if (expansionAttempted) {
-      return `已返回 ${verifiedCount} 条已核验官方项目；本轮全网搜索没有补充到更高质量的候选官网页。`;
+    if (query.budgetTier || query.intake) {
+      return `这所学校当前没有命中符合预算或入学季条件的项目。可以先放宽预算 / 入学季，再继续查看该校项目。${advisoryNote}`.trim();
+    }
+
+    return "这所学校已经进入学校底库，但当前还没有补齐可展示的项目层数据。可以先切回全部院校，或继续缩小专业方向。";
+  }
+
+  if (query.country && !query.major) {
+    if (universityCount) {
+      const projectText =
+        totalVerifiedCount > displayedVerifiedCount
+          ? `${totalVerifiedCount} 个项目，当前展示前 ${displayedVerifiedCount} 个`
+          : `${totalVerifiedCount} 个项目`;
+      return `已定位 ${universityCount} 所学校、${projectText}。现在可以继续输入专业，或先点击某所学校查看该校项目。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${prefetchNote}${advisoryNote}`.trim();
     }
 
     if (!expansionEnabled) {
-      return `已返回 ${verifiedCount} 条已核验官方项目。当前站点未配置百度搜索 API，所以不会实时补抓新院校。`;
+      return "当前国家下暂时没有可展示的已核验学校项目，且站点还未配置百度搜索 API。建议先放宽国家或补充专业方向。";
+    }
+  }
+
+  if (totalVerifiedCount) {
+    const verifiedLead =
+      totalVerifiedCount > displayedVerifiedCount
+        ? `已找到 ${totalVerifiedCount} 条已核验官方项目，当前展示前 ${displayedVerifiedCount} 条`
+        : `已返回 ${totalVerifiedCount} 条已核验官方项目`;
+
+    if (candidateCount) {
+      if (pendingReviewCount) {
+        return `${verifiedLead}，并补充 ${candidateCount} 条全网候选官网页；候选结果也已同步到后台审核。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${prefetchNote}${advisoryNote}`.trim();
+      }
+
+      return `${verifiedLead}，并补充 ${candidateCount} 条全网候选官网页。候选页仅作扩展参考，不会替代正式推荐。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${prefetchNote}${advisoryNote}`.trim();
     }
 
-    return `已返回 ${verifiedCount} 条已核验官方项目。`;
+    if (expansionAttempted) {
+      return `${verifiedLead}；本轮全网搜索没有补充到更高质量的候选官网页。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${prefetchNote}${advisoryNote}`.trim();
+    }
+
+    if (!expansionEnabled) {
+      return `${verifiedLead}。当前站点未配置百度搜索 API，所以不会实时补抓新院校。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${prefetchNote}${advisoryNote}`.trim();
+    }
+
+    return `${verifiedLead}。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${prefetchNote}${advisoryNote}`.trim();
   }
 
   if (!expansionEnabled) {
+    if (query.degree === "本科" || query.degree === "博士") {
+      return `当前学校底库已经支持按国家先筛学校，但 ${query.degree} 项目层还在持续补充，建议先切到硕士查看已核验项目，或先浏览学校池。`;
+    }
+
     return "当前项目库里没有完全匹配结果，且站点还未配置百度搜索 API。建议先放宽专业词，或补充百度 AppBuilder API Key。";
   }
 
   if (candidateCount) {
-    if (pendingReviewCount) {
-      return `当前没有命中已核验项目，但已从全网筛出 ${candidateCount} 条候选官网页，并已送入后台审核。`;
+    if (query.degree === "本科" || query.degree === "博士") {
+      const lead = `当前学校底库已经支持按国家先筛学校，但 ${query.degree} 项目层还在持续补充。`;
+
+      if (pendingReviewCount) {
+      return `${lead} 本轮已从全网筛出 ${candidateCount} 条候选官网页，并已送入后台审核。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim();
     }
 
-    return `当前没有命中已核验项目，但已从全网筛出 ${candidateCount} 条候选官网页。建议先参考这些官网页，再由后台补入正式项目库。`;
+      return `${lead} 本轮已从全网筛出 ${candidateCount} 条候选官网页，建议先参考这些官网页，再由后台补入正式项目库。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim();
+    }
+
+    if (pendingReviewCount) {
+      return `当前没有命中已核验项目，但已从全网筛出 ${candidateCount} 条候选官网页，并已送入后台审核。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim();
+    }
+
+    return `当前没有命中已核验项目，但已从全网筛出 ${candidateCount} 条候选官网页。建议先参考这些官网页，再由后台补入正式项目库。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim();
   }
 
-  return "当前没有匹配到已核验项目，后台也没有抓到足够可靠的候选官网页。建议先放宽国家或专业方向。";
+  if (advisoryFilters.length && fitMode !== "prefer" && filteredByFitModeCount > 0) {
+    return `当前没有留下符合背景策略的已核验项目。建议先切回“推荐排序”，再结合项目卡里的背景匹配提示做判断。${hardFilterNote}${fitCacheNote}${advisoryNote}`.trim();
+  }
+
+  if (query.degree === "本科" || query.degree === "博士") {
+    return `当前学校底库已经支持按国家先筛学校，但 ${query.degree} 项目层还在持续补充。可以先浏览学校池，或切到硕士查看已核验项目。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim();
+  }
+
+  if (hardFilters.length) {
+    return `当前没有匹配到已核验项目，后台也没有抓到足够可靠的候选官网页。建议先放宽预算或入学季，再回头调整国家和专业方向。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim();
+  }
+
+  return `当前没有匹配到已核验项目，后台也没有抓到足够可靠的候选官网页。建议先放宽国家或专业方向。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim();
+}
+
+function compareUniversityMatches(
+  left: StudyAbroadUniversityMatch,
+  right: StudyAbroadUniversityMatch
+) {
+  const leftRank = Number.isFinite(left.qsRank ?? NaN) && (left.qsRank ?? 0) > 0
+    ? (left.qsRank ?? 999999)
+    : 999999;
+  const rightRank = Number.isFinite(right.qsRank ?? NaN) && (right.qsRank ?? 0) > 0
+    ? (right.qsRank ?? 999999)
+    : 999999;
+
+  if (leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+
+  if (left.featuredScore !== right.featuredScore) {
+    return right.featuredScore - left.featuredScore;
+  }
+
+  if (left.programCount !== right.programCount) {
+    return right.programCount - left.programCount;
+  }
+
+  return left.schoolName.localeCompare(right.schoolName, "en-US");
+}
+
+function buildUniversityMatches(programs: StudyAbroadFinderProgram[]) {
+  const matches = new Map<string, StudyAbroadUniversityMatch>();
+
+  programs.forEach((program) => {
+    const key = program.universityId || program.schoolName;
+    const current = matches.get(key);
+
+    if (!current) {
+      matches.set(key, {
+        universityId: key,
+        schoolName: program.schoolName,
+        schoolNameZh: program.schoolNameZh || "",
+        country: program.country,
+        city: program.city,
+        stateOrProvince: program.stateOrProvince,
+        officialWebsite: program.officialWebsite || program.overviewUrl,
+        qsRank: program.qsRank ?? null,
+        qsRankingYear: program.qsRankingYear ?? null,
+        rankingSource: program.rankingSource ?? "",
+        programCount: 1,
+        featuredScore: Number(program.priority ?? 0),
+        topDisciplines: [program.discipline].filter(Boolean),
+        featuredPrograms: [program.programName].filter(Boolean),
+        tuitionProjectCount: 0,
+        tuitionMin: null,
+        tuitionMax: null,
+        tuitionCurrency: "",
+      });
+
+      const created = matches.get(key);
+      const tuitionAmount = Number(program.tuitionAmount);
+      if (
+        created &&
+        Number.isFinite(tuitionAmount) &&
+        tuitionAmount > 0
+      ) {
+        created.tuitionProjectCount = 1;
+        created.tuitionMin = tuitionAmount;
+        created.tuitionMax = tuitionAmount;
+        created.tuitionCurrency = program.tuitionCurrency || "";
+      }
+      return;
+    }
+
+    current.programCount += 1;
+    current.featuredScore = Math.max(current.featuredScore, Number(program.priority ?? 0));
+
+    if (
+      (!current.qsRank || current.qsRank <= 0) &&
+      program.qsRank &&
+      program.qsRank > 0
+    ) {
+      current.qsRank = program.qsRank;
+      current.qsRankingYear = program.qsRankingYear;
+      current.rankingSource = program.rankingSource;
+    }
+
+    if (program.discipline && !current.topDisciplines.includes(program.discipline)) {
+      current.topDisciplines = [...current.topDisciplines, program.discipline].slice(0, 3);
+    }
+
+    if (program.programName && !current.featuredPrograms.includes(program.programName)) {
+      current.featuredPrograms = [...current.featuredPrograms, program.programName].slice(0, 2);
+    }
+
+    if (!current.schoolNameZh && program.schoolNameZh) {
+      current.schoolNameZh = program.schoolNameZh;
+    }
+
+    const tuitionAmount = Number(program.tuitionAmount);
+    if (Number.isFinite(tuitionAmount) && tuitionAmount > 0) {
+      current.tuitionProjectCount += 1;
+      current.tuitionMin =
+        current.tuitionMin === null ? tuitionAmount : Math.min(current.tuitionMin, tuitionAmount);
+      current.tuitionMax =
+        current.tuitionMax === null ? tuitionAmount : Math.max(current.tuitionMax, tuitionAmount);
+
+      if (!current.tuitionCurrency && program.tuitionCurrency) {
+        current.tuitionCurrency = program.tuitionCurrency;
+      }
+    }
+  });
+
+  return Array.from(matches.values()).sort(compareUniversityMatches);
 }
 
 function canUseExternalSearch() {
@@ -415,7 +1123,7 @@ function canUseExternalSearch() {
 
 async function searchExternalOfficialCandidates(
   query: ReturnType<typeof normalizeStudyAbroadQuery>,
-  verifiedResults: StudyAbroadProgram[]
+  verifiedResults: StudyAbroadFinderProgram[]
 ) {
   const queries = buildExternalQueries(query);
   const baiduApiKey = getBaiduSearchApiKey();
@@ -444,6 +1152,13 @@ function buildExternalQueries(query: ReturnType<typeof normalizeStudyAbroadQuery
     MAJOR_QUERY_ALIASES,
     [query.major || "研究生项目"]
   ).slice(0, 4);
+  const specializationAliases = expandQueryAliases(
+    query.specialization,
+    SPECIALIZATION_QUERY_ALIASES,
+    [query.specialization || ""]
+  )
+    .filter(Boolean)
+    .slice(0, 4);
   const locationAliases = expandQueryAliases(
     query.country,
     COUNTRY_QUERY_ALIASES,
@@ -459,12 +1174,16 @@ function buildExternalQueries(query: ReturnType<typeof normalizeStudyAbroadQuery
   const englishLocation = locationAliases.find((item) => /[a-z]/i.test(item)) || locationAliases[0];
   const chineseMajor = majorAliases.find((item) => /[\u4e00-\u9fff]/.test(item)) || majorAliases[0];
   const englishMajor = majorAliases.find((item) => /[a-z]/i.test(item)) || majorAliases[0];
+  const chineseSpecialization =
+    specializationAliases.find((item) => /[\u4e00-\u9fff]/.test(item)) || "";
+  const englishSpecialization =
+    specializationAliases.find((item) => /[a-z]/i.test(item)) || "";
   const chineseDegree = degreeAliases.find((item) => /[\u4e00-\u9fff]/.test(item)) || degreeAliases[0];
   const englishDegree = degreeAliases.find((item) => /[a-z]/i.test(item)) || degreeAliases[0];
 
   const phrases = [
-    `${chineseLocation} ${chineseMajor} ${chineseDegree} 官网 招生 项目 申请 条件`,
-    `${englishLocation} ${englishMajor} ${englishDegree} university official admissions program`,
+    `${chineseLocation} ${chineseMajor} ${chineseSpecialization} ${chineseDegree} 官网 招生 项目 申请 条件`,
+    `${englishLocation} ${englishMajor} ${englishSpecialization} ${englishDegree} university official admissions program`,
   ];
 
   return Array.from(new Set(phrases.filter(Boolean)));
@@ -495,28 +1214,30 @@ async function searchBaiduCandidates(
     }),
   });
 
-  const items = Array.isArray(response?.references) ? response.references : [];
+  const items = Array.isArray(response?.references)
+    ? (response.references as Record<string, unknown>[])
+    : [];
 
   return items
-    .filter((item) => item?.type === "web")
-    .map((item) => {
+    .filter((item: Record<string, unknown>) => item?.type === "web")
+    .map((item: Record<string, unknown>) => {
       const candidate = {
-      title: String(item.title ?? "").trim(),
-      link: String(item.url ?? "").trim(),
-      displayLink: String(item.website ?? item.web_anchor ?? "").trim(),
-      snippet: String(item.content ?? "").trim(),
-      provider: "Baidu Web Search",
-      date: String(item.date ?? "").trim(),
-      authorityScore: Number(item.authority_score ?? 0) || 0,
-      rerankScore: Number(item.rerank_score ?? 0) || 0,
-    } satisfies SearchWebCandidate;
+        title: String(item.title ?? "").trim(),
+        link: String(item.url ?? "").trim(),
+        displayLink: String(item.website ?? item.web_anchor ?? "").trim(),
+        snippet: String(item.content ?? "").trim(),
+        provider: "Baidu Web Search",
+        date: String(item.date ?? "").trim(),
+        authorityScore: Number(item.authority_score ?? 0) || 0,
+        rerankScore: Number(item.rerank_score ?? 0) || 0,
+      } satisfies SearchWebCandidate;
 
       return {
         ...candidate,
         score: scoreCandidate(candidate, query),
       };
     })
-    .filter((candidate) => candidate.score >= MIN_CANDIDATE_SCORE);
+    .filter((candidate: SearchWebCandidate) => Number(candidate.score ?? 0) >= MIN_CANDIDATE_SCORE);
 }
 
 async function fetchJsonWithTimeout(url: string, init?: RequestInit) {

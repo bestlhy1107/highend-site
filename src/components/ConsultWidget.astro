@@ -633,8 +633,8 @@ const widgetConfig = {
 <style is:global>
   .consult-widget {
     position: fixed;
-    right: 20px;
-    bottom: 20px;
+    right: 16px;
+    bottom: 16px;
     z-index: 120;
   }
 
@@ -643,16 +643,16 @@ const widgetConfig = {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-width: 120px;
-    min-height: 52px;
-    padding: 0 20px;
+    min-width: 112px;
+    min-height: 46px;
+    padding: 0 18px;
     border: 1px solid rgba(255, 255, 255, 0.26);
     border-radius: 999px;
     background: linear-gradient(135deg, #ff6849, #ff4d4f);
     color: #fff;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 800;
-    box-shadow: 0 18px 42px rgba(255, 95, 77, 0.24);
+    box-shadow: 0 14px 34px rgba(255, 95, 77, 0.22);
     cursor: pointer;
     transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
   }
@@ -667,8 +667,8 @@ const widgetConfig = {
   }
 
   .consult-panel {
-    width: min(420px, calc(100vw - 24px));
-    height: min(720px, calc(100vh - 24px));
+    width: min(360px, calc(100vw - 20px));
+    height: min(620px, calc(100vh - 20px));
     border-radius: 8px;
     overflow: hidden;
     background: #fff;
@@ -686,37 +686,37 @@ const widgetConfig = {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 68px;
-    padding: 14px 18px 10px;
+    min-height: 60px;
+    padding: 10px 14px 8px;
     background: #fff;
   }
 
   .consult-status-pill {
-    padding: 12px 24px;
+    padding: 10px 18px;
     border-radius: 999px;
     background: #f3f1fb;
     color: #8993b1;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 800;
     text-align: center;
   }
 
   .consult-header-actions {
     position: absolute;
-    right: 12px;
-    top: 12px;
+    right: 10px;
+    top: 10px;
     display: flex;
-    gap: 8px;
+    gap: 6px;
   }
 
   .consult-header-actions button {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     border: 1px solid rgba(70, 86, 145, 0.08);
     border-radius: 999px;
     background: #f7f8fd;
     color: #8e96b1;
-    font-size: 18px;
+    font-size: 16px;
     line-height: 1;
     cursor: pointer;
     transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
@@ -729,28 +729,28 @@ const widgetConfig = {
   }
 
   .consult-body {
-    height: calc(100% - 184px);
-    padding: 0 16px;
+    height: calc(100% - 160px);
+    padding: 0 14px;
     background: #fff;
   }
 
   .consult-messages {
     height: 100%;
     overflow-y: auto;
-    padding: 8px 0 18px;
+    padding: 6px 0 14px;
   }
 
   .consult-message {
     display: grid;
-    gap: 10px;
+    gap: 8px;
   }
 
   .consult-message + .consult-message {
-    margin-top: 18px;
+    margin-top: 14px;
   }
 
   .consult-message--bot {
-    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-columns: 40px minmax(0, 1fr);
     align-items: start;
   }
 
@@ -759,26 +759,26 @@ const widgetConfig = {
   }
 
   .consult-avatar {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
   }
 
   .consult-avatar-img,
   .consult-avatar-fallback {
     display: block;
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     border-radius: 999px;
     object-fit: cover;
     background: linear-gradient(135deg, #ffd9d2, #ffb9ae);
-    box-shadow: 0 8px 22px rgba(45, 57, 120, 0.08);
+    box-shadow: 0 6px 18px rgba(45, 57, 120, 0.08);
   }
 
   .consult-avatar-fallback {
     display: grid;
     place-items: center;
     color: #ff5f4d;
-    font-size: 20px;
+    font-size: 17px;
     font-weight: 900;
   }
 
@@ -789,15 +789,15 @@ const widgetConfig = {
   .consult-message-meta {
     display: flex;
     align-items: center;
-    gap: 18px;
-    margin-bottom: 8px;
+    gap: 12px;
+    margin-bottom: 6px;
     color: #2e3240;
-    font-size: 18px;
+    font-size: 15px;
     line-height: 1.2;
   }
 
   .consult-message-meta strong {
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 900;
   }
 
@@ -811,12 +811,12 @@ const widgetConfig = {
   }
 
   .consult-bubble {
-    max-width: min(92%, 320px);
-    padding: 18px 20px;
+    max-width: min(92%, 286px);
+    padding: 14px 16px;
     border-radius: 8px;
-    font-size: 17px;
-    line-height: 1.72;
-    box-shadow: 0 10px 24px rgba(45, 57, 120, 0.1);
+    font-size: 15px;
+    line-height: 1.62;
+    box-shadow: 0 8px 20px rgba(45, 57, 120, 0.1);
   }
 
   .consult-bubble--bot {
@@ -833,24 +833,24 @@ const widgetConfig = {
   .consult-message-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 14px;
+    gap: 8px;
+    margin-top: 12px;
   }
 
   .consult-action-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
-    padding: 0 16px;
+    min-height: 36px;
+    padding: 0 14px;
     border: 1px solid rgba(255, 131, 78, 0.35);
     border-radius: 999px;
     background: linear-gradient(180deg, #fffdf8, #fff5ef);
     color: #ff7836;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
     line-height: 1;
-    box-shadow: 0 10px 22px rgba(45, 57, 120, 0.06);
+    box-shadow: 0 8px 18px rgba(45, 57, 120, 0.06);
     cursor: pointer;
     transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
   }
@@ -878,30 +878,30 @@ const widgetConfig = {
   }
 
   .consult-form {
-    padding: 16px 16px 18px;
+    padding: 12px 14px 14px;
     border-top: 1px solid rgba(70, 86, 145, 0.08);
     background: #fff;
   }
 
   .consult-label {
     display: block;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     color: #a5adc4;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
   }
 
   .consult-input {
     width: 100%;
-    min-height: 108px;
+    min-height: 78px;
     padding: 0;
     border: 0;
     outline: 0;
     resize: none;
     background: transparent;
     color: #1f2552;
-    font-size: 16px;
-    line-height: 1.75;
+    font-size: 15px;
+    line-height: 1.68;
   }
 
   .consult-input::placeholder {
@@ -912,13 +912,13 @@ const widgetConfig = {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-top: 12px;
+    gap: 10px;
+    margin-top: 10px;
   }
 
   .consult-count {
     color: #a3abc3;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
   }
 
@@ -927,14 +927,14 @@ const widgetConfig = {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-width: 110px;
-    min-height: 50px;
-    padding: 0 20px;
+    min-width: 94px;
+    min-height: 42px;
+    padding: 0 16px;
     border: 1px solid transparent;
     border-radius: 999px;
     background: linear-gradient(180deg, #e4e8f3, #d5dbe9);
     color: #fff;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 900;
     cursor: pointer;
     transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease, background 0.16s ease;
@@ -979,37 +979,37 @@ const widgetConfig = {
 
     .consult-panel {
       width: 100%;
-      height: min(680px, calc(100vh - 24px));
+      height: min(560px, calc(100vh - 24px));
     }
 
     .consult-body {
-      height: calc(100% - 176px);
+      height: calc(100% - 154px);
     }
 
     .consult-status-pill {
       width: calc(100% - 76px);
-      padding-left: 16px;
-      padding-right: 16px;
-      font-size: 14px;
+      padding-left: 14px;
+      padding-right: 14px;
+      font-size: 13px;
     }
 
     .consult-message-meta {
-      gap: 12px;
-      font-size: 16px;
+      gap: 10px;
+      font-size: 14px;
     }
 
     .consult-bubble {
       max-width: 100%;
-      font-size: 16px;
+      font-size: 14px;
     }
 
     .consult-message-actions {
-      gap: 10px;
+      gap: 8px;
     }
 
     .consult-action-btn {
-      min-height: 40px;
-      padding: 0 14px;
+      min-height: 34px;
+      padding: 0 12px;
     }
   }
 </style>

@@ -17,6 +17,11 @@ pnpm-debug.log*
 .env
 .env.production
 
+# runtime caches
+data/study-abroad-admissions-cache.json
+data/study-abroad-admissions-warmup-state.json
+data/study-abroad-admissions-campaign-state.json
+
 # macOS-specific files
 .DS_Store
 

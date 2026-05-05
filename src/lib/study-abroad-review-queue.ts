@@ -19,6 +19,7 @@ export type StudyAbroadReviewEntry = {
   status: "pending" | "reviewed" | "discarded";
   country: string;
   major: string;
+  specialization: string;
   degree: string;
   candidates: StudyAbroadReviewCandidate[];
 };
@@ -51,6 +52,7 @@ function normalizeEntry(input: Partial<StudyAbroadReviewEntry>): StudyAbroadRevi
         : "pending",
     country: String(input.country ?? "").trim(),
     major: String(input.major ?? "").trim(),
+    specialization: String(input.specialization ?? "").trim(),
     degree: String(input.degree ?? "").trim(),
     candidates: Array.isArray(input.candidates)
       ? input.candidates.map(normalizeCandidate).filter(isValidCandidate)
@@ -79,6 +81,7 @@ export async function readStudyAbroadReviewQueue() {
 export async function enqueueStudyAbroadReview(params: {
   country?: string;
   major?: string;
+  specialization?: string;
   degree?: string;
   candidates: StudyAbroadReviewCandidate[];
 }) {
@@ -95,6 +98,7 @@ export async function enqueueStudyAbroadReview(params: {
   const now = new Date().toISOString();
   const country = String(params.country ?? "").trim();
   const major = String(params.major ?? "").trim();
+  const specialization = String(params.specialization ?? "").trim();
   const degree = String(params.degree ?? "").trim();
 
   const existing = queue.find(
@@ -102,6 +106,7 @@ export async function enqueueStudyAbroadReview(params: {
       item.status === "pending" &&
       item.country === country &&
       item.major === major &&
+      item.specialization === specialization &&
       item.degree === degree
   );
 
@@ -123,6 +128,7 @@ export async function enqueueStudyAbroadReview(params: {
           status: "pending",
           country,
           major,
+          specialization,
           degree,
           candidates: normalizedCandidates,
         }),

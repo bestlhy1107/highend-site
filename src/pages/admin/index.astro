@@ -11,6 +11,18 @@ import { readExams } from "../../lib/exams-store";
 import { readScores } from "../../lib/scores-store";
 import { readLeads } from "../../lib/leads-store";
 import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
+import { readStudyAbroadCatalogSummary } from "../../lib/study-abroad-catalog-store";
+import { readStudyAbroadCatalogSyncState } from "../../lib/study-abroad-catalog-sync";
+import {
+  readStudyAbroadAdmissionsCampaignCadence,
+  readStudyAbroadAdmissionsCampaignCountryFocusTrend,
+  readStudyAbroadAdmissionsCountryTargetPlans,
+  readStudyAbroadAdmissionsCountryRecentActivity,
+  readStudyAbroadAdmissionsCampaignCountryTrend,
+  readStudyAbroadAdmissionsCampaignOutlook,
+  readStudyAbroadAdmissionsCampaignSchedule,
+  readStudyAbroadAdmissionsCampaignTrend,
+} from "../../lib/study-abroad-admissions-sync";
 
 const adminUser = await Astro.session?.get("adminUser");
 
@@ -25,12 +37,70 @@ const exams = await readExams();
 const scores = await readScores();
 const leads = await readLeads();
 const schoolSearchQueue = await readStudyAbroadReviewQueue();
+const studyAbroadCatalog = await readStudyAbroadCatalogSummary();
+const studyAbroadCatalogSyncState = await readStudyAbroadCatalogSyncState();
+const studyAbroadCampaignOutlook = await readStudyAbroadAdmissionsCampaignOutlook({
+  degree: "硕士",
+});
+const studyAbroadCampaignCadence = await readStudyAbroadAdmissionsCampaignCadence({
+  degree: "硕士",
+});
+const studyAbroadCampaignSchedule = await readStudyAbroadAdmissionsCampaignSchedule({
+  degree: "硕士",
+});
+const studyAbroadCampaignTrend = await readStudyAbroadAdmissionsCampaignTrend({
+  degree: "硕士",
+  days: 7,
+});
+const studyAbroadCampaignCountryTrend = await readStudyAbroadAdmissionsCampaignCountryTrend({
+  degree: "硕士",
+  days: 7,
+});
+const studyAbroadCampaignCountryFocusTrend =
+  await readStudyAbroadAdmissionsCampaignCountryFocusTrend({
+    degree: "硕士",
+    days: 7,
+    countryLimit: 3,
+    focusLimit: 3,
+  });
+const studyAbroadCampaignCountryNames = Array.from(
+  new Set([
+    ...studyAbroadCampaignCountryTrend.countries.map((item) => item.country),
+    ...studyAbroadCampaignCountryFocusTrend.countries.map((item) => item.country),
+  ])
+).filter(Boolean);
+const studyAbroadCountryTargetPlans = await readStudyAbroadAdmissionsCountryTargetPlans({
+  degree: "硕士",
+  countries: studyAbroadCampaignCountryNames,
+  limit: Math.max(studyAbroadCampaignCountryNames.length, 1),
+  focusLimit: 6,
+});
+const studyAbroadCountryRecentActivity = await readStudyAbroadAdmissionsCountryRecentActivity({
+  countries: studyAbroadCampaignCountryNames,
+  limit: Math.max(studyAbroadCampaignCountryNames.length, 1),
+});
 
 const updateLeadResult = Astro.getActionResult(actions.updateLead);
 const deleteLeadResult = Astro.getActionResult(actions.deleteLead);
+const catalogSyncResult = Astro.getActionResult(actions.syncStudyAbroadCatalogSources);
+const campaignCadenceResult = Astro.getActionResult(
+  actions.executeStudyAbroadAdmissionsCampaignCadence
+);
+const countryTargetPlanResult = Astro.getActionResult(
+  actions.executeStudyAbroadAdmissionsCountryTargetPlan
+);
+const admissionsSyncResult = Astro.getActionResult(actions.syncStudyAbroadAdmissionsSnapshots);
 
 const updateLeadSuccess = updateLeadResult && !updateLeadResult.error ? updateLeadResult.data : null;
 const deleteLeadSuccess = deleteLeadResult && !deleteLeadResult.error ? deleteLeadResult.data : null;
+const catalogSyncSuccess =
+  catalogSyncResult && !catalogSyncResult.error ? catalogSyncResult.data : null;
+const campaignCadenceSuccess =
+  campaignCadenceResult && !campaignCadenceResult.error ? campaignCadenceResult.data : null;
+const countryTargetPlanSuccess =
+  countryTargetPlanResult && !countryTargetPlanResult.error ? countryTargetPlanResult.data : null;
+const admissionsSyncSuccess =
+  admissionsSyncResult && !admissionsSyncResult.error ? admissionsSyncResult.data : null;
 
 const STATUS_LABELS: Record<string, string> = {
   new: "未处理",
@@ -96,6 +166,98 @@ const examStats = Object.entries(examStatsMap)
   .sort((a, b) => b.count - a.count);
 
 const latestLeads = leads.slice(0, 10);
+const latestCatalogSyncRun = studyAbroadCatalogSyncState.runs[0] ?? null;
+const latestCampaignRun = studyAbroadCampaignOutlook.recentRuns[0] ?? null;
+const structuredCoveragePercent = studyAbroadCatalog.stats.programCount
+  ? Math.round(
+      (studyAbroadCatalog.stats.structuredAdmissionsCoverage /
+        studyAbroadCatalog.stats.programCount) *
+        100
+    )
+  : 0;
+const cadenceLabel =
+  studyAbroadCampaignCadence.rhythm === "accelerate"
+    ? "加速推进"
+    : studyAbroadCampaignCadence.rhythm === "steady"
+      ? "稳定补齐"
+      : "精修收口";
+const campaignModeLabel = (mode: string) => {
+  if (mode === "roadmap") return "多轮批处理";
+  if (mode === "sprint") return "单轮冲刺";
+  return "留学补齐";
+};
+const maxTrendStructuredDelta = Math.max(
+  1,
+  ...studyAbroadCampaignTrend.days.map((day) => day.structuredDelta)
+);
+const maxCountryTrendStructuredDelta = Math.max(
+  1,
+  ...studyAbroadCampaignCountryTrend.countries.map((item) =>
+    Math.max(item.structuredDelta, item.completeDelta)
+  )
+);
+const countryFocusTrendMap = new Map(
+  studyAbroadCampaignCountryFocusTrend.countries.map((item) => [item.country, item])
+);
+const countryTargetPlanMap = new Map(
+  studyAbroadCountryTargetPlans.map((item) => [item.country, item])
+);
+const countryRecentActivityMap = new Map(
+  studyAbroadCountryRecentActivity.map((item) => [item.country, item])
+);
+const countryTargetPlanRunMap = new Map(
+  ((countryTargetPlanSuccess?.countryRuns as Array<{
+    country: string;
+    syncedCount?: number;
+    okCount?: number;
+    partialCount?: number;
+    unavailableCount?: number;
+  }>) ?? []).map((item) => [item.country, item])
+);
+const admissionsSyncFilters = admissionsSyncSuccess?.filters ?? {};
+const admissionsSyncCountry = String(admissionsSyncFilters.country ?? "").trim();
+const admissionsSyncMajor = String(admissionsSyncFilters.major ?? "").trim();
+const admissionsSyncSpecialization = String(admissionsSyncFilters.specialization ?? "").trim();
+const activeCampaignCountry =
+  Array.from(countryTargetPlanRunMap.keys())[0] ||
+  admissionsSyncCountry ||
+  "";
+const focusMatchesSync = (focus: { country?: string; major?: string; specialization?: string }) => {
+  const focusCountry = String(focus.country ?? "").trim();
+  const focusMajor = String(focus.major ?? "").trim();
+  const focusSpecialization = String(focus.specialization ?? "").trim();
+
+  if (!admissionsSyncCountry || focusCountry !== admissionsSyncCountry) return false;
+  if (admissionsSyncMajor && focusMajor !== admissionsSyncMajor) return false;
+  if (admissionsSyncSpecialization && focusSpecialization !== admissionsSyncSpecialization) {
+    return false;
+  }
+  return true;
+};
+const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map((countryTrend) => ({
+  ...countryTrend,
+  focusTrend: countryFocusTrendMap.get(countryTrend.country) ?? null,
+  targetPlan: countryTargetPlanMap.get(countryTrend.country) ?? null,
+  recentActivity: countryRecentActivityMap.get(countryTrend.country) ?? null,
+})).map((item) => {
+  const targetPlan = item.targetPlan;
+  const displayFocusRecommendations = targetPlan?.focusRecommendations?.length
+    ? (() => {
+        const freshDeferrals = targetPlan.focusRecommendations.filter(
+          (focus) => focus.coolingDown
+        );
+        return {
+          items: targetPlan.focusRecommendations.slice(0, 6),
+          deferredCount: freshDeferrals.length,
+        };
+      })()
+    : { items: [], deferredCount: 0 };
+
+  return {
+    ...item,
+    displayFocusRecommendations,
+  };
+});
 ---
 
 <BaseLayout title="管理员后台" description="后台总览">
@@ -178,6 +340,15 @@ const latestLeads = leads.slice(0, 10);
         <div class="card-cta">查看候选 →</div>
       </a>
 
+      <a class="card card--hover" href="/admin/study-abroad-catalog">
+        <div class="card-top">
+          <div class="h3">留学底库</div>
+          <span class="badge">{studyAbroadCatalog.stats.universityCount}</span>
+        </div>
+        <p class="muted mt-2">查看大学底库、项目底库和可接入的数据源清单，规划大规模选校检索。</p>
+        <div class="card-cta">查看底库 →</div>
+      </a>
+
       <a class="card card--hover" href="/">
         <div class="card-top">
           <div class="h3">返回前台</div>
@@ -187,6 +358,617 @@ const latestLeads = leads.slice(0, 10);
         <div class="card-cta">打开首页 →</div>
       </a>
     </div>
+
+    <section class="mt-8">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Admissions Campaign</div>
+          <h2 class="section-title">留学门槛补齐进度</h2>
+          <p class="section-desc">这里看最近自动补齐跑得怎么样，以及系统当前建议的推进节奏。</p>
+        </div>
+      </div>
+
+      {campaignCadenceSuccess && (
+        <div class="contact-notice contact-notice--success mt-4">
+          {campaignCadenceSuccess.message}
+        </div>
+      )}
+      {countryTargetPlanSuccess && (
+        <div class="contact-notice contact-notice--success mt-4">
+          {countryTargetPlanSuccess.message}
+        </div>
+      )}
+      {admissionsSyncSuccess && (
+        <div class="contact-notice contact-notice--success mt-4">
+          {admissionsSyncSuccess.message}
+        </div>
+      )}
+      {catalogSyncSuccess && (
+        <div class="contact-notice contact-notice--success mt-4">
+          {catalogSyncSuccess.message}
+        </div>
+      )}
+
+      <div class="cards cards--3 mt-4">
+        <div class="card">
+          <div class="muted text-sm">当前结构化门槛覆盖</div>
+          <div class="h2 mt-2">{structuredCoveragePercent}%</div>
+          <div class="muted mt-2">
+            重点国家目标线 {studyAbroadCampaignOutlook.goal.targetCoveragePercent}% ，当前还差 {studyAbroadCampaignOutlook.goal.remainingStructuredPrograms} 个结构化门槛项目。
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">系统推荐节奏</div>
+          <div class="h2 mt-2">{cadenceLabel}</div>
+          <div class="muted mt-2">
+            建议每周推进 {studyAbroadCampaignCadence.suggestedRunsPerWeek} 次，每次 {studyAbroadCampaignCadence.rounds} 轮。
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">预计还需轮次</div>
+          <div class="h2 mt-2">{studyAbroadCampaignOutlook.estimatedRunsToTarget ?? "待起量"}</div>
+          <div class="muted mt-2">{studyAbroadCampaignOutlook.summary}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">建议下次自动运行</div>
+          <div class="h2 mt-2">{studyAbroadCampaignSchedule.nextRunLabel}</div>
+          <div class="muted mt-2">
+            {studyAbroadCampaignSchedule.frequencyLabel} · 命令：<code>{studyAbroadCampaignSchedule.command}</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards cards--2 mt-6">
+        <div class="card">
+          <div class="h3">最近一次补齐结果</div>
+
+          {latestCampaignRun ? (
+            <div class="mt-4">
+              <div><strong>模式：</strong>{campaignModeLabel(latestCampaignRun.mode)}</div>
+              <div class="mt-2"><strong>时间：</strong>{latestCampaignRun.runAt.replace("T", " ").slice(0, 16)}</div>
+              <div class="mt-2"><strong>轮次：</strong>{latestCampaignRun.rounds}</div>
+              <div class="mt-2"><strong>同步项目：</strong>{latestCampaignRun.syncedCount}</div>
+              <div class="mt-2"><strong>结构化门槛新增：</strong>{latestCampaignRun.structuredDelta}</div>
+              <div class="mt-2"><strong>完整门槛新增：</strong>{latestCampaignRun.completeDelta}</div>
+              <div class="mt-2"><strong>覆盖国家：</strong>{latestCampaignRun.countries.join(" / ") || "待补"}</div>
+            </div>
+          ) : (
+            <p class="muted mt-3">还没有长期补齐记录，先从留学底库页跑一轮推荐节奏。</p>
+          )}
+
+          <div class="mt-4">
+            <a class="btn btn-ghost" href="/admin/study-abroad-catalog">打开留学底库 →</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="h3">自动化入口</div>
+          <div class="muted mt-3">
+            后台现在已经有统一命令入口，后面无论是手动跑还是挂自动任务，都走同一条链路。
+          </div>
+          <div class="mt-3"><strong>命令：</strong><code>npm run study-abroad:campaign -- --mode=cadence</code></div>
+          <div class="mt-2 muted">
+            它会按系统当前推荐节奏自动选择轮次、国家数量和重点方向，不会机械重复上一轮。
+          </div>
+          <form method="POST" action={actions.executeStudyAbroadAdmissionsCampaignCadence} class="mt-4">
+            <input type="hidden" name="degree" value="硕士" />
+            <button class="btn" type="submit">按推荐节奏立即执行</button>
+          </form>
+          <div class="mt-4">
+            <a class="btn btn-ghost" href="/admin/study-abroad-catalog">查看节奏面板 →</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards cards--2 mt-6">
+        <div class="card">
+          <div class="card-top">
+            <div class="h3">最近底库同步</div>
+            <span class="badge">Catalog</span>
+          </div>
+
+          {latestCatalogSyncRun ? (
+            <div class="mt-4">
+              <div><strong>时间：</strong>{latestCatalogSyncRun.runAt.replace("T", " ").slice(0, 16)}</div>
+              <div class="mt-2">
+                <strong>来源：</strong>
+                {latestCatalogSyncRun.trigger === "automation"
+                  ? "自动任务"
+                  : latestCatalogSyncRun.trigger === "script"
+                    ? "脚本"
+                    : "后台手动"}
+              </div>
+              <div class="mt-2">
+                <strong>净增：</strong>学校{" "}
+                {latestCatalogSyncRun.delta.universityCount >= 0 ? "+" : ""}
+                {latestCatalogSyncRun.delta.universityCount} · 项目{" "}
+                {latestCatalogSyncRun.delta.programCount >= 0 ? "+" : ""}
+                {latestCatalogSyncRun.delta.programCount} · 国家{" "}
+                {latestCatalogSyncRun.delta.countryCount >= 0 ? "+" : ""}
+                {latestCatalogSyncRun.delta.countryCount}
+              </div>
+              <div class="muted mt-3">{latestCatalogSyncRun.message}</div>
+              <div class="catalog-queue-grid mt-4">
+                {latestCatalogSyncRun.sourceRuns.map((sourceRun) => (
+                  <div class="catalog-queue-item">
+                    <div class="card-top">
+                      <div class="h3">{sourceRun.label}</div>
+                      <span class="badge">
+                        {sourceRun.metrics.skipped === true
+                          ? "安全跳过"
+                          : sourceRun.ok
+                            ? "成功"
+                            : "失败"}
+                      </span>
+                    </div>
+                    <div class="muted mt-2">{sourceRun.message}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p class="muted mt-3">还没有底库同步记录。先跑一轮安全同步，后面自动任务和首页都会沿用同一条入口。</p>
+          )}
+
+          <div class="mt-4">
+            <a class="btn btn-ghost" href="/admin/study-abroad-catalog#catalog-roadmap">
+              打开底库同步面板 →
+            </a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="h3">安全同步底库</div>
+          <div class="muted mt-3">
+            这条入口会沿用统一底库同步执行器；如果还没配正式
+            <code>COLLEGE_SCORECARD_API_KEY</code>，系统会自动安全跳过美国源，先稳住全球学校、英国项目种子和门槛缓存回填。
+          </div>
+          <div class="mt-3">
+            <strong>命令：</strong>
+            <code>npm run study-abroad:catalog-sync</code>
+          </div>
+          <form method="POST" action={actions.syncStudyAbroadCatalogSources} class="mt-4">
+            <input type="hidden" name="includeGlobal" value="true" />
+            <input type="hidden" name="includeUs" value="true" />
+            <input type="hidden" name="includeUk" value="true" />
+            <input type="hidden" name="usMaxPages" value="10" />
+            <input type="hidden" name="usPerPage" value="100" />
+            <button class="btn" type="submit">安全同步整套底库</button>
+          </form>
+          <div class="mt-4">
+            <a class="btn btn-ghost" href="/admin/study-abroad-catalog#catalog-roadmap">
+              去底库页看完整细节 →
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-6">
+        <div class="card-top">
+          <div class="h3">最近 7 天推进趋势</div>
+          <span class="badge">{studyAbroadCampaignTrend.totals.structuredDelta}</span>
+        </div>
+        <p class="muted mt-2">
+          这周一共跑了 {studyAbroadCampaignTrend.totals.runCount} 次，累计同步{" "}
+          {studyAbroadCampaignTrend.totals.syncedCount} 个项目，新增{" "}
+          {studyAbroadCampaignTrend.totals.structuredDelta} 个结构化门槛、{" "}
+          {studyAbroadCampaignTrend.totals.completeDelta} 个完整门槛。
+        </p>
+
+        {studyAbroadCampaignTrend.hasActivity ? (
+          <div class="campaign-trend mt-4">
+            {studyAbroadCampaignTrend.days.map((day) => (
+              <div class="campaign-trend-row">
+                <div class="campaign-trend-label">
+                  <strong>{day.label}</strong>
+                  <span>{day.runCount ? `${day.runCount} 次` : "未运行"}</span>
+                </div>
+                <div class="campaign-trend-bar">
+                  <span
+                    class="campaign-trend-fill"
+                    style={`width: ${Math.max(
+                      day.structuredDelta ? 10 : 0,
+                      Math.round((day.structuredDelta / maxTrendStructuredDelta) * 100)
+                    )}%`}
+                  />
+                </div>
+                <div class="campaign-trend-stats">
+                  <div>结构化 +{day.structuredDelta}</div>
+                  <div>完整 +{day.completeDelta}</div>
+                  <div>同步 {day.syncedCount}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p class="muted mt-4">最近 7 天还没有长期补齐记录，先按推荐节奏跑一轮把趋势线拉起来。</p>
+        )}
+      </div>
+
+      <div class="card mt-6">
+        <div class="card-top">
+          <div class="h3">近 7 天重点国家推进</div>
+          <span class="badge">{studyAbroadCampaignCountryTrend.countries.length}</span>
+        </div>
+        <p class="muted mt-2">
+          这里按真实国家级门槛增量汇总，方便看最近到底是哪些国家在起量，不会把多国批处理都糊成一团。
+        </p>
+
+        {studyAbroadCampaignCountryTrend.hasActivity ? (
+          <div class="campaign-country-list mt-4">
+            {studyAbroadCampaignCountryTrend.countries.slice(0, 6).map((country) => (
+              <div class="campaign-country-row">
+                <div class="campaign-country-main">
+                  <strong>{country.country}</strong>
+                  <span>
+                    活跃 {country.activeDays} 天 · 跑了 {country.runCount} 次 · 最近一次 {country.lastRunLabel}
+                  </span>
+                </div>
+                <div class="campaign-country-bar">
+                  <span
+                    class="campaign-country-fill"
+                    style={`width: ${Math.max(
+                      country.structuredDelta || country.completeDelta ? 10 : 0,
+                      Math.round(
+                        (Math.max(country.structuredDelta, country.completeDelta) /
+                          maxCountryTrendStructuredDelta) *
+                          100
+                      )
+                    )}%`}
+                  />
+                </div>
+                <div class="campaign-country-stats">
+                  <div>结构化 +{country.structuredDelta}</div>
+                  <div>完整 +{country.completeDelta}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p class="muted mt-4">最近 7 天还没有国家级推进数据，先跑一轮补齐，首页就会开始长出国家节奏。</p>
+        )}
+      </div>
+
+      <div class="card mt-6">
+        <div class="card-top">
+          <div class="h3">国家内方向起量</div>
+          <span class="badge">{campaignCountryDrilldowns.length}</span>
+        </div>
+        <p class="muted mt-2">
+          点开一个国家，就能同时看到最近 7 天真实起量的方向，以及系统建议下一批优先补的方向，不用在多个页面之间来回跳。
+        </p>
+
+        {campaignCountryDrilldowns.length ? (
+          <div class="campaign-focus-groups mt-4">
+            {campaignCountryDrilldowns.map((country, index) => (
+              <details
+                class="campaign-drilldown"
+                open={country.country === activeCampaignCountry || (!activeCampaignCountry && index === 0)}
+              >
+                <summary class="campaign-drilldown-summary">
+                  <div class="campaign-drilldown-head">
+                    <strong>{country.country}</strong>
+                    <span>
+                      活跃 {country.activeDays} 天 · 跑了 {country.runCount} 次 · 最近 {country.lastRunLabel}
+                    </span>
+                  </div>
+                  <div class="campaign-drilldown-badges">
+                    <span>结构化 +{country.structuredDelta}</span>
+                    <span>完整 +{country.completeDelta}</span>
+                    <span>
+                      {(country.focusTrend?.focuses.length ?? 0) || 0} 个方向在动
+                    </span>
+                  </div>
+                </summary>
+
+                <div class="campaign-drilldown-body">
+                  <div class="campaign-drilldown-column">
+                    {country.recentActivity && (
+                      <div class="campaign-inline-notice campaign-inline-notice--soft">
+                        上次执行：{country.recentActivity.runAtLabel} · {country.recentActivity.label}
+                        <br />
+                        同步 {country.recentActivity.syncedCount} 个项目，完整提取{" "}
+                        {country.recentActivity.okCount} 个，部分提取{" "}
+                        {country.recentActivity.partialCount} 个，待补抓{" "}
+                        {country.recentActivity.unavailableCount} 个。
+                      </div>
+                    )}
+                    {countryTargetPlanRunMap.get(country.country) && (
+                      <div class="campaign-inline-notice">
+                        已按这个国家的推荐方向执行一轮补齐：同步{" "}
+                        {countryTargetPlanRunMap.get(country.country)?.syncedCount ?? 0} 个项目，
+                        完整提取 {countryTargetPlanRunMap.get(country.country)?.okCount ?? 0} 个，
+                        待补抓 {countryTargetPlanRunMap.get(country.country)?.unavailableCount ?? 0} 个。
+                      </div>
+                    )}
+                    {admissionsSyncCountry === country.country && (
+                      <div class="campaign-inline-notice campaign-inline-notice--soft">
+                        刚刚已对这个国家的筛选范围执行门槛同步：
+                        {admissionsSyncMajor ? ` ${admissionsSyncMajor}` : " 全部方向"}
+                        {admissionsSyncSpecialization ? ` / ${admissionsSyncSpecialization}` : ""}。
+                      </div>
+                    )}
+                    <div class="campaign-focus-head">
+                      <strong>最近起量的方向</strong>
+                      <span>
+                        {country.focusTrend?.focuses.length
+                          ? `${country.focusTrend.focuses.length} 个方向有真实动作`
+                          : "这轮还没有方向级增量"}
+                      </span>
+                    </div>
+                    {country.focusTrend?.focuses.length ? (
+                      <div class="campaign-focus-list">
+                        {country.focusTrend.focuses.map((focus) => (
+                          <div class="campaign-focus-item">
+                            <div class="campaign-focus-label">
+                              <strong>{focus.specialization || focus.major}</strong>
+                              <span>{focus.label}</span>
+                            </div>
+                            <div class="campaign-focus-stats">
+                              <span>结构化 +{focus.structuredDelta}</span>
+                              <span>完整 +{focus.completeDelta}</span>
+                              <span>同步 {focus.syncedCount}</span>
+                            </div>
+                            {focusMatchesSync({
+                              country: country.country,
+                              major: focus.major,
+                              specialization: focus.specialization,
+                            }) && (
+                              <div class="campaign-inline-note">
+                                这组方向刚刚执行过同步，刷新后会继续反映到趋势里。
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p class="muted">这个国家最近有补齐动作，但方向级增量还在继续累积。</p>
+                    )}
+                  </div>
+
+                  <div class="campaign-drilldown-column">
+                    <div class="campaign-focus-head">
+                      <strong>下一批建议补齐</strong>
+                      <span>
+                        {country.displayFocusRecommendations.items.length
+                          ? `${country.displayFocusRecommendations.items.length} 个候选方向 · 目标线还差 ${country.targetPlan.targetProgramGap} 个项目`
+                          : "当前没有新建议"}
+                      </span>
+                    </div>
+                    {country.displayFocusRecommendations.items.length ? (
+                      <div class="campaign-recommendation-list" data-sort-list>
+                        {country.displayFocusRecommendations.deferredCount > 0 && (
+                          <div class="campaign-inline-note">
+                            刚刚补过的方向已经自动后移，先把下一批更该补的方向顶上来。
+                          </div>
+                        )}
+                        <div class="campaign-sort-toolbar" data-sort-toolbar>
+                          <div class="campaign-sort-controls" data-sort-controls>
+                            <button
+                              type="button"
+                              class="campaign-sort-btn is-active"
+                              data-sort-mode="recommendation"
+                            >
+                              综合推荐
+                            </button>
+                            <button
+                              type="button"
+                              class="campaign-sort-btn"
+                              data-sort-mode="gap"
+                            >
+                              缺口最大
+                            </button>
+                            <button
+                              type="button"
+                              class="campaign-sort-btn"
+                              data-sort-mode="stale"
+                            >
+                              最久未补
+                            </button>
+                          </div>
+                          <div class="campaign-sort-hint" data-sort-hint>
+                            综合推荐会把缺口、优先级和冷却一起算进去，适合日常默认判断。
+                          </div>
+                        </div>
+                        {country.displayFocusRecommendations.items.map((focus) => (
+                          <div
+                            class="campaign-recommendation-item"
+                            data-sort-item
+                            data-sort-recommendation={focus.recommendationScore}
+                            data-sort-gap={focus.gapScore}
+                            data-sort-stale={Number.isFinite(focus.lastRecommendationRunDays) ? Math.round(focus.lastRecommendationRunDays * 100) : 999999}
+                          >
+                            <div class="campaign-focus-label">
+                              <strong>{focus.specialization || focus.major}</strong>
+                              <span>{focus.description}</span>
+                            </div>
+                            <div class="campaign-focus-stats">
+                              <span>项目 {focus.totalPrograms}</span>
+                              <span>覆盖 {focus.structuredCoveragePercent}%</span>
+                              <span>待补 {focus.missingPrograms}</span>
+                            </div>
+                            <div class="campaign-recommendation-meta">
+                              <span>
+                                {focus.coolingDown
+                                  ? `冷却中 ${focus.cooldownRemainingHours}h · 上次 ${focus.lastRecommendationRunLabel}`
+                                  : focus.recentlyRun
+                                    ? `最近补过 · ${focus.lastRecommendationRunLabel}`
+                                    : `上次补齐：${focus.lastRecommendationRunLabel}`}
+                              </span>
+                              <span>建议分 {focus.recommendationScore}</span>
+                            </div>
+                            <div class="campaign-inline-note">
+                              缺口 {focus.gapScore} = 缺失 {focus.missingGapScore} + 结构化 {focus.structuredGapScore} + 完整 {focus.completeGapScore} + 国家目标 {focus.targetGapScore} + 优先级 {focus.priorityScore} + 规模 {focus.volumeScore}
+                            </div>
+                            <div class="campaign-inline-note">
+                              节奏修正：久未执行 +{focus.recencyBoostScore} / 冷却扣分 -{focus.recencyPenaltyScore}
+                            </div>
+                            <form
+                              method="POST"
+                              action={actions.syncStudyAbroadAdmissionsSnapshots}
+                              class="campaign-inline-form"
+                            >
+                              <input type="hidden" name="country" value={focus.country} />
+                              <input type="hidden" name="degree" value={focus.degree} />
+                              <input type="hidden" name="major" value={focus.major} />
+                              <input type="hidden" name="specialization" value={focus.specialization} />
+                              <input type="hidden" name="mode" value="missing-first" />
+                              <input type="hidden" name="maxPrograms" value={focus.maxPrograms} />
+                              <input type="hidden" name="recordHistory" value="true" />
+                              <button class="btn btn-ghost" type="submit">只补这个方向</button>
+                            </form>
+                            {focusMatchesSync(focus) && (
+                              <div class="campaign-inline-note">
+                                这个方向刚刚已经发起同步，稍后再刷新会看到最新门槛结果。
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p class="muted">这个国家当前没有新的方向建议，说明目标线已经比较接近，或者项目层还需要继续长厚。</p>
+                    )}
+                    <div class="campaign-inline-actions">
+                      <form
+                        method="POST"
+                        action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}
+                      >
+                        <input type="hidden" name="country" value={country.country} />
+                        <input type="hidden" name="degree" value="硕士" />
+                        <input
+                          type="hidden"
+                          name="maxFocusPerCountry"
+                          value={Math.min(
+                            3,
+                            Math.max(1, country.displayFocusRecommendations.items.length || 1)
+                          )}
+                        />
+                        <button class="btn" type="submit">按这个国家的推荐方向补齐</button>
+                      </form>
+                      <form
+                        method="POST"
+                        action={actions.syncStudyAbroadAdmissionsSnapshots}
+                      >
+                        <input type="hidden" name="country" value={country.country} />
+                        <input type="hidden" name="degree" value="硕士" />
+                        <input type="hidden" name="mode" value="missing-first" />
+                        <input type="hidden" name="recordHistory" value="true" />
+                        <input
+                          type="hidden"
+                          name="maxPrograms"
+                          value={Math.min(
+                            12,
+                            Math.max(4, country.targetPlan?.targetProgramGap || 4)
+                          )}
+                        />
+                        <button class="btn btn-ghost" type="submit">先补这个国家</button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <p class="muted mt-4">新的国家内方向趋势会从这版开始累积，接下来每轮补齐都会越来越清楚。</p>
+        )}
+      </div>
+    </section>
+    <script is:inline>
+      (() => {
+        const storageKey = "study-abroad-admin-sort-mode";
+        const modeMeta = {
+          recommendation: {
+            attr: "data-sort-recommendation",
+            hint: "综合推荐会把缺口、优先级和冷却一起算进去，适合日常默认判断。",
+          },
+          gap: {
+            attr: "data-sort-gap",
+            hint: "缺口最大只看补齐空间，适合短期把覆盖率往上推。",
+          },
+          stale: {
+            attr: "data-sort-stale",
+            hint: "最久未补会优先露出很久没动过、或从未动过的方向。",
+          },
+        };
+
+        const readSavedMode = () => {
+          try {
+            const value = window.localStorage.getItem(storageKey) || "";
+            return value in modeMeta ? value : "recommendation";
+          } catch {
+            return "recommendation";
+          }
+        };
+
+        const writeSavedMode = (mode) => {
+          try {
+            window.localStorage.setItem(storageKey, mode);
+          } catch {}
+        };
+
+        const sortBlocks = Array.from(
+          document.querySelectorAll("[data-sort-toolbar]")
+        )
+          .map((toolbar) => {
+            const list =
+              toolbar.parentElement?.querySelector("[data-sort-list]") ||
+              toolbar.parentElement;
+            const buttons = Array.from(toolbar.querySelectorAll("[data-sort-mode]"));
+            const hint = toolbar.querySelector("[data-sort-hint]");
+            if (!(list instanceof HTMLElement) || !buttons.length) return null;
+            return { toolbar, list, buttons, hint };
+          })
+          .filter(Boolean);
+
+        const applyMode = (mode) => {
+          const safeMode = mode in modeMeta ? mode : "recommendation";
+          const meta = modeMeta[safeMode] || modeMeta.recommendation;
+
+          sortBlocks.forEach((block) => {
+            const items = Array.from(block.list.querySelectorAll("[data-sort-item]"));
+            items.sort((left, right) => {
+              const rightValue = Number(right.getAttribute(meta.attr) || 0);
+              const leftValue = Number(left.getAttribute(meta.attr) || 0);
+              if (rightValue !== leftValue) return rightValue - leftValue;
+
+              const rightFallback = Number(
+                right.getAttribute("data-sort-recommendation") || 0
+              );
+              const leftFallback = Number(
+                left.getAttribute("data-sort-recommendation") || 0
+              );
+              return rightFallback - leftFallback;
+            });
+            block.list.append(...items);
+            block.buttons.forEach((button) => {
+              button.classList.toggle(
+                "is-active",
+                button.getAttribute("data-sort-mode") === safeMode
+              );
+            });
+            if (block.hint) {
+              block.hint.textContent = meta.hint;
+            }
+          });
+
+          writeSavedMode(safeMode);
+        };
+
+        sortBlocks.forEach((block) => {
+          block.buttons.forEach((button) => {
+            button.addEventListener("click", () => {
+              applyMode(button.getAttribute("data-sort-mode") || "recommendation");
+            });
+          });
+        });
+
+        applyMode(readSavedMode());
+      })();
+    </script>
 
     <section class="mt-8">
       <div class="section-head">

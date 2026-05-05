@@ -16,6 +16,8 @@ interface ImportMetaEnv {
   readonly BAIDU_APPBUILDER_API_KEY?: string;
   readonly BAIDU_SEARCH_API_KEY?: string;
   readonly BAIDU_SEARCH_MODEL?: string;
+
+  readonly COLLEGE_SCORECARD_API_KEY?: string;
 }
 
 interface ImportMeta {

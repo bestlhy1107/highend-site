@@ -6,16 +6,22 @@
     "dev": "astro dev",
     "build": "astro build --remote",
     "preview": "astro preview",
-    "start": "npx @dotenvx/dotenvx run -- node ./dist/server/entry.mjs"
+    "start": "npx @dotenvx/dotenvx run -- node ./dist/server/entry.mjs",
+    "study-abroad:campaign": "tsx scripts/run-study-abroad-campaign.ts",
+    "study-abroad:catalog-sync": "npx @dotenvx/dotenvx run -- tsx scripts/run-study-abroad-catalog-sync.ts"
   },
   "dependencies": {
     "@astrojs/db": "^0.20.1",
     "@astrojs/node": "^9.5.2",
     "astro": "^5.16.9",
+    "cheerio": "^1.2.0",
     "nodemailer": "^7.0.13",
     "rss-parser": "^3.13.0"
   },
   "devDependencies": {
-    "@types/nodemailer": "^7.0.11"
+    "@astrojs/check": "^0.9.9",
+    "@types/nodemailer": "^7.0.11",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

@@ -1,12 +1,12 @@
 import nodemailer from "nodemailer";
 
-const SMTP_HOST = import.meta.env.SMTP_HOST;
-const SMTP_PORT = import.meta.env.SMTP_PORT;
-const SMTP_SECURE = import.meta.env.SMTP_SECURE;
-const SMTP_USER = import.meta.env.SMTP_USER;
-const SMTP_PASS = import.meta.env.SMTP_PASS;
-const LEAD_TO_EMAIL = import.meta.env.LEAD_TO_EMAIL;
-const MAIL_FROM = import.meta.env.MAIL_FROM;
+const SMTP_HOST = import.meta.env?.SMTP_HOST;
+const SMTP_PORT = import.meta.env?.SMTP_PORT;
+const SMTP_SECURE = import.meta.env?.SMTP_SECURE;
+const SMTP_USER = import.meta.env?.SMTP_USER;
+const SMTP_PASS = import.meta.env?.SMTP_PASS;
+const LEAD_TO_EMAIL = import.meta.env?.LEAD_TO_EMAIL;
+const MAIL_FROM = import.meta.env?.MAIL_FROM;
 
 export const smtpConfigured =
   !!SMTP_HOST &&

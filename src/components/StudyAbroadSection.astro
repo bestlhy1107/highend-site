@@ -1,18 +1,23 @@
 ---
-import UniversityFinder from "./UniversityFinder.astro";
 import { normalizeImageUrl } from "../lib/image-url";
 import type { RuntimeService } from "../lib/services-store";
 import {
-  POPULAR_MAJOR_HINTS,
-  STUDY_ABROAD_COUNTRIES,
-  STUDY_ABROAD_PROGRAMS,
+  STUDY_ABROAD_MAJOR_OPTIONS,
 } from "../lib/study-abroad-programs";
+import {
+  readStudyAbroadFinderCountries,
+  readStudyAbroadFinderPrograms,
+} from "../lib/study-abroad-catalog-store";
 
 type Props = {
   services?: RuntimeService[];
 };
 
 const { services = [] } = Astro.props as Props;
+const [countryOptions, finderPrograms] = await Promise.all([
+  readStudyAbroadFinderCountries(),
+  readStudyAbroadFinderPrograms(),
+]);
 
 const abroadServices = Array.isArray(services)
   ? services
@@ -30,38 +35,53 @@ const summaryParagraphs = String(featuredService?.summary ?? "")
 
 const sectionStats = [
   {
-    value: `${STUDY_ABROAD_PROGRAMS.length}+`,
-    label: "精选官网项目",
+    value: `${finderPrograms.length}+`,
+    label: "项目底库",
   },
   {
-    value: `${STUDY_ABROAD_COUNTRIES.length}`,
+    value: `${countryOptions.length}`,
     label: "国家 / 地区",
   },
   {
-    value: `${POPULAR_MAJOR_HINTS.length}`,
-    label: "热门方向",
+    value: `${STUDY_ABROAD_MAJOR_OPTIONS.length}`,
+    label: "可选方向",
   },
 ];
 
 const journeySteps = [
   {
     step: "01",
-    title: "先定国家与专业",
-    body: "把目标国家、专业方向、预算和准备时间一起框住，第一轮项目池才不会发散。",
+    title: "先定国家与方向",
+    body: "把目标国家、学位与专业先框住，第一轮项目池才会干净。",
   },
   {
     step: "02",
-    title: "再看学校与项目匹配",
-    body: "同一所学校里，不同项目的课程、申请要求和职业出口往往差别很大，要逐项拆开看。",
+    title: "再看学校与项目",
+    body: "同一所学校里，不同项目的课程、要求与职业出口往往差别很大。",
   },
   {
     step: "03",
-    title: "最后进入背景规划",
-    body: "把语言、实习、科研、文书和推荐信按时间线推进，申请动作才会真正落地。",
+    title: "最后安排申请节奏",
+    body: "语言、实习、文书与推荐信需要按时间线往前推，申请才会更稳。",
   },
 ];
 
-const featuredPrograms = STUDY_ABROAD_PROGRAMS.slice(0, 4);
+const featuredPrograms = finderPrograms.slice(0, 3);
+const featuredCountries = ["美国", "英国", "中国香港", "新加坡", "加拿大", "澳大利亚"].filter(
+  (country) => countryOptions.includes(country)
+);
+const refinedHighlights = (
+  featuredService?.highlights?.length
+    ? featuredService.highlights
+    : [
+        "先用国家、学位与方向收拢第一轮项目池",
+        "再把学校、专业要求和申请时间线一层层拉清楚",
+        "让选校、文书、递交与签证落在同一条节奏里",
+      ]
+)
+  .map((item) => String(item).trim())
+  .filter(Boolean)
+  .slice(0, 3);
 ---
 
 {
@@ -76,13 +96,13 @@ const featuredPrograms = STUDY_ABROAD_PROGRAMS.slice(0, 4);
           </p>
         </div>
 
-        <a class="section-link" href={`/services/${featuredService.id}`}>
-          查看完整服务 →
+        <a class="section-link" href="/school-finder">
+          进入选校查询 →
         </a>
       </div>
 
-      <div class="study-abroad-band">
-        <div class="study-abroad-hero">
+      <div class="study-abroad-band study-abroad-band--refined">
+        <div class="study-abroad-stage">
           <div class="study-abroad-copy">
             <div class="card-tags">
               <span>留学申请</span>
@@ -91,42 +111,42 @@ const featuredPrograms = STUDY_ABROAD_PROGRAMS.slice(0, 4);
               ))}
             </div>
 
-            <h3 class="study-abroad-title">
-              {featuredService.icon ? `${featuredService.icon} ` : ""}
-              用真实项目池做第一轮留学筛选
-            </h3>
+            <h3 class="study-abroad-title">把国家、项目与申请节奏放到同一条主线上</h3>
 
             <p class="study-abroad-subtitle">
-              {featuredService.subtitle || "选校定位、文书、申请、签证一站式服务"}
+              {featuredService.subtitle || "先定方向，再看学校与项目，最后安排语言、文书与递交流程。"}
             </p>
 
             <div class="study-abroad-summary">
               {(summaryParagraphs.length
                 ? summaryParagraphs
                 : [
-                    "后台继续补充国家、专业和学生画像后，这个模块会更适合做分层转化。",
+                    "从选校定位到文书递交，把复杂申请拆成清楚、能推进的一条线。",
                   ]
               )
-                .slice(0, 2)
+                .slice(0, 1)
                 .map((item) => <p>{item}</p>)}
             </div>
 
+            <div class="study-abroad-bullets">
+              {refinedHighlights.map((item) => (
+                <div class="study-abroad-bullet">
+                  <span class="study-abroad-bullet-mark" />
+                  <p>{item}</p>
+                </div>
+              ))}
+            </div>
+
             <div class="study-abroad-actions">
+              <a class="btn" href="/school-finder">
+                选校查询
+              </a>
               <a class="btn" href={`/services/${featuredService.id}`}>
                 查看申请方案
               </a>
               <a class="btn btn-ghost" href="#contact">
                 预约留学咨询
               </a>
-            </div>
-
-            <div class="study-abroad-stats">
-              {sectionStats.map((stat) => (
-                <div class="study-abroad-stat">
-                  <strong>{stat.value}</strong>
-                  <span>{stat.label}</span>
-                </div>
-              ))}
             </div>
           </div>
 
@@ -142,57 +162,87 @@ const featuredPrograms = STUDY_ABROAD_PROGRAMS.slice(0, 4);
               <div class="study-abroad-placeholder">
                 <div>
                   <div class="study-abroad-placeholder-kicker">Study Abroad</div>
-                  <div class="study-abroad-placeholder-title">把项目、国家和专业放在一张图里看</div>
+                  <div class="study-abroad-placeholder-title">把目标学校和申请节奏一起收拢</div>
                   <p class="study-abroad-placeholder-copy">
-                    这里会显示后台上传的留学申请主图，建议换成更能体现国家和校园氛围的实拍图。
+                    用一张更有校园与国际氛围的主图，会让这一块更稳、更有质感。
                   </p>
                 </div>
               </div>
             )}
+          </div>
 
-            <div class="study-abroad-picks">
-              <div class="study-abroad-picks-head">
-                <span>热门匹配方向</span>
-                <strong>直达官网项目页</strong>
+          <div class="study-abroad-lower">
+            <div class="study-abroad-data-rail">
+              <div class="study-abroad-stats">
+                {sectionStats.map((stat) => (
+                  <div class="study-abroad-stat">
+                    <strong>{stat.value}</strong>
+                    <span>{stat.label}</span>
+                  </div>
+                ))}
               </div>
 
-              <div class="study-abroad-picks-grid">
-                {featuredPrograms.map((program) => (
-                  <a
-                    class="study-abroad-pick"
-                    href={program.overviewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <small>{program.country}</small>
-                    <strong>{program.schoolName}</strong>
-                    <span>{program.programName}</span>
+              <div class="study-abroad-preview study-abroad-preview--inline">
+                <div class="study-abroad-preview-head">
+                  <div>
+                    <div class="section-kicker">Featured Programs</div>
+                    <h3 class="h2">精选项目入口</h3>
+                  </div>
+                  <a class="section-link" href="/school-finder">
+                    进入完整择校 →
                   </a>
+                </div>
+
+                <div class="study-abroad-picks-grid study-abroad-picks-grid--minimal">
+                  {featuredPrograms.map((program) => (
+                    <a
+                      class="study-abroad-pick study-abroad-pick--minimal"
+                      href={program.overviewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <small>{program.country}</small>
+                      <strong>{program.schoolNameZh || program.schoolName}</strong>
+                      {program.schoolNameZh && program.schoolNameZh !== program.schoolName ? (
+                        <small>{program.schoolName}</small>
+                      ) : null}
+                      <span>{program.programName}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div class="study-abroad-brief">
+              <div class="study-abroad-brief-head">
+                <span>热门国家</span>
+                <strong>先定国家，再看项目池</strong>
+              </div>
+              <div class="study-abroad-brief-tags">
+                {featuredCountries.slice(0, 6).map((country) => (
+                  <span>{country}</span>
+                ))}
+              </div>
+              <div class="study-abroad-journey study-abroad-journey--compact">
+                {journeySteps.map((item) => (
+                  <article class="study-abroad-step">
+                    <div class="study-abroad-step-number">STEP {item.step}</div>
+                    <h3>{item.title}</h3>
+                    <p>{item.body}</p>
+                  </article>
                 ))}
               </div>
             </div>
           </div>
         </div>
-
-        <div class="study-abroad-journey">
-          {journeySteps.map((item) => (
-            <article class="study-abroad-step">
-              <div class="study-abroad-step-number">STEP {item.step}</div>
-              <h3>{item.title}</h3>
-              <p>{item.body}</p>
-            </article>
-          ))}
-        </div>
-
-        <UniversityFinder />
       </div>
 
       {otherServices.length ? (
-        <div class="mt-8">
+        <div class="study-abroad-service-strip mt-8">
           <div class="section-head">
             <div>
-              <div class="section-kicker">More</div>
-              <h3 class="h2">更多留学服务</h3>
+              <div class="section-kicker">Apply More</div>
+              <h3 class="h2">申请相关服务</h3>
             </div>
           </div>
 

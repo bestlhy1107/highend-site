@@ -1,11 +1,14 @@
 ---
 import {
-  POPULAR_MAJOR_HINTS,
-  STUDY_ABROAD_COUNTRIES,
+  STUDY_ABROAD_MAJOR_GROUPS,
+  STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
   STUDY_ABROAD_DATA_UPDATED_AT,
-  STUDY_ABROAD_PROGRAMS,
-  type StudyAbroadProgram,
 } from "../lib/study-abroad-programs";
+import {
+  readStudyAbroadFinderCountries,
+  readStudyAbroadFinderPrograms,
+  type StudyAbroadFinderProgram,
+} from "../lib/study-abroad-catalog-store";
 
 type Props = {
   anchorId?: string;
@@ -14,12 +17,168 @@ type Props = {
 
 const { anchorId = "school-match", compact = false } = Astro.props as Props;
 
+const [countryOptions, finderPrograms] = await Promise.all([
+  readStudyAbroadFinderCountries(),
+  readStudyAbroadFinderPrograms(),
+]);
 const finderId = `school-match-${Math.random().toString(36).slice(2, 10)}`;
-const initialResults = STUDY_ABROAD_PROGRAMS.slice(0, compact ? 4 : 6);
+const totalPrograms = finderPrograms.length;
+const initialResults = finderPrograms.slice(0, compact ? 4 : 6);
 const seedResults = initialResults;
+const latestCheckedAt =
+  finderPrograms.reduce(
+    (latest, program) => (program.checkedAt > latest ? program.checkedAt : latest),
+    ""
+  ) || STUDY_ABROAD_DATA_UPDATED_AT;
 
-const sameLink = (program: StudyAbroadProgram) =>
+const sameLink = (program: StudyAbroadFinderProgram) =>
   Boolean(program.admissionsUrl) && program.admissionsUrl === program.overviewUrl;
+
+const locationLabel = (program: Pick<StudyAbroadFinderProgram, "city" | "stateOrProvince">) =>
+  [program.city, program.stateOrProvince].filter(Boolean).join(", ");
+
+const tuitionLabel = (
+  program: Pick<StudyAbroadFinderProgram, "tuitionAmount" | "tuitionCurrency">
+) => {
+  if (!program.tuitionAmount) return "";
+
+  const rawValue = Number(program.tuitionAmount);
+  const amount = Number.isFinite(rawValue)
+    ? new Intl.NumberFormat("en-US").format(rawValue)
+    : program.tuitionAmount;
+
+  return program.tuitionCurrency
+    ? `学费：${program.tuitionCurrency} ${amount}`
+    : `学费：${amount}`;
+};
+
+const rankingLabel = (
+  program: Pick<StudyAbroadFinderProgram, "qsRank" | "qsRankingYear">
+) => {
+  if (!program.qsRank || program.qsRank <= 0) return "";
+  return program.qsRankingYear
+    ? `QS ${program.qsRankingYear}：#${program.qsRank}`
+    : `QS：#${program.qsRank}`;
+};
+
+const admissionsSnapshotLabel = (
+  program: Pick<StudyAbroadFinderProgram, "admissionsSnapshot">
+) => {
+  const status = program.admissionsSnapshot?.extractionStatus;
+  if (status === "ok") return "门槛：已入库";
+  if (status === "partial") return "门槛：部分字段";
+  if (status === "unavailable") return "门槛：待补抓";
+  return "";
+};
+
+const buildUniversityMatches = (programs: StudyAbroadFinderProgram[]) => {
+  const map = new Map<
+    string,
+    {
+      universityId: string;
+      schoolName: string;
+      schoolNameZh: string;
+      country: string;
+      city: string;
+      stateOrProvince: string;
+      qsRank: number | null;
+      qsRankingYear: number | null;
+      programCount: number;
+      topDisciplines: string[];
+      featuredPrograms: string[];
+      tuitionProjectCount: number;
+      tuitionMin: number | null;
+      tuitionMax: number | null;
+      tuitionCurrency: string;
+    }
+  >();
+
+  programs.forEach((program) => {
+    const key = program.universityId || program.schoolName;
+    const current = map.get(key);
+
+    if (!current) {
+      map.set(key, {
+        universityId: key,
+        schoolName: program.schoolName,
+        schoolNameZh: program.schoolNameZh || "",
+        country: program.country,
+        city: program.city,
+        stateOrProvince: program.stateOrProvince,
+        qsRank: program.qsRank ?? null,
+        qsRankingYear: program.qsRankingYear ?? null,
+        programCount: 1,
+        topDisciplines: [program.discipline].filter(Boolean),
+        featuredPrograms: [program.programName].filter(Boolean),
+        tuitionProjectCount:
+          Number.isFinite(Number(program.tuitionAmount)) && Number(program.tuitionAmount) > 0 ? 1 : 0,
+        tuitionMin:
+          Number.isFinite(Number(program.tuitionAmount)) && Number(program.tuitionAmount) > 0
+            ? Number(program.tuitionAmount)
+            : null,
+        tuitionMax:
+          Number.isFinite(Number(program.tuitionAmount)) && Number(program.tuitionAmount) > 0
+            ? Number(program.tuitionAmount)
+            : null,
+        tuitionCurrency:
+          Number.isFinite(Number(program.tuitionAmount)) && Number(program.tuitionAmount) > 0
+            ? program.tuitionCurrency || ""
+            : "",
+      });
+      return;
+    }
+
+    current.programCount += 1;
+
+    if ((!current.qsRank || current.qsRank <= 0) && program.qsRank && program.qsRank > 0) {
+      current.qsRank = program.qsRank;
+      current.qsRankingYear = program.qsRankingYear;
+    }
+
+    if (program.discipline && !current.topDisciplines.includes(program.discipline)) {
+      current.topDisciplines = [...current.topDisciplines, program.discipline].slice(0, 3);
+    }
+
+    if (program.programName && !current.featuredPrograms.includes(program.programName)) {
+      current.featuredPrograms = [...current.featuredPrograms, program.programName].slice(0, 2);
+    }
+
+    if (!current.schoolNameZh && program.schoolNameZh) {
+      current.schoolNameZh = program.schoolNameZh;
+    }
+
+    const tuitionAmount = Number(program.tuitionAmount);
+    if (Number.isFinite(tuitionAmount) && tuitionAmount > 0) {
+      current.tuitionProjectCount += 1;
+      current.tuitionMin =
+        current.tuitionMin === null ? tuitionAmount : Math.min(current.tuitionMin, tuitionAmount);
+      current.tuitionMax =
+        current.tuitionMax === null ? tuitionAmount : Math.max(current.tuitionMax, tuitionAmount);
+
+      if (!current.tuitionCurrency && program.tuitionCurrency) {
+        current.tuitionCurrency = program.tuitionCurrency;
+      }
+    }
+  });
+
+  return Array.from(map.values()).sort((left, right) => {
+    const leftRank = left.qsRank && left.qsRank > 0 ? left.qsRank : 999999;
+    const rightRank = right.qsRank && right.qsRank > 0 ? right.qsRank : 999999;
+
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    if (left.programCount !== right.programCount) {
+      return right.programCount - left.programCount;
+    }
+
+    return left.schoolName.localeCompare(right.schoolName, "en-US");
+  });
+};
+
+const initialUniversityMatches = buildUniversityMatches(initialResults);
+const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 ---
 
 <section
@@ -32,94 +191,347 @@ const sameLink = (program: StudyAbroadProgram) =>
       <div class="section-kicker">Official School Finder</div>
       <h3 class="school-match-title">先填条件，再点击开始搜索</h3>
       <p class="school-match-desc">
-        搜索会先返回已核验的官方项目，再补充一层全网候选官网页。候选页会先经过官网规则筛选，并同步进入后台审核，不会直接替代正式推荐。
+        搜索会先返回已核验的官方项目，再展示院校官网与项目页；你还可以继续点开“查看要求摘要”，系统会尝试从官方招生页里提取招生要求重点。
       </p>
     </div>
 
     <div class="school-match-source">
       <strong>数据说明</strong>
       <p>
-        当前为精选官方项目库，覆盖美英加澳、中国香港和新加坡的热门方向。项目链接均来自院校官网，最近核对日期
-        {STUDY_ABROAD_DATA_UPDATED_AT}。
+        当前项目底库已同步 {totalPrograms} 个项目，覆盖 {countryOptions.length} 个国家 / 地区。项目链接均来自院校官网或美国官方项目数据，最近核对日期
+        {latestCheckedAt || STUDY_ABROAD_DATA_UPDATED_AT}。
       </p>
     </div>
   </div>
 
-  <div class="school-match-controls">
-    <label class="school-match-field">
-      <span>意向国家</span>
-      <select data-role="country">
-        <option value="">全部国家 / 地区</option>
-        {STUDY_ABROAD_COUNTRIES.map((country) => (
-          <option value={country}>{country}</option>
-        ))}
-      </select>
-    </label>
-
-    <label class="school-match-field">
-      <span>意向专业</span>
-      <input
-        data-role="major"
-        type="text"
-        inputmode="search"
-        placeholder="例如 计算机、金融、市场营销、教育、商业分析"
-      />
-    </label>
-
-    <label class="school-match-field">
-      <span>学位类型</span>
-      <select data-role="degree">
-        <option value="">全部</option>
-        <option value="硕士">硕士</option>
-        <option value="MBA">MBA</option>
-      </select>
-    </label>
+  <div class="school-match-metrics">
+    <article class="school-match-metric">
+      <span>国家 / 地区</span>
+      <strong>{countryOptions.length}</strong>
+      <p>先定国家，再缩学校池和项目池。</p>
+    </article>
+    <article class="school-match-metric">
+      <span>项目底库</span>
+      <strong>{totalPrograms}</strong>
+      <p>优先返回已核验项目，再补全网候选官网页。</p>
+    </article>
+    <article class="school-match-metric">
+      <span>最近核对</span>
+      <strong>{latestCheckedAt || STUDY_ABROAD_DATA_UPDATED_AT}</strong>
+      <p>门槛字段会持续补抓并写回底库。</p>
+    </article>
   </div>
 
-  <div class="school-match-hints">
-    <span>热门方向</span>
-    <div class="school-match-chip-row">
-      {POPULAR_MAJOR_HINTS.map((hint) => (
-        <button class="school-match-chip" type="button" data-major-hint={hint}>
-          {hint}
-        </button>
-      ))}
+  <div class="school-match-search-shell">
+    <section class="school-match-search-card">
+      <div class="school-match-search-head">
+        <div>
+          <div class="school-match-panel-kicker">Step 1</div>
+          <h4>基础筛选</h4>
+          <p>先定国家、学位和方向，系统再去拼学校池和项目池。</p>
+        </div>
+      </div>
+
+      <div class="school-match-controls">
+        <label class="school-match-field">
+          <span>意向国家</span>
+          <select data-role="country">
+            <option value="">全部国家 / 地区</option>
+            {countryOptions.map((country) => (
+              <option value={country}>{country}</option>
+            ))}
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>学位类型</span>
+          <select data-role="degree">
+            <option value="">全部</option>
+            <option value="本科">本科</option>
+            <option value="硕士">硕士</option>
+            <option value="博士">博士</option>
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>专业方向</span>
+          <select data-role="major">
+            <option value="">全部方向</option>
+            {STUDY_ABROAD_MAJOR_GROUPS.map((group) => (
+              <optgroup label={group.label}>
+                {group.options.map((option) => (
+                  <option value={option}>{option}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>细分方向</span>
+          <select data-role="specialization" disabled>
+            <option value="">先选专业方向</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="school-match-search-card">
+      <div class="school-match-search-head">
+        <div>
+          <div class="school-match-panel-kicker">Step 2</div>
+          <h4>申请背景</h4>
+          <p>预算和入学季会硬筛，GPA 和语言会先参与排序与背景判断。</p>
+        </div>
+      </div>
+
+      <div class="school-match-profile">
+        <label class="school-match-field">
+          <span>预算上限</span>
+          <select data-role="budget">
+            <option value="">全部预算</option>
+            <option value="under-30000">USD 30,000 以内</option>
+            <option value="under-50000">USD 50,000 以内</option>
+            <option value="under-70000">USD 70,000 以内</option>
+            <option value="under-90000">USD 90,000 以内</option>
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>入学季</span>
+          <select data-role="intake">
+            <option value="">全部入学季</option>
+            <option value="spring">春季</option>
+            <option value="summer">夏季</option>
+            <option value="fall">秋季</option>
+            <option value="winter">冬季</option>
+            <option value="rolling">滚动录取</option>
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>当前 GPA</span>
+          <select data-role="gpa">
+            <option value="">未填写</option>
+            <option value="3.7+">3.7 及以上</option>
+            <option value="3.5-3.69">3.5 - 3.69</option>
+            <option value="3.3-3.49">3.3 - 3.49</option>
+            <option value="3.0-3.29">3.0 - 3.29</option>
+            <option value="under-3.0">3.0 以下</option>
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>语言成绩</span>
+          <select data-role="language">
+            <option value="">未填写</option>
+            <option value="IELTS 6.5">IELTS 6.5</option>
+            <option value="IELTS 7.0">IELTS 7.0</option>
+            <option value="TOEFL 90">TOEFL 90</option>
+            <option value="TOEFL 100">TOEFL 100</option>
+            <option value="Duolingo 120">Duolingo 120</option>
+            <option value="PTE 65">PTE 65</option>
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>背景策略</span>
+          <select data-role="fit-mode">
+            <option value="prefer">推荐排序</option>
+            <option value="exclude-risk">排除明显偏紧</option>
+            <option value="match-only">只看已确认匹配</option>
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>门槛质量</span>
+          <select data-role="snapshot-quality">
+            <option value="">全部项目</option>
+            <option value="ready-only">只看门槛已入库</option>
+            <option value="structured-only">只看有结构化门槛</option>
+            <option value="synced-only">只看已同步门槛</option>
+          </select>
+        </label>
+      </div>
+    </section>
+  </div>
+
+  <div class="school-match-command-bar">
+    <div class="school-match-toolbar">
+      <button class="btn" type="button" data-role="search-button">
+        开始搜索
+      </button>
+      <button class="btn btn-ghost" type="button" data-role="reset-button">
+        恢复精选
+      </button>
     </div>
-  </div>
 
-  <div class="school-match-toolbar">
-    <button class="btn" type="button" data-role="search-button">
-      开始搜索
-    </button>
-    <button class="btn btn-ghost" type="button" data-role="reset-button">
-      恢复精选
-    </button>
-  </div>
+    <div class="school-match-status" data-role="status">
+      当前底库共有 {totalPrograms} 个项目，当前展示 {initialResults.length} 个优先样例。先选学位类型、专业方向、细分方向和学生背景，再点击“开始搜索”获取已核验结果。
+    </div>
 
-  <div class="school-match-status" data-role="status">
-    当前展示 {initialResults.length} 个精选项目。填好国家和专业后，点击“开始搜索”获取已核验结果。
+    <ul class="school-match-guidance school-match-guidance--inline">
+      <li>预算和入学季只会筛掉已经补了对应字段的项目。</li>
+      <li>GPA 和语言默认参与排序，严策略只作用于已抓到官网门槛的项目。</li>
+      <li>前排缺失门槛的项目会继续在后台补抓，后续搜索会越来越完整。</li>
+    </ul>
   </div>
 
   <div class="school-match-stack">
+    <section class="school-match-block school-match-block--schools" data-role="schools-section">
+      <div class="school-match-block-head">
+        <div>
+          <strong>学校池</strong>
+          <p>先看命中的学校，再用排名、学费信息和项目状态继续缩小，最后点某所学校查看该校项目。</p>
+        </div>
+        <span class="school-match-badge" data-role="schools-count">
+          {initialUniversityMatches.length} 所
+        </span>
+      </div>
+
+      <div class="school-pool-refiners">
+        <label class="school-match-field">
+          <span>学校 / 城市关键词</span>
+          <input
+            data-role="school-keyword"
+            type="text"
+            inputmode="search"
+            placeholder="例如 Boston、California、科技大学"
+          />
+        </label>
+
+        <label class="school-match-field">
+          <span>QS 排名</span>
+          <select data-role="school-rank">
+            <option value="">全部</option>
+            <option value="top-50">QS 前 50</option>
+            <option value="top-100">QS 前 100</option>
+            <option value="top-200">QS 前 200</option>
+            <option value="ranked">有 QS 排名</option>
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>学费信息</span>
+          <select data-role="school-tuition">
+            <option value="">全部</option>
+            <option value="with-tuition">已补学费</option>
+            <option value="under-30000">低于 USD 30,000</option>
+            <option value="30000-50000">USD 30,000 - 50,000</option>
+            <option value="50000-plus">USD 50,000+</option>
+          </select>
+        </label>
+
+        <label class="school-match-field">
+          <span>项目状态</span>
+          <select data-role="school-availability">
+            <option value="">全部</option>
+            <option value="with-programs">已有项目层</option>
+            <option value="catalog-only">仅学校底库</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="school-pool" data-role="schools-results">
+        <button class="school-pool-card is-active" type="button" data-university-id="">
+          <div class="school-pool-top">
+            <strong>全部院校</strong>
+            <span>{initialResults.length} 个样例项目</span>
+          </div>
+          <p>先浏览当前优先样例，再输入国家或专业继续缩小。</p>
+        </button>
+
+        {initialUniversityMatches.map((school) => (
+          <button class="school-pool-card" type="button" data-university-id={school.universityId}>
+            <div class="school-pool-top">
+              <strong>{school.schoolNameZh || school.schoolName}</strong>
+              <span>{school.programCount} 个项目</span>
+            </div>
+            {school.schoolNameZh && school.schoolNameZh !== school.schoolName ? (
+              <div class="school-pool-school-en">{school.schoolName}</div>
+            ) : null}
+            <div class="school-pool-meta">
+              <span>{school.country}</span>
+              {[school.city, school.stateOrProvince].filter(Boolean).join(", ") ? (
+                <span>{[school.city, school.stateOrProvince].filter(Boolean).join(", ")}</span>
+              ) : null}
+              {school.qsRank && school.qsRank > 0 ? (
+                <span>
+                  QS {school.qsRankingYear || 2026}：#{school.qsRank}
+                </span>
+              ) : null}
+              {school.tuitionProjectCount > 0 && school.tuitionMin ? (
+                <span>
+                  {school.tuitionCurrency || "USD"} {new Intl.NumberFormat("en-US").format(
+                    Number(school.tuitionMin)
+                  )}
+                  {school.tuitionMax && Number(school.tuitionMax) > Number(school.tuitionMin)
+                    ? ` - ${new Intl.NumberFormat("en-US").format(Number(school.tuitionMax))}`
+                    : ""}{" "}
+                  起
+                </span>
+              ) : null}
+            </div>
+            <p>
+              {school.topDisciplines.join(" · ") ||
+                (school.programCount > 0 ? "点击后查看该校项目" : "已进入学校底库，项目层持续补充中")}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      <div class="school-pool-toolbar" data-role="schools-toolbar">
+        <button class="btn btn-ghost" type="button" data-role="schools-more" hidden>
+          展开更多院校
+        </button>
+      </div>
+
+      <div class="school-summary" data-role="school-summary" hidden>
+        <div class="school-summary-head">
+          <div>
+            <div class="school-summary-kicker">School Snapshot</div>
+            <h4 data-role="school-summary-title">院校概要</h4>
+            <div class="school-summary-subtitle" data-role="school-summary-subtitle"></div>
+          </div>
+          <a
+            class="btn btn-ghost"
+            href="#"
+            target="_blank"
+            rel="noreferrer"
+            data-role="school-summary-link"
+          >
+            打开学校官网
+          </a>
+        </div>
+
+        <div class="school-summary-facts" data-role="school-summary-facts"></div>
+        <div class="school-summary-tags" data-role="school-summary-tags"></div>
+        <p class="school-summary-note" data-role="school-summary-note"></p>
+      </div>
+    </section>
+
     <section class="school-match-block">
       <div class="school-match-block-head">
         <div>
           <strong>已核验官方项目</strong>
-          <p>这些项目已经整理进项目库，适合直接给学生展示和做顾问推荐。</p>
+          <p>这些项目已经整理进项目库，可直接查看院校官网、项目页和官方招生要求摘要。</p>
         </div>
       </div>
 
       <div class="school-match-results" data-role="verified-results">
         {initialResults.map((program) => (
-          <article class="school-card">
+          <article class="school-card" data-program-card={program.id}>
             <div class="school-card-top">
               <div>
                 <div class="school-card-meta">
                   <span>{program.country}</span>
-                  <span>{program.city}</span>
+                  {locationLabel(program) ? <span>{locationLabel(program)}</span> : null}
                   <span>{program.degree}</span>
                 </div>
-                <h4>{program.schoolName}</h4>
+                <h4>{program.schoolNameZh || program.schoolName}</h4>
+                {program.schoolNameZh && program.schoolNameZh !== program.schoolName ? (
+                  <div class="school-card-school-en">{program.schoolName}</div>
+                ) : null}
                 <p class="school-card-program">{program.programName}</p>
               </div>
               <div class="school-card-discipline">{program.discipline}</div>
@@ -134,23 +546,56 @@ const sameLink = (program: StudyAbroadProgram) =>
             </div>
 
             <div class="school-card-facts">
+              {rankingLabel(program) ? <span>{rankingLabel(program)}</span> : null}
+              {tuitionLabel(program) ? <span>{tuitionLabel(program)}</span> : null}
               {program.duration ? <span>学制：{program.duration}</span> : null}
               {program.intake ? <span>入学：{program.intake}</span> : null}
+              <span
+                data-program-admissions-status={program.id}
+                hidden={!admissionsSnapshotLabel(program)}
+              >
+                {admissionsSnapshotLabel(program)}
+              </span>
               <span>核对：{program.checkedAt}</span>
             </div>
 
+            <div class="school-card-fit" data-program-fit={program.id} hidden></div>
+
             <div class="school-card-actions">
+              <a href={program.officialWebsite} target="_blank" rel="noreferrer">
+                院校官网
+              </a>
               <a href={program.overviewUrl} target="_blank" rel="noreferrer">
-                招生简介
+                项目页
               </a>
               {!sameLink(program) && program.admissionsUrl ? (
                 <a href={program.admissionsUrl} target="_blank" rel="noreferrer">
-                  申请要求
+                  申请要求页
                 </a>
               ) : null}
+              <button type="button" class="school-card-trigger" data-program-detail-button={program.id}>
+                查看要求摘要
+              </button>
             </div>
           </article>
         ))}
+      </div>
+
+      <div class="school-match-detail" data-role="detail-panel" hidden>
+        <div class="school-match-detail-head">
+          <div>
+            <strong data-role="detail-title">官方招生要求摘要</strong>
+            <p data-role="detail-subtitle">
+              点击上方项目中的“查看要求摘要”后，这里会读取院校官网内容并展示关键信息。
+            </p>
+          </div>
+
+          <button class="btn btn-ghost school-match-detail-close" type="button" data-role="detail-close">
+            收起
+          </button>
+        </div>
+
+        <div class="school-match-detail-body" data-role="detail-body"></div>
       </div>
     </section>
 
@@ -167,22 +612,98 @@ const sameLink = (program: StudyAbroadProgram) =>
     </section>
   </div>
 
-  <script is:inline define:vars={{ finderId, seedResults }}>
+  <script
+    is:inline
+    define:vars={{
+      finderId,
+      seedResults,
+      totalPrograms,
+      initialUniversityMatches,
+      initialVisibleSchoolCount: INITIAL_VISIBLE_SCHOOL_COUNT,
+      specializationOptionsByMajor: STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
+    }}
+  >
     const root = document.querySelector(`[data-school-match="${finderId}"]`);
 
     if (root) {
       const initialResults = Array.isArray(seedResults) ? seedResults : [];
+      const totalProgramCount = Number(totalPrograms) || initialResults.length;
+      const seedUniversityMatches = Array.isArray(initialUniversityMatches)
+        ? initialUniversityMatches
+        : [];
       const countrySelect = root.querySelector('[data-role="country"]');
-      const majorInput = root.querySelector('[data-role="major"]');
       const degreeSelect = root.querySelector('[data-role="degree"]');
+      const majorSelect = root.querySelector('[data-role="major"]');
+      const specializationSelect = root.querySelector('[data-role="specialization"]');
+      const budgetSelect = root.querySelector('[data-role="budget"]');
+      const intakeSelect = root.querySelector('[data-role="intake"]');
+      const gpaSelect = root.querySelector('[data-role="gpa"]');
+      const languageSelect = root.querySelector('[data-role="language"]');
+      const fitModeSelect = root.querySelector('[data-role="fit-mode"]');
+      const snapshotQualitySelect = root.querySelector('[data-role="snapshot-quality"]');
       const searchButton = root.querySelector('[data-role="search-button"]');
       const resetButton = root.querySelector('[data-role="reset-button"]');
       const statusNode = root.querySelector('[data-role="status"]');
+      const schoolsSection = root.querySelector('[data-role="schools-section"]');
+      const schoolsResultsNode = root.querySelector('[data-role="schools-results"]');
+      const schoolsCountNode = root.querySelector('[data-role="schools-count"]');
       const verifiedResultsNode = root.querySelector('[data-role="verified-results"]');
+      const schoolsToolbar = root.querySelector('[data-role="schools-toolbar"]');
+      const schoolsMoreButton = root.querySelector('[data-role="schools-more"]');
+      const schoolKeywordInput = root.querySelector('[data-role="school-keyword"]');
+      const schoolRankSelect = root.querySelector('[data-role="school-rank"]');
+      const schoolTuitionSelect = root.querySelector('[data-role="school-tuition"]');
+      const schoolAvailabilitySelect = root.querySelector('[data-role="school-availability"]');
+      const schoolSummaryPanel = root.querySelector('[data-role="school-summary"]');
+      const schoolSummaryTitleNode = root.querySelector('[data-role="school-summary-title"]');
+      const schoolSummarySubtitleNode = root.querySelector('[data-role="school-summary-subtitle"]');
+      const schoolSummaryFactsNode = root.querySelector('[data-role="school-summary-facts"]');
+      const schoolSummaryTagsNode = root.querySelector('[data-role="school-summary-tags"]');
+      const schoolSummaryNoteNode = root.querySelector('[data-role="school-summary-note"]');
+      const schoolSummaryLink = root.querySelector('[data-role="school-summary-link"]');
       const candidateSection = root.querySelector('[data-role="candidate-section"]');
       const candidateResultsNode = root.querySelector('[data-role="candidate-results"]');
       const candidateCountNode = root.querySelector('[data-role="candidate-count"]');
-      const hintButtons = Array.from(root.querySelectorAll("[data-major-hint]"));
+      const detailPanel = root.querySelector('[data-role="detail-panel"]');
+      const detailTitleNode = root.querySelector('[data-role="detail-title"]');
+      const detailSubtitleNode = root.querySelector('[data-role="detail-subtitle"]');
+      const detailBodyNode = root.querySelector('[data-role="detail-body"]');
+      const detailCloseButton = root.querySelector('[data-role="detail-close"]');
+      let activeVerifiedResults = initialResults;
+      let activeUniversityMatches = seedUniversityMatches;
+      let activeUniversityCount = seedUniversityMatches.length;
+      const initialSchoolBatchSize = Number(initialVisibleSchoolCount) || 24;
+      let visibleSchoolCount = initialSchoolBatchSize;
+      let baseVerifiedResults = initialResults;
+      let baseUniversityMatches = seedUniversityMatches;
+      let baseUniversityCount = seedUniversityMatches.length;
+      let baseCandidateResults = [];
+      let baseStatusText =
+        `当前底库共有 ${totalProgramCount} 个项目，当前展示 ${initialResults.length} 个优先样例。先选学位类型、专业方向、细分方向和学生背景，再点击“开始搜索”获取已核验结果。`;
+      let lastBasePayload = {
+        country: "",
+        major: "",
+        specialization: "",
+        degree: "",
+        budgetTier: "",
+        intake: "",
+        gpaProfile: "",
+        languageProfile: "",
+        fitMode: "prefer",
+        snapshotQuality: "",
+      };
+      let selectedUniversityId = "";
+      let lastEmptyText =
+        "可以先放宽国家条件，或者改选更宽的专业方向，比如从“商业分析 / 数据”切到“商科 / 管理”。";
+      let activeDetailProgramId = "";
+      let fitPreviewToken = 0;
+      let admissionsPrefetchToken = 0;
+      const detailCache = new Map();
+      const specializationMap =
+        specializationOptionsByMajor &&
+        typeof specializationOptionsByMajor === "object"
+          ? specializationOptionsByMajor
+          : {};
 
       const escapeHtml = (value) =>
         String(value || "")
@@ -192,10 +713,274 @@ const sameLink = (program: StudyAbroadProgram) =>
           .replaceAll('"', "&quot;")
           .replaceAll("'", "&#39;");
 
+      const locationLabel = (program) =>
+        [program.city, program.stateOrProvince].filter(Boolean).join(", ");
+
+      const tuitionLabel = (program) => {
+        if (!program.tuitionAmount) {
+          return "";
+        }
+
+        const rawValue = Number(program.tuitionAmount);
+        const amount = Number.isFinite(rawValue)
+          ? new Intl.NumberFormat("en-US").format(rawValue)
+          : String(program.tuitionAmount);
+
+        return program.tuitionCurrency
+          ? `学费：${program.tuitionCurrency} ${amount}`
+          : `学费：${amount}`;
+      };
+
+      const rankingLabel = (program) => {
+        const rank = Number(program.qsRank);
+        if (!Number.isFinite(rank) || rank <= 0) {
+          return "";
+        }
+
+        return program.qsRankingYear
+          ? `QS ${escapeHtml(program.qsRankingYear)}：#${escapeHtml(rank)}`
+          : `QS：#${escapeHtml(rank)}`;
+      };
+
+      const admissionsSnapshotStatusLabel = (snapshot) => {
+        const status = snapshot?.extractionStatus;
+        if (status === "ok") return "门槛：已入库";
+        if (status === "partial") return "门槛：部分字段";
+        if (status === "unavailable") return "门槛：待补抓";
+        return "";
+      };
+
+      const admissionsSnapshotLabel = (program) =>
+        admissionsSnapshotStatusLabel(program?.admissionsSnapshot);
+
+      const formatCurrencyNumber = (value) => {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric <= 0) {
+          return "";
+        }
+
+        return new Intl.NumberFormat("en-US").format(Math.round(numeric));
+      };
+
+      const schoolRankingLabel = (school) => {
+        const rank = Number(school?.qsRank);
+        if (!Number.isFinite(rank) || rank <= 0) {
+          return "";
+        }
+
+        return school.qsRankingYear
+          ? `QS ${school.qsRankingYear}：#${rank}`
+          : `QS：#${rank}`;
+      };
+
+      const schoolTuitionLabel = (school) => {
+        const min = Number(school?.tuitionMin);
+        const max = Number(school?.tuitionMax);
+        const count = Number(school?.tuitionProjectCount) || 0;
+        const currency = school?.tuitionCurrency || "USD";
+
+        if (!count || !Number.isFinite(min) || min <= 0) {
+          return "";
+        }
+
+        if (!Number.isFinite(max) || max <= 0 || min === max) {
+          return `学费样本：${currency} ${formatCurrencyNumber(min)} 起`;
+        }
+
+        return `学费样本：${currency} ${formatCurrencyNumber(min)} - ${formatCurrencyNumber(max)}`;
+      };
+
+      const currentSchoolRefiners = () => ({
+        keyword:
+          schoolKeywordInput instanceof HTMLInputElement
+            ? schoolKeywordInput.value.trim().toLowerCase()
+            : "",
+        rank:
+          schoolRankSelect instanceof HTMLSelectElement ? schoolRankSelect.value : "",
+        tuition:
+          schoolTuitionSelect instanceof HTMLSelectElement ? schoolTuitionSelect.value : "",
+        availability:
+          schoolAvailabilitySelect instanceof HTMLSelectElement
+            ? schoolAvailabilitySelect.value
+            : "",
+      });
+
+      const resetSchoolRefiners = () => {
+        if (schoolKeywordInput instanceof HTMLInputElement) schoolKeywordInput.value = "";
+        if (schoolRankSelect instanceof HTMLSelectElement) schoolRankSelect.value = "";
+        if (schoolTuitionSelect instanceof HTMLSelectElement) schoolTuitionSelect.value = "";
+        if (schoolAvailabilitySelect instanceof HTMLSelectElement) {
+          schoolAvailabilitySelect.value = "";
+        }
+      };
+
+      const hasActiveSchoolRefiners = () => {
+        const filters = currentSchoolRefiners();
+        return Boolean(filters.keyword || filters.rank || filters.tuition || filters.availability);
+      };
+
+      const matchesRankFilter = (school, rankFilter) => {
+        if (!rankFilter) return true;
+
+        const rank = Number(school?.qsRank);
+        if (!Number.isFinite(rank) || rank <= 0) {
+          return rankFilter === "ranked" ? false : false;
+        }
+
+        if (rankFilter === "ranked") return true;
+        if (rankFilter === "top-50") return rank <= 50;
+        if (rankFilter === "top-100") return rank <= 100;
+        if (rankFilter === "top-200") return rank <= 200;
+        return true;
+      };
+
+      const matchesTuitionFilter = (school, tuitionFilter) => {
+        if (!tuitionFilter) return true;
+
+        const min = Number(school?.tuitionMin);
+        const max = Number(school?.tuitionMax);
+        const hasTuition =
+          (Number(school?.tuitionProjectCount) || 0) > 0 &&
+          Number.isFinite(min) &&
+          min > 0;
+
+        if (tuitionFilter === "with-tuition") {
+          return hasTuition;
+        }
+
+        if (!hasTuition) {
+          return false;
+        }
+
+        if (tuitionFilter === "under-30000") {
+          return min < 30000;
+        }
+
+        if (tuitionFilter === "30000-50000") {
+          return min <= 50000 && (Number.isFinite(max) ? max >= 30000 : min >= 30000);
+        }
+
+        if (tuitionFilter === "50000-plus") {
+          return (Number.isFinite(max) ? max : min) >= 50000;
+        }
+
+        return true;
+      };
+
+      const filterUniversityMatches = (items) => {
+        const filters = currentSchoolRefiners();
+        if (!Array.isArray(items) || !items.length) {
+          return [];
+        }
+
+        return items.filter((school) => {
+          const keywordMatched =
+            !filters.keyword ||
+            [
+              school.schoolNameZh,
+              school.schoolName,
+              school.country,
+              school.city,
+              school.stateOrProvince,
+              ...(school.topDisciplines || []),
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(filters.keyword);
+
+          if (!keywordMatched) return false;
+
+          if (!matchesRankFilter(school, filters.rank)) return false;
+          if (!matchesTuitionFilter(school, filters.tuition)) return false;
+
+          if (filters.availability === "with-programs" && Number(school.programCount) <= 0) {
+            return false;
+          }
+
+          if (filters.availability === "catalog-only" && Number(school.programCount) > 0) {
+            return false;
+          }
+
+          return true;
+        });
+      };
+
+      const hideSchoolSummary = () => {
+        if (schoolSummaryPanel instanceof HTMLElement) {
+          schoolSummaryPanel.hidden = true;
+        }
+      };
+
+      const renderSchoolSummary = (school) => {
+        if (
+          !(schoolSummaryPanel instanceof HTMLElement) ||
+          !(schoolSummaryTitleNode instanceof HTMLElement) ||
+          !(schoolSummarySubtitleNode instanceof HTMLElement) ||
+          !(schoolSummaryFactsNode instanceof HTMLElement) ||
+          !(schoolSummaryTagsNode instanceof HTMLElement) ||
+          !(schoolSummaryNoteNode instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        if (!school) {
+          hideSchoolSummary();
+          return;
+        }
+
+        schoolSummaryPanel.hidden = false;
+        schoolSummaryTitleNode.textContent = school.schoolNameZh || school.schoolName;
+        schoolSummarySubtitleNode.textContent =
+          school.schoolNameZh && school.schoolNameZh !== school.schoolName
+            ? school.schoolName
+            : [school.country, [school.city, school.stateOrProvince].filter(Boolean).join(", ")]
+                .filter(Boolean)
+                .join(" / ");
+
+        if (schoolSummaryLink instanceof HTMLAnchorElement) {
+          schoolSummaryLink.href = school.officialWebsite || "#";
+          schoolSummaryLink.style.display = school.officialWebsite ? "" : "none";
+        }
+
+        const factItems = [
+          schoolRankingLabel(school),
+          [school.country, [school.city, school.stateOrProvince].filter(Boolean).join(", ")]
+            .filter(Boolean)
+            .join(" / "),
+          Number(school.programCount) > 0
+            ? `${school.programCount} 个项目`
+            : "已进入学校底库，项目层持续补充中",
+          schoolTuitionLabel(school),
+        ].filter(Boolean);
+
+        schoolSummaryFactsNode.innerHTML = factItems
+          .map((item) => `<span>${escapeHtml(item)}</span>`)
+          .join("");
+
+        const tags = [
+          ...(school.topDisciplines || []),
+          ...(school.featuredPrograms || []),
+        ].filter(Boolean).slice(0, 5);
+
+        schoolSummaryTagsNode.innerHTML = tags
+          .map((item) => `<span>${escapeHtml(item)}</span>`)
+          .join("");
+
+        schoolSummaryNoteNode.textContent =
+          Number(school.programCount) > 0
+            ? "你现在看到的是这所学校当前已经补进项目库的项目结果，后面还可以继续点“查看要求摘要”读取官网招生页。"
+            : "这所学校已经进入学校底库，但项目页和学费页还在继续补全。现在可以先打开学校官网做第一轮核对。";
+      };
+
       const cardHtml = (program) => {
         const facts = [
+          rankingLabel(program) ? `<span>${rankingLabel(program)}</span>` : "",
+          tuitionLabel(program) ? `<span>${escapeHtml(tuitionLabel(program))}</span>` : "",
           program.duration ? `<span>学制：${escapeHtml(program.duration)}</span>` : "",
           program.intake ? `<span>入学：${escapeHtml(program.intake)}</span>` : "",
+          `<span data-program-admissions-status="${escapeHtml(program.id)}" ${
+            admissionsSnapshotLabel(program) ? "" : "hidden"
+          }>${escapeHtml(admissionsSnapshotLabel(program))}</span>`,
           `<span>核对：${escapeHtml(program.checkedAt)}</span>`,
         ]
           .filter(Boolean)
@@ -203,19 +988,24 @@ const sameLink = (program: StudyAbroadProgram) =>
 
         const admissionsLink =
           program.admissionsUrl && program.admissionsUrl !== program.overviewUrl
-            ? `<a href="${escapeHtml(program.admissionsUrl)}" target="_blank" rel="noreferrer">申请要求</a>`
+            ? `<a href="${escapeHtml(program.admissionsUrl)}" target="_blank" rel="noreferrer">申请要求页</a>`
             : "";
 
         return `
-          <article class="school-card">
+          <article class="school-card" data-program-card="${escapeHtml(program.id)}">
             <div class="school-card-top">
               <div>
                 <div class="school-card-meta">
                   <span>${escapeHtml(program.country)}</span>
-                  <span>${escapeHtml(program.city)}</span>
+                  ${locationLabel(program) ? `<span>${escapeHtml(locationLabel(program))}</span>` : ""}
                   <span>${escapeHtml(program.degree)}</span>
                 </div>
-                <h4>${escapeHtml(program.schoolName)}</h4>
+                <h4>${escapeHtml(program.schoolNameZh || program.schoolName)}</h4>
+                ${
+                  program.schoolNameZh && program.schoolNameZh !== program.schoolName
+                    ? `<div class="school-card-school-en">${escapeHtml(program.schoolName)}</div>`
+                    : ""
+                }
                 <p class="school-card-program">${escapeHtml(program.programName)}</p>
               </div>
               <div class="school-card-discipline">${escapeHtml(program.discipline)}</div>
@@ -229,12 +1019,166 @@ const sameLink = (program: StudyAbroadProgram) =>
 
             <div class="school-card-facts">${facts}</div>
 
+            <div class="school-card-fit" data-program-fit="${escapeHtml(program.id)}" hidden></div>
+
             <div class="school-card-actions">
-              <a href="${escapeHtml(program.overviewUrl)}" target="_blank" rel="noreferrer">招生简介</a>
+              <a href="${escapeHtml(program.officialWebsite || program.overviewUrl)}" target="_blank" rel="noreferrer">院校官网</a>
+              <a href="${escapeHtml(program.overviewUrl)}" target="_blank" rel="noreferrer">项目页</a>
               ${admissionsLink}
+              <button type="button" class="school-card-trigger" data-program-detail-button="${escapeHtml(program.id)}">查看要求摘要</button>
             </div>
           </article>
         `;
+      };
+
+      const hasFitPreviewInput = (payload) =>
+        Boolean(payload?.gpaProfile || payload?.languageProfile);
+
+      const fitBadgeLabel = (status) => {
+        if (status === "match") return "匹配";
+        if (status === "risk") return "偏紧";
+        return "待核对";
+      };
+
+      const clearFitPreviews = () => {
+        root.querySelectorAll("[data-program-fit]").forEach((node) => {
+          if (!(node instanceof HTMLElement)) {
+            return;
+          }
+
+          node.hidden = true;
+          node.className = "school-card-fit";
+          node.innerHTML = "";
+        });
+      };
+
+      const fitPreviewHtml = (preview) => `
+        <div class="school-card-fit-head">
+          <strong>${escapeHtml(preview.headline || "当前背景待核对")}</strong>
+          <span class="school-card-fit-badge school-card-fit-badge--${escapeHtml(preview.status || "review")}">
+            ${escapeHtml(fitBadgeLabel(preview.status))}
+          </span>
+        </div>
+        <ul class="school-card-fit-items">
+          ${(Array.isArray(preview.details) ? preview.details : [])
+            .slice(0, 3)
+            .map((item) => `<li>${escapeHtml(item)}</li>`)
+            .join("")}
+        </ul>
+      `;
+
+      const renderFitPreviews = (previews) => {
+        clearFitPreviews();
+
+        if (!Array.isArray(previews) || !previews.length) {
+          return;
+        }
+
+        previews.forEach((preview) => {
+          const node = root.querySelector(
+            `[data-program-fit="${CSS.escape(String(preview.programId || ""))}"]`
+          );
+
+          if (!(node instanceof HTMLElement)) {
+            return;
+          }
+
+          node.hidden = false;
+          node.className = `school-card-fit school-card-fit--${preview.status || "review"}`;
+          node.innerHTML = fitPreviewHtml(preview);
+        });
+      };
+
+      const hydrateFitPreviews = async (items, payload) => {
+        fitPreviewToken += 1;
+        const token = fitPreviewToken;
+        clearFitPreviews();
+
+        if (!hasFitPreviewInput(payload) || !Array.isArray(items) || !items.length) {
+          return;
+        }
+
+        const programIds = items
+          .map((item) => String(item?.id || "").trim())
+          .filter(Boolean)
+          .slice(0, 8);
+
+        if (!programIds.length) {
+          return;
+        }
+
+        programIds.forEach((programId) => {
+          const node = root.querySelector(
+            `[data-program-fit="${CSS.escape(programId)}"]`
+          );
+
+          if (!(node instanceof HTMLElement)) {
+            return;
+          }
+
+          node.hidden = false;
+          node.className = "school-card-fit school-card-fit--review";
+          node.innerHTML = `
+            <div class="school-card-fit-head">
+              <strong>正在比对招生要求</strong>
+              <span class="school-card-fit-badge school-card-fit-badge--review">分析中</span>
+            </div>
+            <ul class="school-card-fit-items">
+              <li>系统正在根据官网页提取 GPA、语言成绩和标化要求。</li>
+            </ul>
+          `;
+        });
+
+        try {
+          const response = await fetch("/api/study-abroad/fit-preview", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              programIds,
+              gpaProfile: payload.gpaProfile || "",
+              languageProfile: payload.languageProfile || "",
+            }),
+          });
+
+          const data = await response.json();
+          if (token !== fitPreviewToken) {
+            return;
+          }
+
+          if (!response.ok || !data?.ok) {
+            throw new Error(data?.message || "暂时无法生成背景匹配预估。");
+          }
+
+          renderFitPreviews(data.previews);
+        } catch (error) {
+          if (token !== fitPreviewToken) {
+            return;
+          }
+
+          programIds.forEach((programId) => {
+            const node = root.querySelector(
+              `[data-program-fit="${CSS.escape(programId)}"]`
+            );
+
+            if (!(node instanceof HTMLElement)) {
+              return;
+            }
+
+            node.hidden = false;
+            node.className = "school-card-fit school-card-fit--review";
+            node.innerHTML = `
+              <div class="school-card-fit-head">
+                <strong>当前背景待核对</strong>
+                <span class="school-card-fit-badge school-card-fit-badge--review">待核对</span>
+              </div>
+              <ul class="school-card-fit-items">
+                <li>${escapeHtml(error instanceof Error ? error.message : "暂时无法生成背景匹配预估，请先查看要求摘要。")}</li>
+              </ul>
+            `;
+          });
+        }
       };
 
       const candidateCardHtml = (candidate) => `
@@ -259,18 +1203,208 @@ const sameLink = (program: StudyAbroadProgram) =>
         </article>
       `;
 
+      const schoolCardHtml = (school, selectedId) => {
+        const isActive = school.universityId === selectedId;
+        const meta = [
+          school.country,
+          [school.city, school.stateOrProvince].filter(Boolean).join(", "),
+          school.qsRank && Number(school.qsRank) > 0
+            ? `QS ${school.qsRankingYear || 2026}：#${school.qsRank}`
+            : "",
+          schoolTuitionLabel(school),
+        ]
+          .filter(Boolean)
+          .map((item) => `<span>${escapeHtml(item)}</span>`)
+          .join("");
+
+        return `
+          <button class="school-pool-card ${isActive ? "is-active" : ""}" type="button" data-university-id="${escapeHtml(school.universityId)}">
+            <div class="school-pool-top">
+              <strong>${escapeHtml(school.schoolNameZh || school.schoolName)}</strong>
+              <span>${escapeHtml(school.programCount)} 个项目</span>
+            </div>
+            ${
+              school.schoolNameZh && school.schoolNameZh !== school.schoolName
+                ? `<div class="school-pool-school-en">${escapeHtml(school.schoolName)}</div>`
+                : ""
+            }
+            <div class="school-pool-meta">${meta}</div>
+            <p>${escapeHtml(
+              (school.topDisciplines || []).join(" · ") ||
+                (school.featuredPrograms || []).slice(0, 2).join(" / ") ||
+                (Number(school.programCount) > 0
+                  ? "点击后查看该校项目"
+                  : "已进入学校底库，项目层持续补充中")
+            )}</p>
+          </button>
+        `;
+      };
+
+      const hideDetailPanel = () => {
+        activeDetailProgramId = "";
+
+        if (detailPanel instanceof HTMLElement) {
+          detailPanel.hidden = true;
+        }
+
+        if (detailTitleNode instanceof HTMLElement) {
+          detailTitleNode.textContent = "官方招生要求摘要";
+        }
+
+        if (detailSubtitleNode instanceof HTMLElement) {
+          detailSubtitleNode.textContent =
+            "点击上方项目中的“查看要求摘要”后，这里会读取院校官网内容并展示关键信息。";
+        }
+
+        if (detailBodyNode instanceof HTMLElement) {
+          detailBodyNode.innerHTML = "";
+        }
+      };
+
+      const showDetailPanel = ({ title, subtitle, bodyHtml }) => {
+        if (!(detailPanel instanceof HTMLElement) || !(detailBodyNode instanceof HTMLElement)) {
+          return;
+        }
+
+        detailPanel.hidden = false;
+
+        if (detailTitleNode instanceof HTMLElement) {
+          detailTitleNode.textContent = title;
+        }
+
+        if (detailSubtitleNode instanceof HTMLElement) {
+          detailSubtitleNode.textContent = subtitle;
+        }
+
+        detailBodyNode.innerHTML = bodyHtml;
+        detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+
+      const requirementGroupHtml = (group) => `
+        <section class="requirement-group">
+          <h5>${escapeHtml(group.label)}</h5>
+          <ul>
+            ${(group.items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </section>
+      `;
+
+      const admissionsSnapshotHtml = (profile) => {
+        if (!profile || typeof profile !== "object") {
+          return "";
+        }
+
+        const items = [
+          profile.gpaMin
+            ? `最低 GPA：${escapeHtml(Number(profile.gpaMin).toFixed(1))}/${escapeHtml(profile.gpaScale || "4.0")}`
+            : "",
+          profile.ieltsMin ? `IELTS：${escapeHtml(profile.ieltsMin)}` : "",
+          profile.toeflMin ? `TOEFL：${escapeHtml(profile.toeflMin)}` : "",
+          profile.duolingoMin ? `Duolingo：${escapeHtml(profile.duolingoMin)}` : "",
+          profile.pteMin ? `PTE：${escapeHtml(profile.pteMin)}` : "",
+          profile.greStatus && profile.greStatus !== "unknown"
+            ? `GRE：${escapeHtml(
+                profile.greStatus === "required"
+                  ? "要求"
+                  : profile.greStatus === "recommended"
+                    ? "建议提交"
+                    : "可选"
+              )}`
+            : "",
+          profile.gmatStatus && profile.gmatStatus !== "unknown"
+            ? `GMAT：${escapeHtml(
+                profile.gmatStatus === "required"
+                  ? "要求"
+                  : profile.gmatStatus === "recommended"
+                    ? "建议提交"
+                    : "可选"
+              )}`
+            : "",
+          profile.workExperienceYears
+            ? `工作经验：${escapeHtml(profile.workExperienceYears)} 年+`
+            : "",
+        ].filter(Boolean);
+
+        if (!items.length) {
+          return "";
+        }
+
+        return `
+          <section class="requirement-snapshot">
+            <h5>结构化门槛快照</h5>
+            <div class="requirement-snapshot-items">
+              ${items.map((item) => `<span>${item}</span>`).join("")}
+            </div>
+          </section>
+        `;
+      };
+
+      const detailHtml = (insight) => {
+        const highlights = Array.isArray(insight?.highlights) ? insight.highlights : [];
+        const groups = Array.isArray(insight?.requirementGroups) ? insight.requirementGroups : [];
+        const links = [
+          insight?.officialWebsite
+            ? `<a href="${escapeHtml(insight.officialWebsite)}" target="_blank" rel="noreferrer">院校官网</a>`
+            : "",
+          insight?.overviewUrl
+            ? `<a href="${escapeHtml(insight.overviewUrl)}" target="_blank" rel="noreferrer">项目页</a>`
+            : "",
+          insight?.admissionsUrl
+            ? `<a href="${escapeHtml(insight.admissionsUrl)}" target="_blank" rel="noreferrer">招生要求页</a>`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("");
+
+        return `
+          <div class="requirement-summary">${escapeHtml(insight?.summary || "暂未提取到可展示的招生要求摘要。")}</div>
+          ${highlights.length ? `
+            <div class="requirement-highlights">
+              ${highlights.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+            </div>
+          ` : ""}
+          ${groups.length ? `
+            <div class="requirement-grid">
+              ${groups.map(requirementGroupHtml).join("")}
+            </div>
+          ` : `
+            <div class="school-match-empty">
+              <strong>暂未抽取到结构化字段</strong>
+              <p>${escapeHtml(insight?.note || "建议直接打开官网查看最新招生要求。")}</p>
+            </div>
+          `}
+          ${admissionsSnapshotHtml(insight?.admissionsProfile)}
+          <div class="requirement-links">${links}</div>
+          <div class="requirement-note">${escapeHtml(insight?.note || "")}</div>
+        `;
+      };
+
+      const renderDetailLoading = (program) => {
+        showDetailPanel({
+          title: `${program.schoolName} · ${program.programName}`,
+          subtitle: "正在读取官方招生页，请稍候…",
+          bodyHtml: `
+            <div class="requirement-loading">
+              <strong>正在抓取官网内容</strong>
+              <p>系统会优先读取项目招生页，再提取学术背景、语言成绩、材料要求等重点。</p>
+            </div>
+          `,
+        });
+      };
+
       const renderVerifiedResults = (items, emptyText) => {
         if (!verifiedResultsNode) {
           return;
         }
 
         if (!Array.isArray(items) || !items.length) {
+          hideDetailPanel();
           verifiedResultsNode.innerHTML = `
             <div class="school-match-empty">
               <strong>这轮没有筛到合适结果</strong>
               <p>${escapeHtml(
                 emptyText ||
-                  "可以先缩短国家条件，或者把专业从“量化金融”“人机交互”放宽到“金融”“计算机 / AI”。"
+                  "可以先放宽国家条件，或者改选更宽的专业方向，比如从“商业分析 / 数据”切到“商科 / 管理”。"
               )}</p>
             </div>
           `;
@@ -304,14 +1438,309 @@ const sameLink = (program: StudyAbroadProgram) =>
         }
       };
 
+      const renderUniversityMatches = (items, totalCount, selectedId) => {
+        if (!(schoolsSection instanceof HTMLElement) || !schoolsResultsNode) {
+          return;
+        }
+
+        const total = Number(totalCount) || 0;
+        const filteredItems = filterUniversityMatches(items);
+        const filteredCount = filteredItems.length;
+
+        if (!Array.isArray(items) || !items.length) {
+          schoolsSection.hidden = true;
+          schoolsResultsNode.innerHTML = "";
+
+          if (schoolsCountNode instanceof HTMLElement) {
+            schoolsCountNode.textContent = "";
+          }
+
+          if (schoolsToolbar instanceof HTMLElement) {
+            schoolsToolbar.hidden = true;
+          }
+
+          return;
+        }
+
+        schoolsSection.hidden = false;
+        const visibleItems = filteredItems.slice(0, visibleSchoolCount);
+
+        if (!filteredCount) {
+          schoolsResultsNode.innerHTML = `
+            <div class="school-match-empty">
+              <strong>这轮学校池里没有符合二次筛选的院校</strong>
+              <p>可以先放宽 QS、学费或项目状态条件，再继续筛学校。</p>
+            </div>
+          `;
+
+          if (schoolsCountNode instanceof HTMLElement) {
+            schoolsCountNode.textContent = total
+              ? `筛出 0 / ${total} 所`
+              : "0 所";
+          }
+
+          if (schoolsToolbar instanceof HTMLElement) {
+            schoolsToolbar.hidden = true;
+          }
+
+          return;
+        }
+
+        const allCard = `
+          <button class="school-pool-card ${selectedId ? "" : "is-active"}" type="button" data-university-id="">
+            <div class="school-pool-top">
+              <strong>全部院校</strong>
+              <span>${escapeHtml(filteredCount)} / ${escapeHtml(total || filteredCount)} 所</span>
+            </div>
+            <p>先看这一轮命中的学校池，再点某所学校缩小下方项目结果。</p>
+          </button>
+        `;
+
+        schoolsResultsNode.innerHTML =
+          allCard + visibleItems.map((school) => schoolCardHtml(school, selectedId)).join("");
+
+        if (schoolsCountNode instanceof HTMLElement) {
+          if (hasActiveSchoolRefiners()) {
+            schoolsCountNode.textContent =
+              visibleItems.length < filteredCount
+                ? `筛出 ${filteredCount} / ${total} 所，当前展示 ${visibleItems.length} 所`
+                : `筛出 ${filteredCount} / ${total} 所`;
+          } else {
+            schoolsCountNode.textContent =
+              total > visibleItems.length
+                ? `展示 ${visibleItems.length} / ${total} 所`
+                : `${visibleItems.length} 所`;
+          }
+        }
+
+        if (schoolsToolbar instanceof HTMLElement && schoolsMoreButton instanceof HTMLButtonElement) {
+          const hasMore = filteredItems.length > visibleItems.length;
+          schoolsToolbar.hidden = !hasMore;
+          schoolsMoreButton.hidden = !hasMore;
+          schoolsMoreButton.textContent =
+            visibleItems.length >= filteredItems.length
+              ? "已展示全部院校"
+              : `展开更多院校（剩余 ${filteredItems.length - visibleItems.length} 所）`;
+        }
+      };
+
+      const openProgramDetails = async (programId) => {
+        const program = activeVerifiedResults.find((item) => item.id === programId);
+        if (!program) {
+          return;
+        }
+
+        activeDetailProgramId = programId;
+
+        if (detailCache.has(programId)) {
+          const cached = detailCache.get(programId);
+          showDetailPanel({
+            title: `${program.schoolName} · ${program.programName}`,
+            subtitle: cached?.sourceTitle
+              ? `来源：${cached.sourceTitle}`
+              : "来源：院校官网招生页",
+            bodyHtml: detailHtml(cached),
+          });
+          return;
+        }
+
+        renderDetailLoading(program);
+
+        try {
+          const response = await fetch("/api/study-abroad/requirements", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              programId,
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok || !data?.ok || !data?.insight) {
+            throw new Error(data?.message || "暂时无法读取官方招生要求。");
+          }
+
+          detailCache.set(programId, data.insight);
+
+          if (activeDetailProgramId !== programId) {
+            return;
+          }
+
+          showDetailPanel({
+            title: `${program.schoolName} · ${program.programName}`,
+            subtitle: data.insight.sourceTitle
+              ? `来源：${data.insight.sourceTitle}`
+              : "来源：院校官网招生页",
+            bodyHtml: detailHtml(data.insight),
+          });
+        } catch (error) {
+          if (activeDetailProgramId !== programId) {
+            return;
+          }
+
+          showDetailPanel({
+            title: `${program.schoolName} · ${program.programName}`,
+            subtitle: "来源：院校官网招生页",
+            bodyHtml: `
+              <div class="school-match-empty">
+                <strong>暂时无法读取官方招生要求</strong>
+                <p>${escapeHtml(error instanceof Error ? error.message : "请稍后重试，或直接打开官网核对。")}</p>
+              </div>
+              <div class="requirement-links">
+                ${program.officialWebsite ? `<a href="${escapeHtml(program.officialWebsite)}" target="_blank" rel="noreferrer">院校官网</a>` : ""}
+                <a href="${escapeHtml(program.overviewUrl)}" target="_blank" rel="noreferrer">项目页</a>
+                ${program.admissionsUrl ? `<a href="${escapeHtml(program.admissionsUrl)}" target="_blank" rel="noreferrer">招生要求页</a>` : ""}
+              </div>
+            `,
+          });
+        }
+      };
+
       const setStatus = (text) => {
         if (statusNode) {
           statusNode.textContent = text;
         }
       };
 
+      const patchProgramsWithAdmissionsSnapshots = (items, updatesMap) => {
+        if (!Array.isArray(items) || !items.length || !updatesMap.size) {
+          return items;
+        }
+
+        return items.map((program) =>
+          updatesMap.has(program.id)
+            ? {
+                ...program,
+                admissionsSnapshot: updatesMap.get(program.id),
+              }
+            : program
+        );
+      };
+
+      const updateAdmissionsStatusNodes = (updatedPrograms) => {
+        if (!Array.isArray(updatedPrograms) || !updatedPrograms.length) {
+          return;
+        }
+
+        updatedPrograms.forEach((item) => {
+          const label = admissionsSnapshotStatusLabel(item?.admissionsSnapshot);
+          root
+            .querySelectorAll(
+              `[data-program-admissions-status="${CSS.escape(String(item?.id || ""))}"]`
+            )
+            .forEach((node) => {
+              if (!(node instanceof HTMLElement)) {
+                return;
+              }
+
+              node.textContent = label;
+              node.hidden = !label;
+            });
+        });
+      };
+
+      const refreshAdmissionsSnapshots = (updatedPrograms) => {
+        if (!Array.isArray(updatedPrograms) || !updatedPrograms.length) {
+          return;
+        }
+
+        const updatesMap = new Map(
+          updatedPrograms
+            .map((item) => [String(item?.id || "").trim(), item?.admissionsSnapshot ?? null])
+            .filter(([programId]) => Boolean(programId))
+        );
+
+        activeVerifiedResults = patchProgramsWithAdmissionsSnapshots(
+          activeVerifiedResults,
+          updatesMap
+        );
+        baseVerifiedResults = patchProgramsWithAdmissionsSnapshots(
+          baseVerifiedResults,
+          updatesMap
+        );
+
+        updateAdmissionsStatusNodes(updatedPrograms);
+      };
+
+      const runAdmissionsPrefetch = async (items, payload, options = {}) => {
+        const currentResults = Array.isArray(items) ? items : [];
+        if (!currentResults.length) {
+          return;
+        }
+
+        const candidates = currentResults
+          .filter((program) => !program?.admissionsSnapshot?.extractedAt)
+          .slice(0, 6);
+
+        if (!candidates.length) {
+          return;
+        }
+
+        admissionsPrefetchToken += 1;
+        const token = admissionsPrefetchToken;
+
+        try {
+          const response = await fetch("/api/study-abroad/prefetch-admissions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              country: payload?.country || "",
+              degree: payload?.degree || "",
+              major: payload?.major || "",
+              specialization: payload?.specialization || "",
+              maxPrograms: candidates.length,
+              programIds: candidates.map((program) => program.id),
+            }),
+          });
+
+          const data = await response.json();
+          if (token !== admissionsPrefetchToken) {
+            return;
+          }
+
+          if (!response.ok || !data?.ok) {
+            return;
+          }
+
+          const updatedPrograms = Array.isArray(data.updatedPrograms) ? data.updatedPrograms : [];
+          if (!updatedPrograms.length) {
+            return;
+          }
+
+          refreshAdmissionsSnapshots(updatedPrograms);
+
+          if (!options?.silentStatus) {
+            const noteParts = [];
+            if (Number(data.okCount) > 0) {
+              noteParts.push(`${data.okCount} 个项目已补齐较完整门槛`);
+            }
+            if (Number(data.partialCount) > 0) {
+              noteParts.push(`${data.partialCount} 个项目补到部分字段`);
+            }
+
+            if (noteParts.length) {
+              setStatus(`${statusNode?.textContent || ""} 当前已在后台补抓：${noteParts.join("，")}。`.trim());
+            }
+          }
+
+          if (hasFitPreviewInput(payload)) {
+            hydrateFitPreviews(activeVerifiedResults, payload);
+          }
+        } catch {
+          return;
+        }
+      };
+
       const setBusy = (busy) => {
-        const label = busy ? "搜索中..." : "开始搜索";
+        const label = busy
+          ? selectedUniversityId
+            ? "切换学校中..."
+            : "搜索中..."
+          : "开始搜索";
 
         if (searchButton instanceof HTMLButtonElement) {
           searchButton.disabled = busy;
@@ -323,34 +1752,134 @@ const sameLink = (program: StudyAbroadProgram) =>
         }
       };
 
+      const updateSpecializationOptions = (preserveValue = "") => {
+        if (!(specializationSelect instanceof HTMLSelectElement)) {
+          return;
+        }
+
+        const majorValue = majorSelect instanceof HTMLSelectElement ? majorSelect.value : "";
+        const nextOptions = Array.isArray(specializationMap[majorValue])
+          ? specializationMap[majorValue]
+          : [];
+        const nextValue = nextOptions.includes(preserveValue) ? preserveValue : "";
+
+        if (!majorValue || !nextOptions.length) {
+          specializationSelect.innerHTML = `<option value="">先选专业方向</option>`;
+          specializationSelect.disabled = true;
+          specializationSelect.value = "";
+          return;
+        }
+
+        specializationSelect.innerHTML = [
+          `<option value="">全部细分方向</option>`,
+          ...nextOptions.map(
+            (option) =>
+              `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`
+          ),
+        ].join("");
+        specializationSelect.disabled = false;
+        specializationSelect.value = nextValue;
+      };
+
       const collectPayload = () => ({
         country: countrySelect instanceof HTMLSelectElement ? countrySelect.value : "",
-        major: majorInput instanceof HTMLInputElement ? majorInput.value.trim() : "",
         degree: degreeSelect instanceof HTMLSelectElement ? degreeSelect.value : "",
+        major: majorSelect instanceof HTMLSelectElement ? majorSelect.value : "",
+        specialization:
+          specializationSelect instanceof HTMLSelectElement
+            ? specializationSelect.value
+            : "",
+        budgetTier: budgetSelect instanceof HTMLSelectElement ? budgetSelect.value : "",
+        intake: intakeSelect instanceof HTMLSelectElement ? intakeSelect.value : "",
+        gpaProfile: gpaSelect instanceof HTMLSelectElement ? gpaSelect.value : "",
+        languageProfile:
+          languageSelect instanceof HTMLSelectElement ? languageSelect.value : "",
+        fitMode: fitModeSelect instanceof HTMLSelectElement ? fitModeSelect.value : "prefer",
+        snapshotQuality:
+          snapshotQualitySelect instanceof HTMLSelectElement
+            ? snapshotQualitySelect.value
+            : "",
       });
 
       const resetToFeatured = () => {
+        admissionsPrefetchToken += 1;
         if (countrySelect instanceof HTMLSelectElement) countrySelect.value = "";
-        if (majorInput instanceof HTMLInputElement) majorInput.value = "";
         if (degreeSelect instanceof HTMLSelectElement) degreeSelect.value = "";
+        if (majorSelect instanceof HTMLSelectElement) majorSelect.value = "";
+        if (budgetSelect instanceof HTMLSelectElement) budgetSelect.value = "";
+        if (intakeSelect instanceof HTMLSelectElement) intakeSelect.value = "";
+        if (gpaSelect instanceof HTMLSelectElement) gpaSelect.value = "";
+        if (languageSelect instanceof HTMLSelectElement) languageSelect.value = "";
+        if (fitModeSelect instanceof HTMLSelectElement) fitModeSelect.value = "prefer";
+        if (snapshotQualitySelect instanceof HTMLSelectElement) {
+          snapshotQualitySelect.value = "";
+        }
+        updateSpecializationOptions("");
+        resetSchoolRefiners();
+        selectedUniversityId = "";
+        activeDetailProgramId = "";
+        activeVerifiedResults = initialResults;
+        activeUniversityMatches = seedUniversityMatches;
+        activeUniversityCount = seedUniversityMatches.length;
+        visibleSchoolCount = initialSchoolBatchSize;
+        baseVerifiedResults = initialResults;
+        baseUniversityMatches = seedUniversityMatches;
+        baseUniversityCount = seedUniversityMatches.length;
+        baseCandidateResults = [];
+        baseStatusText =
+          `当前底库共有 ${totalProgramCount} 个项目，当前展示 ${initialResults.length} 个优先样例。先选学位类型、专业方向、细分方向和学生背景，再点击“开始搜索”获取已核验结果。`;
+        lastBasePayload = {
+          country: "",
+          major: "",
+          specialization: "",
+          degree: "",
+          budgetTier: "",
+          intake: "",
+          gpaProfile: "",
+          languageProfile: "",
+          fitMode: "prefer",
+          snapshotQuality: "",
+        };
+        lastEmptyText =
+          "可以先放宽国家条件，或者改选更宽的专业方向，比如从“商业分析 / 数据”切到“商科 / 管理”。";
 
-        setStatus(
-          `当前展示 ${initialResults.length} 个精选项目。填好国家和专业后，点击“开始搜索”获取已核验结果。`
-        );
+        setStatus(baseStatusText);
         renderVerifiedResults(initialResults);
+        renderUniversityMatches(seedUniversityMatches, seedUniversityMatches.length, "");
         renderCandidateResults([]);
+        fitPreviewToken += 1;
+        clearFitPreviews();
+        hideDetailPanel();
+        hideSchoolSummary();
       };
 
-      const runSearch = async () => {
-        const payload = collectPayload();
+      const runSearch = async (overridePayload = {}, options = {}) => {
+        admissionsPrefetchToken += 1;
+        const payload = {
+          ...collectPayload(),
+          ...overridePayload,
+        };
+        const fromSchoolFilter = Boolean(options?.fromSchoolFilter);
 
-        if (!payload.country && !payload.major && !payload.degree) {
+        if (
+          !payload.country &&
+          !payload.major &&
+          !payload.specialization &&
+          !payload.degree &&
+          !payload.budgetTier &&
+          !payload.intake &&
+          !payload.universityId
+        ) {
           resetToFeatured();
           return;
         }
 
         setBusy(true);
-        setStatus("正在搜索已核验项目，并从全网筛选候选官网页...");
+        setStatus(
+          fromSchoolFilter
+            ? "正在切换学校并缩小项目范围..."
+            : "正在搜索已核验项目，并从全网筛选候选官网页..."
+        );
 
         try {
           const response = await fetch("/api/study-abroad/search", {
@@ -367,54 +1896,213 @@ const sameLink = (program: StudyAbroadProgram) =>
             throw new Error(data?.message || "搜索失败");
           }
 
-          setStatus(
-            data.message || `已找到 ${Array.isArray(data.verifiedResults) ? data.verifiedResults.length : 0} 条结果。`
-          );
-          renderVerifiedResults(
-            Array.isArray(data.verifiedResults) ? data.verifiedResults : [],
-            Array.isArray(data.candidateResults) && data.candidateResults.length
+          const nextVerifiedResults = Array.isArray(data.verifiedResults) ? data.verifiedResults : [];
+          const nextUniversityMatches = Array.isArray(data.universityMatches)
+            ? data.universityMatches
+            : [];
+          const nextUniversityCount =
+            Number(data.totalUniversityCount) || nextUniversityMatches.length;
+          const nextCandidateResults = Array.isArray(data.candidateResults)
+            ? data.candidateResults
+            : [];
+          const nextStatus =
+            data.message ||
+            `已找到 ${Array.isArray(data.verifiedResults) ? data.verifiedResults.length : 0} 条结果。`;
+
+          activeDetailProgramId = "";
+          lastEmptyText =
+            nextCandidateResults.length
               ? "当前没有找到完全匹配的已核验项目，可以先参考下方全网候选官网页。"
-              : "当前没有找到完全匹配的已核验项目。建议先放宽国家或专业方向。"
-          );
-          renderCandidateResults(Array.isArray(data.candidateResults) ? data.candidateResults : []);
+              : "当前没有找到完全匹配的已核验项目。建议先放宽国家或专业方向。";
+
+          if (fromSchoolFilter) {
+            selectedUniversityId = String(payload.universityId || "");
+            activeVerifiedResults = nextVerifiedResults;
+            const selectedSchool =
+              baseUniversityMatches.find((item) => item.universityId === selectedUniversityId) || null;
+            setStatus(
+              nextVerifiedResults.length
+                ? `已切换到当前学校，找到 ${nextVerifiedResults.length} 个项目。`
+                : "这所学校已经进入学校底库，但项目层还在继续补充。可以切回全部院校，或继续缩小专业方向。"
+            );
+            renderVerifiedResults(activeVerifiedResults, lastEmptyText);
+            hydrateFitPreviews(activeVerifiedResults, payload);
+            renderUniversityMatches(baseUniversityMatches, baseUniversityCount, selectedUniversityId);
+            renderCandidateResults([]);
+            hideDetailPanel();
+            renderSchoolSummary(selectedSchool);
+            runAdmissionsPrefetch(activeVerifiedResults, payload, {
+              silentStatus: true,
+            });
+            return;
+          }
+
+          selectedUniversityId = "";
+          resetSchoolRefiners();
+          activeVerifiedResults = nextVerifiedResults;
+          activeUniversityMatches = nextUniversityMatches;
+          activeUniversityCount = nextUniversityCount;
+          visibleSchoolCount = initialSchoolBatchSize;
+          baseVerifiedResults = nextVerifiedResults;
+          baseUniversityMatches = nextUniversityMatches;
+          baseUniversityCount = nextUniversityCount;
+          baseCandidateResults = nextCandidateResults;
+          baseStatusText = nextStatus;
+          lastBasePayload = {
+            country: payload.country || "",
+            major: payload.major || "",
+            specialization: payload.specialization || "",
+            degree: payload.degree || "",
+            budgetTier: payload.budgetTier || "",
+            intake: payload.intake || "",
+            gpaProfile: payload.gpaProfile || "",
+            languageProfile: payload.languageProfile || "",
+            fitMode: payload.fitMode || "prefer",
+            snapshotQuality: payload.snapshotQuality || "",
+          };
+
+          setStatus(baseStatusText);
+          renderVerifiedResults(baseVerifiedResults, lastEmptyText);
+          hydrateFitPreviews(baseVerifiedResults, lastBasePayload);
+          renderUniversityMatches(baseUniversityMatches, baseUniversityCount, "");
+          renderCandidateResults(baseCandidateResults);
+          hideDetailPanel();
+          hideSchoolSummary();
+          runAdmissionsPrefetch(baseVerifiedResults, lastBasePayload);
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "搜索失败，请稍后重试。");
           renderVerifiedResults([], "接口暂时不可用，请稍后重试。");
+          renderUniversityMatches([], 0, "");
           renderCandidateResults([]);
+          fitPreviewToken += 1;
+          admissionsPrefetchToken += 1;
+          clearFitPreviews();
+          hideDetailPanel();
+          hideSchoolSummary();
         } finally {
           setBusy(false);
         }
+      };
+
+      const applySchoolRefiners = () => {
+        selectedUniversityId = "";
+        activeVerifiedResults = baseVerifiedResults;
+        setStatus(
+          hasActiveSchoolRefiners()
+            ? `${baseStatusText} 当前已按学校名、排名、学费或项目状态做二次筛选。`
+            : baseStatusText
+        );
+        renderUniversityMatches(baseUniversityMatches, baseUniversityCount, "");
+        renderVerifiedResults(baseVerifiedResults, lastEmptyText);
+        hydrateFitPreviews(baseVerifiedResults, lastBasePayload);
+        renderCandidateResults(baseCandidateResults);
+        hideDetailPanel();
+        hideSchoolSummary();
       };
 
       if (searchButton instanceof HTMLButtonElement) {
         searchButton.addEventListener("click", runSearch);
       }
 
+      if (majorSelect instanceof HTMLSelectElement) {
+        majorSelect.addEventListener("change", () => {
+          updateSpecializationOptions("");
+        });
+      }
+
       if (resetButton instanceof HTMLButtonElement) {
         resetButton.addEventListener("click", resetToFeatured);
       }
 
-      if (majorInput instanceof HTMLInputElement) {
-        majorInput.addEventListener("keydown", (event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            runSearch();
-          }
-        });
+      if (schoolKeywordInput instanceof HTMLInputElement) {
+        schoolKeywordInput.addEventListener("input", applySchoolRefiners);
       }
 
-      hintButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-          const hint = button.getAttribute("data-major-hint");
+      if (schoolRankSelect instanceof HTMLSelectElement) {
+        schoolRankSelect.addEventListener("change", applySchoolRefiners);
+      }
 
-          if (!(majorInput instanceof HTMLInputElement) || !hint) {
+      if (schoolTuitionSelect instanceof HTMLSelectElement) {
+        schoolTuitionSelect.addEventListener("change", applySchoolRefiners);
+      }
+
+      if (schoolAvailabilitySelect instanceof HTMLSelectElement) {
+        schoolAvailabilitySelect.addEventListener("change", applySchoolRefiners);
+      }
+
+      if (verifiedResultsNode instanceof HTMLElement) {
+        verifiedResultsNode.addEventListener("click", (event) => {
+          const target = event.target instanceof Element
+            ? event.target.closest("[data-program-detail-button]")
+            : null;
+
+          if (!(target instanceof HTMLElement)) {
             return;
           }
 
-          majorInput.value = hint;
-          majorInput.focus();
+          const programId = target.getAttribute("data-program-detail-button") || "";
+          if (!programId) {
+            return;
+          }
+
+          openProgramDetails(programId);
         });
-      });
+      }
+
+      if (schoolsResultsNode instanceof HTMLElement) {
+        schoolsResultsNode.addEventListener("click", (event) => {
+          const target = event.target instanceof Element
+            ? event.target.closest("[data-university-id]")
+            : null;
+
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+
+          const nextUniversityId = target.getAttribute("data-university-id") || "";
+          selectedUniversityId = nextUniversityId;
+
+          if (!nextUniversityId) {
+            activeVerifiedResults = baseVerifiedResults;
+            selectedUniversityId = "";
+            setStatus(baseStatusText);
+            renderUniversityMatches(baseUniversityMatches, baseUniversityCount, "");
+            renderVerifiedResults(baseVerifiedResults, lastEmptyText);
+            hydrateFitPreviews(baseVerifiedResults, lastBasePayload);
+            renderCandidateResults(baseCandidateResults);
+            hideDetailPanel();
+            hideSchoolSummary();
+            return;
+          }
+
+          const selectedSchool =
+            baseUniversityMatches.find((item) => item.universityId === nextUniversityId) || null;
+          renderUniversityMatches(baseUniversityMatches, baseUniversityCount, selectedUniversityId);
+          renderSchoolSummary(selectedSchool);
+          runSearch(
+            {
+              ...lastBasePayload,
+              universityId: nextUniversityId,
+            },
+            { fromSchoolFilter: true }
+          );
+        });
+      }
+
+      if (schoolsMoreButton instanceof HTMLButtonElement) {
+        schoolsMoreButton.addEventListener("click", () => {
+          visibleSchoolCount += initialSchoolBatchSize;
+          renderUniversityMatches(baseUniversityMatches, baseUniversityCount, selectedUniversityId);
+        });
+      }
+
+      if (detailCloseButton instanceof HTMLButtonElement) {
+        detailCloseButton.addEventListener("click", hideDetailPanel);
+      }
+
+      renderUniversityMatches(seedUniversityMatches, seedUniversityMatches.length, "");
+      updateSpecializationOptions("");
+      clearFitPreviews();
     }
   </script>
 </section>

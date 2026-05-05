@@ -17,7 +17,15 @@ export const POST: APIRoute = async ({ request }) => {
     const result = await searchStudyAbroadPrograms({
       country: payload?.country,
       major: payload?.major,
+      specialization: payload?.specialization,
       degree: payload?.degree,
+      budgetTier: payload?.budgetTier,
+      intake: payload?.intake,
+      gpaProfile: payload?.gpaProfile,
+      languageProfile: payload?.languageProfile,
+      fitMode: payload?.fitMode,
+      snapshotQuality: payload?.snapshotQuality,
+      universityId: payload?.universityId,
     });
 
     return json({

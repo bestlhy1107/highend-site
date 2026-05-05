@@ -1,0 +1,78 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../layouts/BaseLayout.astro";
+import UniversityFinder from "../components/UniversityFinder.astro";
+import { readStudyAbroadCatalogSummary } from "../lib/study-abroad-catalog-store";
+
+const { stats } = await readStudyAbroadCatalogSummary();
+---
+
+<BaseLayout
+  title="留学院校查询 · 官方官网与招生要求"
+  description="按国家、专业和学位筛选留学院校，查看院校官网、项目页与官方招生要求摘要。"
+>
+  <main class="container page">
+    <section class="section-block school-finder-hero-shell">
+      <div class="school-finder-hero">
+        <div class="school-finder-hero-copy">
+          <div class="section-kicker">School Finder</div>
+          <h1 class="section-title">留学院校查询</h1>
+          <p class="section-desc">
+            先定国家、学位和方向，再把学校池、项目页、官网要求和背景匹配一层层收窄。把复杂信息拆成更好扫读的结构，第一轮选校会更快、更稳。
+          </p>
+
+          <div class="school-finder-trust">
+            <span>官方项目页</span>
+            <span>学校池与项目池分层查看</span>
+            <span>门槛快照持续补齐</span>
+          </div>
+
+          <div class="school-finder-hero-actions">
+            <a class="btn" href="#school-finder-page">开始匹配</a>
+            <a class="btn btn-ghost" href="/#contact">预约咨询</a>
+          </div>
+
+          <div class="school-finder-hero-metrics">
+            <article class="school-finder-stat">
+              <span>覆盖国家 / 地区</span>
+              <strong>{stats.countryCount}</strong>
+            </article>
+
+            <article class="school-finder-stat">
+              <span>学校底库</span>
+              <strong>{stats.universityCount}</strong>
+            </article>
+
+            <article class="school-finder-stat">
+              <span>项目条目</span>
+              <strong>{stats.programCount}</strong>
+            </article>
+          </div>
+        </div>
+
+        <aside class="school-finder-hero-panel">
+          <div class="school-finder-panel-kicker">How It Works</div>
+          <div class="school-finder-panel-list">
+            <article class="school-finder-panel-item">
+              <strong>第一步</strong>
+              <p>先定国家、学位和专业方向，把学校池收拢到值得继续看的范围。</p>
+            </article>
+            <article class="school-finder-panel-item">
+              <strong>第二步</strong>
+              <p>再看学校与项目差异，区分官网项目页、招生要求和背景匹配提示。</p>
+            </article>
+            <article class="school-finder-panel-item">
+              <strong>第三步</strong>
+              <p>把预算、入学季、语言和 GPA 放进同一轮判断里，减少无效比较。</p>
+            </article>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section-block compact-top">
+      <UniversityFinder anchorId="school-finder-page" />
+    </section>
+  </main>
+</BaseLayout>

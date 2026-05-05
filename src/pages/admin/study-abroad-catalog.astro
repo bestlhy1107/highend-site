@@ -1,0 +1,1410 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions } from "astro:actions";
+import { readStudyAbroadCatalogSummary } from "../../lib/study-abroad-catalog-store";
+import { readStudyAbroadCatalogSyncState } from "../../lib/study-abroad-catalog-sync";
+import {
+  STUDY_ABROAD_MAJOR_GROUPS,
+  STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
+} from "../../lib/study-abroad-programs";
+import {
+  getStudyAbroadAdmissionsStrategyPresetId,
+  getStudyAbroadAdmissionsStrategyPresets,
+  readStudyAbroadAdmissionsCampaignCadence,
+  readStudyAbroadAdmissionsCampaignOutlook,
+  readStudyAbroadAdmissionsCampaignSchedule,
+  readStudyAbroadAdmissionsCoverageGoalSummary,
+  getStudyAbroadAdmissionsWarmupPresets,
+  readStudyAbroadAdmissionsStrategy,
+  readStudyAbroadAdmissionsCoverageSprintPlan,
+  readStudyAbroadAdmissionsCoverageSprintRoadmap,
+  readStudyAbroadAdmissionsCountryTargetExecutionQueue,
+  readStudyAbroadAdmissionsCountryTargetPlans,
+  readStudyAbroadAdmissionsWarmupRecommendations,
+  readStudyAbroadAdmissionsWarmupState,
+} from "../../lib/study-abroad-admissions-sync";
+
+const adminUser = await Astro.session?.get("adminUser");
+if (!adminUser) {
+  return Astro.redirect("/admin/login");
+}
+
+const { sources, universities, programs, stats } = await readStudyAbroadCatalogSummary();
+const catalogSyncState = await readStudyAbroadCatalogSyncState();
+const latestCatalogSyncRun = catalogSyncState.runs[0] ?? null;
+const syncResult = Astro.getActionResult(actions.syncUsStudyAbroadCatalog);
+const syncSuccess = syncResult && !syncResult.error ? syncResult.data : null;
+const globalSyncResult = Astro.getActionResult(actions.syncGlobalStudyAbroadUniversities);
+const globalSyncSuccess = globalSyncResult && !globalSyncResult.error ? globalSyncResult.data : null;
+const ukSyncResult = Astro.getActionResult(actions.syncUkStudyAbroadPilotPrograms);
+const ukSyncSuccess = ukSyncResult && !ukSyncResult.error ? ukSyncResult.data : null;
+const catalogSyncResult = Astro.getActionResult(actions.syncStudyAbroadCatalogSources);
+const catalogSyncSuccess =
+  catalogSyncResult && !catalogSyncResult.error ? catalogSyncResult.data : null;
+const admissionsSyncResult = Astro.getActionResult(actions.syncStudyAbroadAdmissionsSnapshots);
+const admissionsSyncSuccess =
+  admissionsSyncResult && !admissionsSyncResult.error ? admissionsSyncResult.data : null;
+const admissionsWarmupResult = Astro.getActionResult(actions.warmStudyAbroadAdmissionsCoverage);
+const admissionsWarmupSuccess =
+  admissionsWarmupResult && !admissionsWarmupResult.error ? admissionsWarmupResult.data : null;
+const admissionsSmartWarmupResult = Astro.getActionResult(actions.smartWarmStudyAbroadAdmissionsCoverage);
+const admissionsSmartWarmupSuccess =
+  admissionsSmartWarmupResult && !admissionsSmartWarmupResult.error
+    ? admissionsSmartWarmupResult.data
+    : null;
+const admissionsCountryTargetRunResult = Astro.getActionResult(
+  actions.executeStudyAbroadAdmissionsCountryTargetPlan
+);
+const admissionsCountryTargetRunSuccess =
+  admissionsCountryTargetRunResult && !admissionsCountryTargetRunResult.error
+    ? admissionsCountryTargetRunResult.data
+    : null;
+const admissionsCoverageSprintResult = Astro.getActionResult(
+  actions.executeStudyAbroadAdmissionsCoverageSprint
+);
+const admissionsCoverageSprintSuccess =
+  admissionsCoverageSprintResult && !admissionsCoverageSprintResult.error
+    ? admissionsCoverageSprintResult.data
+    : null;
+const admissionsCoverageRoadmapResult = Astro.getActionResult(
+  actions.executeStudyAbroadAdmissionsCoverageRoadmap
+);
+const admissionsCoverageRoadmapSuccess =
+  admissionsCoverageRoadmapResult && !admissionsCoverageRoadmapResult.error
+    ? admissionsCoverageRoadmapResult.data
+    : null;
+const admissionsCampaignCadenceResult = Astro.getActionResult(
+  actions.executeStudyAbroadAdmissionsCampaignCadence
+);
+const admissionsCampaignCadenceSuccess =
+  admissionsCampaignCadenceResult && !admissionsCampaignCadenceResult.error
+    ? admissionsCampaignCadenceResult.data
+    : null;
+const admissionsStrategyResult = Astro.getActionResult(actions.updateStudyAbroadAdmissionsStrategy);
+const admissionsStrategySuccess =
+  admissionsStrategyResult && !admissionsStrategyResult.error
+    ? admissionsStrategyResult.data
+    : null;
+
+const STATUS_LABELS: Record<string, string> = {
+  ready: "可直接开工",
+  pilot: "适合试点",
+  "needs-license": "需采购授权",
+  research: "还需调研",
+};
+
+const ACCESS_LABELS: Record<string, string> = {
+  api: "API",
+  "open-data": "开放数据",
+  licensed: "授权接入",
+  manual: "人工/半自动",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  official: "官方源",
+  commercial: "商业源",
+  "open-data": "开源/开放数据",
+};
+
+const rankCoverage = stats.universityCount
+  ? Math.round((stats.qsCoverage / stats.universityCount) * 100)
+  : 0;
+const tuitionCoverage = stats.programCount
+  ? Math.round((stats.tuitionCoverage / stats.programCount) * 100)
+  : 0;
+const admissionsCoverage = stats.programCount
+  ? Math.round((stats.admissionsCoverage / stats.programCount) * 100)
+  : 0;
+const structuredAdmissionsCoverage = stats.programCount
+  ? Math.round((stats.structuredAdmissionsCoverage / stats.programCount) * 100)
+  : 0;
+
+const topSources = sources.slice(0, 5);
+const universityPreview = universities.slice(0, 8);
+const programPreview = programs.slice(0, 8);
+const programCountryOptions = Array.from(
+  new Set(programs.map((item) => item.country).filter(Boolean))
+).sort((a, b) => a.localeCompare(b, "zh-CN"));
+const specializationOptions = Array.from(
+  new Set(
+    Object.values(STUDY_ABROAD_MAJOR_SPECIALIZATIONS)
+      .flat()
+      .filter(Boolean)
+  )
+).sort((a, b) => a.localeCompare(b, "zh-CN"));
+const admissionsWarmupPresets = getStudyAbroadAdmissionsWarmupPresets();
+const admissionsWarmupRecommendations = await readStudyAbroadAdmissionsWarmupRecommendations({
+  limit: 6,
+  degree: "硕士",
+});
+const admissionsCountryTargetPlans = await readStudyAbroadAdmissionsCountryTargetPlans({
+  limit: 8,
+  degree: "硕士",
+  focusLimit: 3,
+});
+const admissionsCountryTargetQueue = await readStudyAbroadAdmissionsCountryTargetExecutionQueue({
+  limit: 4,
+  degree: "硕士",
+  focusLimit: 2,
+});
+const admissionsCoverageSprintPlan = await readStudyAbroadAdmissionsCoverageSprintPlan({
+  degree: "硕士",
+  maxCountries: 2,
+  maxFocusPerCountry: 2,
+  maxRecommendations: 3,
+});
+const admissionsCoverageGoalSummary = await readStudyAbroadAdmissionsCoverageGoalSummary({
+  degree: "硕士",
+});
+const admissionsCampaignOutlook = await readStudyAbroadAdmissionsCampaignOutlook({
+  degree: "硕士",
+});
+const admissionsCampaignCadence = await readStudyAbroadAdmissionsCampaignCadence({
+  degree: "硕士",
+});
+const admissionsCampaignSchedule = await readStudyAbroadAdmissionsCampaignSchedule({
+  degree: "硕士",
+});
+const admissionsStrategy = await readStudyAbroadAdmissionsStrategy();
+const admissionsCoverageSprintRoadmap = await readStudyAbroadAdmissionsCoverageSprintRoadmap({
+  degree: "硕士",
+  rounds: 3,
+  maxCountries: 2,
+  maxFocusPerCountry: 2,
+  maxRecommendations: 3,
+});
+const admissionsStrategyPresets = getStudyAbroadAdmissionsStrategyPresets();
+const activeAdmissionsStrategyPresetId =
+  getStudyAbroadAdmissionsStrategyPresetId(admissionsStrategy);
+const admissionsWarmupState = await readStudyAbroadAdmissionsWarmupState();
+const recentWarmupHistory = admissionsWarmupState.history.slice(0, 6);
+const topCountryGaps = stats.countryAdmissionsCoverage.slice(0, 8);
+const topDisciplineGaps = stats.disciplineAdmissionsCoverage.slice(0, 8);
+const admissionsStatusLabel = (status?: string | null) => {
+  if (status === "ok") return "门槛已入库";
+  if (status === "partial") return "门槛部分入库";
+  if (status === "unavailable") return "门槛待补抓";
+  return "未同步门槛";
+};
+const coveragePercent = (covered: number, total: number) =>
+  total ? Math.round((covered / total) * 100) : 0;
+const admissionsCountryTargetStatusLabel = (status: string) => {
+  if (status === "reached") return "已达目标";
+  if (status === "progressing") return "追赶中";
+  return "待起量";
+};
+const admissionsHistoryModeLabel = (mode: string) => {
+  if (mode === "preset") return "手动预热";
+  if (mode === "sprint") return "覆盖冲刺";
+  if (mode === "direct") return "定向同步";
+  return "智能预热";
+};
+---
+
+<BaseLayout title="管理员后台 - 留学院校底库" description="留学院校与项目底库规划面板">
+  <main class="container page">
+    <section class="catalog-hero">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Admin</div>
+          <h1 class="section-title">留学院校底库</h1>
+          <p class="section-desc">
+            这里不是前台搜索结果，而是后续做“地区筛学校、专业筛项目、补 QS 排名和学费”的数据底座。
+          </p>
+        </div>
+
+        <a class="btn btn-ghost" href="/admin">返回后台</a>
+      </div>
+
+      <div class="catalog-overview-grid mt-4">
+        <article class="catalog-overview-card">
+          <div class="muted text-sm">已登记数据源</div>
+          <div class="h2 mt-2">{stats.sourceCount}</div>
+          <div class="muted mt-2">按 2026 年 4 月 27 日核过一轮来源。</div>
+        </article>
+
+        <article class="catalog-overview-card">
+          <div class="muted text-sm">底库规模</div>
+          <div class="catalog-overview-stat-list mt-3">
+            <div>
+              <span>学校</span>
+              <strong>{stats.universityCount}</strong>
+            </div>
+            <div>
+              <span>项目</span>
+              <strong>{stats.programCount}</strong>
+            </div>
+            <div>
+              <span>国家 / 地区</span>
+              <strong>{stats.countryCount}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="catalog-overview-card">
+          <div class="muted text-sm">基础字段覆盖</div>
+          <div class="catalog-overview-dual mt-3">
+            <div>
+              <span>QS 排名</span>
+              <strong>{rankCoverage}%</strong>
+            </div>
+            <div>
+              <span>学费字段</span>
+              <strong>{tuitionCoverage}%</strong>
+            </div>
+          </div>
+          <div class="muted mt-3">排名还需要正式授权源，学费字段已经能支撑第一轮选校比较。</div>
+        </article>
+
+        <article class="catalog-overview-card">
+          <div class="muted text-sm">门槛质量</div>
+          <div class="catalog-overview-dual mt-3">
+            <div>
+              <span>门槛快照</span>
+              <strong>{admissionsCoverage}%</strong>
+            </div>
+            <div>
+              <span>可比对字段</span>
+              <strong>{structuredAdmissionsCoverage}%</strong>
+            </div>
+          </div>
+          <div class="muted mt-3">重点国家和热门硕士方向的结构化覆盖，还在继续往上推。</div>
+        </article>
+      </div>
+    </section>
+
+    {syncSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {syncSuccess.message}
+        {syncSuccess.usingDemoKey ? " 当前使用的是 demo key，适合试点验证，后续建议换正式 API key。" : ""}
+      </div>
+    )}
+
+    {globalSyncSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {globalSyncSuccess.message}
+      </div>
+    )}
+
+    {ukSyncSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {ukSyncSuccess.message}
+      </div>
+    )}
+
+    {admissionsSyncSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {admissionsSyncSuccess.message}
+      </div>
+    )}
+
+    {admissionsWarmupSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {admissionsWarmupSuccess.message}
+      </div>
+    )}
+
+    {admissionsSmartWarmupSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {admissionsSmartWarmupSuccess.message}
+      </div>
+    )}
+
+    {admissionsCountryTargetRunSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {admissionsCountryTargetRunSuccess.message}
+      </div>
+    )}
+
+    {admissionsCoverageSprintSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {admissionsCoverageSprintSuccess.message}
+      </div>
+    )}
+
+    {admissionsCoverageRoadmapSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {admissionsCoverageRoadmapSuccess.message}
+      </div>
+    )}
+
+    {admissionsCampaignCadenceSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {admissionsCampaignCadenceSuccess.message}
+      </div>
+    )}
+
+    <nav class="catalog-nav mt-4">
+      <a href="#catalog-roadmap">同步入口</a>
+      <a href="#catalog-targets">目标与预热</a>
+      <a href="#catalog-gaps">覆盖缺口</a>
+      <a href="#catalog-sources">数据源</a>
+      <a href="#catalog-preview">底库预览</a>
+    </nav>
+
+    <section class="mt-8" id="catalog-roadmap">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Roadmap</div>
+          <h2 class="section-title">推荐落地顺序</h2>
+          <p class="section-desc">先把最容易接、最有产出的源接进来，再逐步补齐排名和更大范围项目。</p>
+        </div>
+      </div>
+
+      {catalogSyncSuccess && (
+        <div class="contact-notice contact-notice--success mt-4">
+          {catalogSyncSuccess.message}
+        </div>
+      )}
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">统一底库同步</div>
+            <div class="muted mt-1">把全球学校、美国试点和英国项目种子揉成同一轮同步，方便自动化和最近同步记录统一沉淀。</div>
+          </div>
+          <span class="badge">Sync</span>
+        </div>
+
+        <div class="catalog-queue-grid mt-4">
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">最近一次同步</div>
+            <div class="h2 mt-2">
+              {latestCatalogSyncRun ? latestCatalogSyncRun.runAt.replace("T", " ").slice(0, 16) : "还未运行"}
+            </div>
+            <div class="muted mt-2">
+              {latestCatalogSyncRun
+                ? `${latestCatalogSyncRun.ok ? "成功" : "部分失败"} · ${latestCatalogSyncRun.trigger === "automation" ? "自动任务" : latestCatalogSyncRun.trigger === "script" ? "脚本" : "后台"}`
+                : "建议先跑一轮，后面自动任务也会沿用这条入口。 "}
+            </div>
+          </div>
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">最近净增</div>
+            <div class="h2 mt-2">
+              {latestCatalogSyncRun
+                ? `校 ${latestCatalogSyncRun.delta.universityCount >= 0 ? "+" : ""}${latestCatalogSyncRun.delta.universityCount}`
+                : "待运行"}
+            </div>
+            <div class="muted mt-2">
+              {latestCatalogSyncRun
+                ? `项目 ${latestCatalogSyncRun.delta.programCount >= 0 ? "+" : ""}${latestCatalogSyncRun.delta.programCount} · 国家 ${latestCatalogSyncRun.delta.countryCount >= 0 ? "+" : ""}${latestCatalogSyncRun.delta.countryCount}`
+                : "运行后这里会显示本轮真实增量。"}
+            </div>
+          </div>
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">自动同步命令</div>
+            <div class="h2 mt-2">study-abroad:catalog-sync</div>
+            <div class="muted mt-2">
+              <code>npm run study-abroad:catalog-sync</code>
+            </div>
+            <div class="muted mt-2">
+              如果还没配正式 <code>COLLEGE_SCORECARD_API_KEY</code>，脚本会默认跳过美国源，先稳定同步全球学校和英国项目种子。
+            </div>
+          </div>
+        </div>
+
+        {latestCatalogSyncRun && (
+          <div class="mt-4">
+            <div class="muted">{latestCatalogSyncRun.message}</div>
+            <div class="catalog-queue-grid mt-3">
+              {latestCatalogSyncRun.sourceRuns.map((sourceRun) => (
+                <div class="catalog-queue-item">
+                  <div class="card-top">
+                    <div class="h3">{sourceRun.label}</div>
+                    <span class="badge">{sourceRun.ok ? "成功" : "失败"}</span>
+                  </div>
+                  <div class="muted mt-2">{sourceRun.message}</div>
+                  <div class="muted mt-2">
+                    耗时 {Math.max(1, Math.round(sourceRun.durationMs / 1000))}s
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <form method="POST" action={actions.syncStudyAbroadCatalogSources} class="mt-4">
+          <div class="form-grid">
+            <label class="form-item">
+              <span class="form-label">美国抓取页数</span>
+              <input class="input" name="usMaxPages" type="number" min="1" max="30" value="10" />
+              <p class="muted mt-2">默认沿用当前更稳的 10 页，后面有正式 key 再继续放大。</p>
+            </label>
+            <label class="form-item">
+              <span class="form-label">美国每页数量</span>
+              <input class="input" name="usPerPage" type="number" min="20" max="100" value="100" />
+              <p class="muted mt-2">通常保持 100 更划算。</p>
+            </label>
+          </div>
+          <div class="campaign-inline-actions mt-4">
+            <input type="hidden" name="includeGlobal" value="true" />
+            <input type="hidden" name="includeUs" value="true" />
+            <input type="hidden" name="includeUk" value="true" />
+            <button class="btn" type="submit">同步整套底库</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="cards cards--3 mt-4">
+        <article class="card">
+          <div class="h3">第一阶段</div>
+          <p class="muted mt-2">先接大学底库和美国官方项目源，快速把“地区筛学校”和“专业筛项目”的主链路跑通。</p>
+          <div class="mt-3"><strong>建议顺序：</strong> Hipo -> College Scorecard</div>
+        </article>
+
+        <article class="card">
+          <div class="h3">第二阶段</div>
+          <p class="muted mt-2">补英国、加拿大、澳洲官方课程源，把热门留学地区扩成真正可检索的目录。</p>
+          <div class="mt-3"><strong>建议顺序：</strong> Discover Uni / EduCanada / Course Seeker</div>
+        </article>
+
+        <article class="card">
+          <div class="h3">第三阶段</div>
+          <p class="muted mt-2">最后补商业排名和商业项目库，让排序、排名和覆盖面真正成体系。</p>
+          <div class="mt-3"><strong>建议顺序：</strong> QS 授权 -> Studyportals 合作</div>
+        </article>
+
+        <article class="card">
+          <div class="h3">学校层扩容</div>
+          <p class="muted mt-2">先把全球学校底库铺开，再按国家逐个补官方项目层，这样选国家时不会再被学校数量卡住。</p>
+          <div class="mt-3"><strong>建议顺序：</strong> Hipo 全球学校 -> 英/加/澳官方项目源</div>
+        </article>
+      </div>
+
+      <div class="card mt-4" id="catalog-targets">
+        <div class="card-top">
+          <div>
+            <div class="h3">美国试点同步</div>
+            <div class="muted mt-1">先把美国学校底库和官方硕士项目层同步进来，后面再扩到英国、加拿大和澳洲。</div>
+          </div>
+          <span class="badge">Pilot</span>
+        </div>
+
+        <form method="POST" action={actions.syncUsStudyAbroadCatalog} class="mt-4">
+          <div class="form-grid">
+            <div class="form-item">
+              <label class="form-label">抓取页数</label>
+              <input class="input" name="maxPages" type="number" min="1" max="30" value="10" />
+              <p class="muted mt-2">每页最多 100 所学校。当前 demo key 实测 10 页更稳；正式 API key 可以继续提高到 20-30 页。</p>
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">每页数量</label>
+              <input class="input" name="perPage" type="number" min="20" max="100" value="100" />
+              <p class="muted mt-2">建议保持 100，这样美国试点导入更完整一些。</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <button class="btn" type="submit">同步美国试点底库</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">全球学校底库同步</div>
+            <div class="muted mt-1">先把美国之外的学校目录铺进去，前台选国家后就能先拉出更完整的学校池。</div>
+          </div>
+          <span class="badge">Ready</span>
+        </div>
+
+        <form method="POST" action={actions.syncGlobalStudyAbroadUniversities} class="mt-4">
+          <p class="muted">
+            这一步只补学校层，不会替代美国官方项目层。同步完成后，国家下拉会扩成更完整的全球学校目录。
+          </p>
+
+          <div class="mt-4">
+            <button class="btn" type="submit">同步全球学校底库</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">英国硕士项目种子</div>
+            <div class="muted mt-1">先把一批英国官网硕士项目写进项目层，让英国从“学校很多、项目很薄”推进到可直接检索项目。</div>
+          </div>
+          <span class="badge">Pilot</span>
+        </div>
+
+        <form method="POST" action={actions.syncUkStudyAbroadPilotPrograms} class="mt-4">
+          <p class="muted">
+            当前这批项目种子来自英国高校官方 postgraduate course pages，适合作为英国方向第一轮项目层补全。
+          </p>
+
+          <div class="mt-4">
+            <button class="btn" type="submit">同步英国硕士项目种子</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">招生门槛快照同步</div>
+            <div class="muted mt-1">把官网里已经抓到的 GPA、语言、GRE / GMAT、工作经验字段沉淀回项目底库，后续搜索会优先吃这层快照。</div>
+          </div>
+          <span class="badge">Quality</span>
+        </div>
+
+        <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots} class="mt-4">
+          <div class="form-grid">
+            <div class="form-item">
+              <label class="form-label">同步项目数</label>
+              <input class="input" name="maxPrograms" type="number" min="1" max="40" value="12" />
+              <p class="muted mt-2">建议先从高优先级项目开始，每轮 8 到 20 个更稳。</p>
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">同步策略</label>
+              <select class="input" name="mode">
+                <option value="missing-first">优先补缺 / 过期项目</option>
+                <option value="refresh-all">强制刷新本轮项目</option>
+              </select>
+              <p class="muted mt-2">默认优先补还没抓过或快照过期的项目；强制刷新适合规则升级后重抓。</p>
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">国家 / 地区</label>
+              <select class="input" name="country">
+                <option value="">全部国家 / 地区</option>
+                {programCountryOptions.map((country) => (
+                  <option value={country}>{country}</option>
+                ))}
+              </select>
+              <p class="muted mt-2">如果你想先把美国、英国或香港某一批项目补齐，可以先锁定国家。</p>
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">学位类型</label>
+              <select class="input" name="degree">
+                <option value="">全部学位</option>
+                <option value="本科">本科</option>
+                <option value="硕士">硕士</option>
+                <option value="博士">博士</option>
+              </select>
+              <p class="muted mt-2">通常建议先从硕士开始补，覆盖最厚、反馈也最快。</p>
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">专业方向</label>
+              <select class="input" name="major">
+                <option value="">全部方向</option>
+                {STUDY_ABROAD_MAJOR_GROUPS.map((group) => (
+                  <optgroup label={group.label}>
+                    {group.options.map((option) => (
+                      <option value={option}>{option}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p class="muted mt-2">适合优先把热门方向补厚，比如金融、计算机 / AI、公共卫生。</p>
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">细分方向</label>
+              <select class="input" name="specialization">
+                <option value="">全部细分方向</option>
+                {specializationOptions.map((option) => (
+                  <option value={option}>{option}</option>
+                ))}
+              </select>
+              <p class="muted mt-2">如果你想先补“量化金融”或“人机交互”这类细分方向，这里可以直接锁定。</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <button class="btn" type="submit">同步招生门槛快照</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">热门方向门槛预热</div>
+            <div class="muted mt-1">把前台最常见的国家 + 专业组合先跑一轮门槛同步，让学生第一次搜索就更容易看到可比对字段。</div>
+          </div>
+          <span class="badge">Ops</span>
+        </div>
+
+        <div class="mt-4">
+          {admissionsWarmupPresets.map((preset) => (
+            <div class="faq">
+              <div class="h3">{preset.label}</div>
+              <p class="muted mt-2">{preset.description}</p>
+              <div class="muted mt-2">每轮最多同步 {preset.maxPrograms} 个项目</div>
+              <form method="POST" action={actions.warmStudyAbroadAdmissionsCoverage} class="mt-4">
+                <input type="hidden" name="presetId" value={preset.id} />
+                <button class="btn" type="submit">预热这一组</button>
+              </form>
+            </div>
+          ))}
+        </div>
+
+        <form method="POST" action={actions.warmStudyAbroadAdmissionsCoverage} class="mt-4">
+          <input type="hidden" name="maxPresets" value={admissionsWarmupPresets.length} />
+          <button class="btn btn-ghost" type="submit">一键预热全部热门方向</button>
+        </form>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">推荐冷却策略</div>
+            <div class="muted mt-1">控制“刚补过的方向多久内后移”和“国家多久内降权”，让系统别反复撞同一批方向。</div>
+          </div>
+          <span class="badge">Strategy</span>
+        </div>
+
+        {admissionsStrategySuccess && (
+          <div class="contact-notice contact-notice--success mt-4">
+            {admissionsStrategySuccess.message}
+          </div>
+        )}
+
+        <div class="catalog-queue-grid mt-4">
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">方向冷却期</div>
+            <div class="h2 mt-2">{admissionsStrategy.focusCooldownHours}h</div>
+            <div class="muted mt-2">这段时间内，刚补过的方向会后移，不再优先推荐。</div>
+          </div>
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">国家冷却期</div>
+            <div class="h2 mt-2">{admissionsStrategy.countryCooldownHours}h</div>
+            <div class="muted mt-2">短时间内刚跑过的国家，会在队列里适度降权。</div>
+          </div>
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">智能预热冷却期</div>
+            <div class="h2 mt-2">{admissionsStrategy.smartRecommendationCooldownHours}h</div>
+            <div class="muted mt-2">避免智能预热反复命中同一组高频方向。</div>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="muted text-sm">一键预设</div>
+          <div class="catalog-queue-grid mt-3">
+            {admissionsStrategyPresets.map((preset) => (
+              <div class="catalog-queue-item">
+                <div class="card-top">
+                  <div class="h3">{preset.label}</div>
+                  <span class="badge">
+                    {activeAdmissionsStrategyPresetId === preset.id ? "当前启用" : "Preset"}
+                  </span>
+                </div>
+                <div class="muted mt-2">{preset.description}</div>
+                <div class="muted mt-2">
+                  方向 {preset.strategy.focusCooldownHours}h · 国家 {preset.strategy.countryCooldownHours}h · 智能预热 {preset.strategy.smartRecommendationCooldownHours}h
+                </div>
+                <form method="POST" action={actions.updateStudyAbroadAdmissionsStrategy} class="mt-4">
+                  <input type="hidden" name="focusCooldownHours" value={preset.strategy.focusCooldownHours} />
+                  <input type="hidden" name="countryCooldownHours" value={preset.strategy.countryCooldownHours} />
+                  <input type="hidden" name="smartRecommendationCooldownHours" value={preset.strategy.smartRecommendationCooldownHours} />
+                  <button class="btn btn-ghost" type="submit">
+                    {activeAdmissionsStrategyPresetId === preset.id ? "重新应用这一档" : "切换到这一档"}
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <form method="POST" action={actions.updateStudyAbroadAdmissionsStrategy} class="mt-4">
+          <div class="form-grid">
+            <label class="form-item">
+              <span class="form-label">方向冷却小时</span>
+              <input class="input" type="number" min="1" max="168" name="focusCooldownHours" value={admissionsStrategy.focusCooldownHours} />
+            </label>
+            <label class="form-item">
+              <span class="form-label">国家冷却小时</span>
+              <input class="input" type="number" min="1" max="168" name="countryCooldownHours" value={admissionsStrategy.countryCooldownHours} />
+            </label>
+            <label class="form-item">
+              <span class="form-label">智能预热冷却小时</span>
+              <input class="input" type="number" min="1" max="336" name="smartRecommendationCooldownHours" value={admissionsStrategy.smartRecommendationCooldownHours} />
+            </label>
+          </div>
+          <button class="btn mt-4" type="submit">更新冷却策略</button>
+        </form>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">智能预热建议</div>
+            <div class="muted mt-1">系统会优先挑“项目多、门槛薄、最值得先补”的组合，不需要先人工判断。</div>
+          </div>
+          <span class="badge">Smart</span>
+        </div>
+
+        <div class="mt-4">
+          {admissionsWarmupRecommendations.map((item) => (
+            <div class="faq">
+              <div class="h3">{item.label}</div>
+              <div class="muted mt-1">
+                智能分 {item.smartScore} · 缺口分 {item.gapScore} · 项目 {item.totalPrograms} 个 · 已同步 {coveragePercent(item.syncedPrograms, item.totalPrograms)}%
+              </div>
+              <div class="muted mt-2">
+                完整门槛 {item.completePrograms} 个 · 结构化字段 {item.structuredPrograms} 个 · 仍待补抓 {item.missingPrograms} 个
+              </div>
+              <div class="muted mt-2">
+                国家目标 {item.countryTargetCoveragePercent}% · 当前 {item.countryStructuredCoveragePercent}% · 还差 {item.countryTargetGapPercent}% · 预计至少再补 {item.countryTargetProgramGap} 个项目
+              </div>
+              <div class="muted mt-2">
+                分数拆解：缺口 {item.gapScore} + 国家目标加权 {item.targetBoostScore} + 久未执行 {item.freshnessBoostScore} + 国家新鲜度 {item.countryFreshnessBoostScore} - 推荐冷却 {item.recommendationPenaltyScore} - 国家冷却 {item.countryPenaltyScore}
+              </div>
+              <form method="POST" action={actions.smartWarmStudyAbroadAdmissionsCoverage} class="mt-4">
+                <input type="hidden" name="recommendationId" value={item.id} />
+                <button class="btn" type="submit">优先补这一组</button>
+              </form>
+            </div>
+          ))}
+        </div>
+
+        <form method="POST" action={actions.smartWarmStudyAbroadAdmissionsCoverage} class="mt-4">
+          <input type="hidden" name="maxRecommendations" value="3" />
+          <button class="btn btn-ghost" type="submit">按缺口自动预热前 3 组</button>
+        </form>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">覆盖冲刺批处理</div>
+            <div class="muted mt-1">把国家目标和智能预热揉成一轮可执行任务，跑完后直接告诉我们这一轮覆盖率涨了多少。</div>
+          </div>
+          <span class="badge">Sprint</span>
+        </div>
+
+        <div class="catalog-queue-grid mt-4">
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">重点国家当前结构化覆盖</div>
+            <div class="h2 mt-2">{admissionsCoverageGoalSummary.currentCoveragePercent}%</div>
+            <div class="muted mt-2">
+              {admissionsCoverageGoalSummary.keyCountries} 个重点国家 / 地区，目标是 {admissionsCoverageGoalSummary.targetCoveragePercent}%
+            </div>
+          </div>
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">距离目标还差</div>
+            <div class="h2 mt-2">{admissionsCoverageGoalSummary.remainingStructuredPrograms}</div>
+            <div class="muted mt-2">至少还需要补出这么多个结构化门槛项目。</div>
+          </div>
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">当前已入结构化门槛</div>
+            <div class="h2 mt-2">{admissionsCoverageGoalSummary.currentStructuredPrograms}</div>
+            <div class="muted mt-2">
+              目标线是 {admissionsCoverageGoalSummary.targetStructuredPrograms} 个结构化门槛项目
+            </div>
+          </div>
+        </div>
+
+        <div class="catalog-queue-grid mt-3">
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">最近平均每轮新增结构化门槛</div>
+            <div class="h2 mt-2">{admissionsCampaignOutlook.averageStructuredDelta}</div>
+            <div class="muted mt-2">
+              平均每轮同步 {admissionsCampaignOutlook.averageSyncedCount} 个项目
+            </div>
+          </div>
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">按当前节奏预计还需</div>
+            <div class="h2 mt-2">
+              {admissionsCampaignOutlook.estimatedRunsToTarget ?? "待起量"}
+            </div>
+            <div class="muted mt-2">轮覆盖冲刺</div>
+          </div>
+          <div class="catalog-queue-item">
+            <div class="muted text-sm">当前建议节奏</div>
+            <div class="h2 mt-2">
+              {admissionsCampaignOutlook.suggestedRhythm === "accelerate"
+                ? "加速推进"
+                : admissionsCampaignOutlook.suggestedRhythm === "steady"
+                  ? "稳定补齐"
+                  : "精修收口"}
+            </div>
+            <div class="muted mt-2">{admissionsCampaignOutlook.summary}</div>
+          </div>
+        </div>
+
+        <div class="catalog-queue-item mt-3">
+          <div class="card-top">
+            <div class="h3">系统推荐节奏</div>
+            <span class="badge">{admissionsCampaignCadence.label}</span>
+          </div>
+          <div class="muted mt-2">{admissionsCampaignCadence.description}</div>
+          <div class="muted mt-2">
+            建议每周推进 {admissionsCampaignCadence.suggestedRunsPerWeek} 次 · 每次 {admissionsCampaignCadence.rounds} 轮 ·
+            每轮最多覆盖 {admissionsCampaignCadence.maxCountries} 个国家 / 地区
+          </div>
+          <div class="muted mt-2">
+            每轮会优先抽取国家目标方向和高价值智能预热组合，不会机械重复上一轮。
+          </div>
+          <div class="muted mt-2">
+            自动化命令：<code>npm run study-abroad:campaign -- --mode=cadence</code>
+          </div>
+          <div class="muted mt-2">
+            建议自动计划：{admissionsCampaignSchedule.frequencyLabel}，下一次建议运行时间 {admissionsCampaignSchedule.nextRunLabel}
+          </div>
+          <form method="POST" action={actions.executeStudyAbroadAdmissionsCampaignCadence} class="mt-4">
+            <input type="hidden" name="degree" value="硕士" />
+            <button class="btn" type="submit">按推荐节奏执行</button>
+          </form>
+        </div>
+
+        <p class="muted mt-3">{admissionsCoverageSprintPlan.summary}</p>
+
+        <div class="catalog-queue-grid mt-4">
+          {admissionsCoverageSprintPlan.items.map((item) => (
+            <div class="catalog-queue-item">
+              <div class="card-top">
+                <div class="h3">{item.label}</div>
+                <span class="badge">{item.source === "country-target" ? "国家目标" : "智能预热"}</span>
+              </div>
+              <div class="muted mt-2">{item.reason}</div>
+              <div class="muted mt-2">
+                {item.country} / {item.degree}
+                {item.major ? ` / ${item.major}` : " / 基础覆盖"} · 本轮最多同步 {item.maxPrograms} 个项目
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div class="mt-4">
+          <div class="muted">接下来 3 轮的自动轮转预览</div>
+          <div class="catalog-queue-grid mt-3">
+            {admissionsCoverageSprintRoadmap.map((round) => (
+              <div class="catalog-queue-item">
+                <div class="card-top">
+                  <div class="h3">第 {round.round} 轮</div>
+                  <span class="badge">{round.plan.estimatedPrograms} 项目预算</span>
+                </div>
+                <div class="muted mt-2">{round.plan.summary}</div>
+                <div class="muted mt-2">
+                  覆盖国家：{round.plan.countries.join(" / ") || "待补"}
+                </div>
+                <div class="muted mt-2">
+                  任务：{round.plan.items.map((item) => item.label).join("；")}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {admissionsCoverageSprintSuccess && (
+          <div class="catalog-queue-grid mt-4">
+            <div class="catalog-queue-item">
+              <div class="muted text-sm">本轮同步</div>
+              <div class="h2 mt-2">{admissionsCoverageSprintSuccess.syncedCount}</div>
+              <div class="muted mt-2">项目已完成一轮门槛抓取或复核。</div>
+            </div>
+            <div class="catalog-queue-item">
+              <div class="muted text-sm">结构化门槛新增</div>
+              <div class="h2 mt-2">{admissionsCoverageSprintSuccess.delta.overall.structuredDelta}</div>
+              <div class="muted mt-2">
+                当前整体结构化覆盖 {admissionsCoverageSprintSuccess.delta.overall.after.structuredCoveragePercent}%
+              </div>
+            </div>
+            <div class="catalog-queue-item">
+              <div class="muted text-sm">完整门槛新增</div>
+              <div class="h2 mt-2">{admissionsCoverageSprintSuccess.delta.overall.completeDelta}</div>
+              <div class="muted mt-2">
+                当前完整门槛覆盖 {admissionsCoverageSprintSuccess.delta.overall.after.completeCoveragePercent}%
+              </div>
+            </div>
+          </div>
+        )}
+
+        {admissionsCoverageSprintSuccess?.delta?.countries?.length ? (
+          <div class="mt-4">
+            <div class="muted">这轮拉动最明显的国家</div>
+            <div class="catalog-queue-grid mt-3">
+              {admissionsCoverageSprintSuccess.delta.countries.map((item) => (
+                <div class="catalog-queue-item">
+                  <div class="h3">{item.country}</div>
+                  <div class="muted mt-2">
+                    结构化门槛 +{item.structuredDelta} · 完整门槛 +{item.completeDelta}
+                  </div>
+                  <div class="muted mt-2">
+                    当前结构化覆盖 {item.after.structuredCoveragePercent}% · 完整覆盖 {item.after.completeCoveragePercent}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <form method="POST" action={actions.executeStudyAbroadAdmissionsCoverageSprint} class="mt-4">
+          <input type="hidden" name="degree" value="硕士" />
+          <input type="hidden" name="maxCountries" value="2" />
+          <input type="hidden" name="maxFocusPerCountry" value="2" />
+          <input type="hidden" name="maxRecommendations" value="3" />
+          <button class="btn" type="submit">执行这一轮覆盖冲刺</button>
+        </form>
+
+        <div class="mt-4">
+          <div class="muted">如果你希望系统连续往前推，而不是每轮手点一次，可以直接跑接下来几轮。</div>
+        </div>
+
+        <form method="POST" action={actions.executeStudyAbroadAdmissionsCoverageRoadmap} class="mt-4">
+          <input type="hidden" name="degree" value="硕士" />
+          <input type="hidden" name="rounds" value="3" />
+          <input type="hidden" name="maxCountries" value="2" />
+          <input type="hidden" name="maxFocusPerCountry" value="2" />
+          <input type="hidden" name="maxRecommendations" value="3" />
+          <button class="btn btn-ghost" type="submit">连续执行接下来 3 轮</button>
+        </form>
+
+        {admissionsCoverageRoadmapSuccess && (
+          <div class="mt-4">
+            <div class="muted">多轮推进结果</div>
+            <div class="catalog-queue-grid mt-3">
+              <div class="catalog-queue-item">
+                <div class="muted text-sm">累计同步</div>
+                <div class="h2 mt-2">{admissionsCoverageRoadmapSuccess.syncedCount}</div>
+                <div class="muted mt-2">跨多轮累计完成门槛抓取或复核。</div>
+              </div>
+              <div class="catalog-queue-item">
+                <div class="muted text-sm">累计结构化门槛新增</div>
+                <div class="h2 mt-2">{admissionsCoverageRoadmapSuccess.delta.structuredDelta}</div>
+                <div class="muted mt-2">
+                  当前整体结构化覆盖 {admissionsCoverageRoadmapSuccess.delta.after.structuredCoveragePercent}%
+                </div>
+              </div>
+              <div class="catalog-queue-item">
+                <div class="muted text-sm">累计完整门槛新增</div>
+                <div class="h2 mt-2">{admissionsCoverageRoadmapSuccess.delta.completeDelta}</div>
+                <div class="muted mt-2">
+                  当前完整门槛覆盖 {admissionsCoverageRoadmapSuccess.delta.after.completeCoveragePercent}%
+                </div>
+              </div>
+            </div>
+
+            <div class="catalog-queue-grid mt-3">
+              {admissionsCoverageRoadmapSuccess.roadmapRuns.map((item) => (
+                <div class="catalog-queue-item">
+                  <div class="card-top">
+                    <div class="h3">第 {item.round} 轮</div>
+                    <span class="badge">{item.syncedCount} 项目</span>
+                  </div>
+                  <div class="muted mt-2">{item.plan.summary}</div>
+                  <div class="muted mt-2">
+                    新增结构化门槛 {item.delta.structuredDelta} · 新增完整门槛 {item.delta.completeDelta}
+                  </div>
+                  <div class="muted mt-2">
+                    任务：{item.plan.items.map((planItem) => planItem.label).join("；")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {admissionsCampaignCadenceSuccess && (
+          <div class="mt-4">
+            <div class="muted">按推荐节奏执行结果</div>
+            <div class="catalog-queue-grid mt-3">
+              <div class="catalog-queue-item">
+                <div class="muted text-sm">执行节奏</div>
+                <div class="h2 mt-2">{admissionsCampaignCadenceSuccess.cadence.label}</div>
+                <div class="muted mt-2">
+                  {admissionsCampaignCadenceSuccess.cadence.rounds} 轮 / 每周建议 {admissionsCampaignCadenceSuccess.cadence.suggestedRunsPerWeek} 次
+                </div>
+              </div>
+              <div class="catalog-queue-item">
+                <div class="muted text-sm">累计结构化门槛新增</div>
+                <div class="h2 mt-2">{admissionsCampaignCadenceSuccess.delta.structuredDelta}</div>
+                <div class="muted mt-2">
+                  当前整体结构化覆盖 {admissionsCampaignCadenceSuccess.delta.after.structuredCoveragePercent}%
+                </div>
+              </div>
+              <div class="catalog-queue-item">
+                <div class="muted text-sm">累计完整门槛新增</div>
+                <div class="h2 mt-2">{admissionsCampaignCadenceSuccess.delta.completeDelta}</div>
+                <div class="muted mt-2">
+                  当前完整门槛覆盖 {admissionsCampaignCadenceSuccess.delta.after.completeCoveragePercent}%
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {admissionsCampaignOutlook.recentRuns.length ? (
+          <div class="mt-4">
+            <div class="muted">最近几轮长期推进记录</div>
+            <div class="catalog-queue-grid mt-3">
+              {admissionsCampaignOutlook.recentRuns.slice(0, 4).map((item) => (
+                <div class="catalog-queue-item">
+                  <div class="card-top">
+                    <div class="h3">{item.mode === "roadmap" ? "多轮批处理" : "单轮冲刺"}</div>
+                    <span class="badge">{item.runAt.slice(5, 16).replace("T", " ")}</span>
+                  </div>
+                  <div class="muted mt-2">
+                    {item.rounds} 轮 · {item.itemCount} 组任务 · {item.syncedCount} 项目
+                  </div>
+                  <div class="muted mt-2">
+                    结构化门槛 +{item.structuredDelta} · 完整门槛 +{item.completeDelta}
+                  </div>
+                  <div class="muted mt-2">
+                    覆盖国家：{item.countries.join(" / ") || "待补"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div class="card mt-4" id="catalog-targets">
+        <div class="card-top">
+          <div>
+            <div class="h3">重点国家目标覆盖率</div>
+            <div class="muted mt-1">这里专门看重点国家离目标线还有多远，避免美国大盘太厚时把英国、香港、新加坡这些国家长期压住。</div>
+          </div>
+          <span class="badge">Targets</span>
+        </div>
+
+        <div class="mt-4">
+          <div class="muted">下一批自动轮转建议</div>
+          <div class="catalog-queue-grid mt-3">
+            {admissionsCountryTargetQueue.map((item) => (
+              <div class="catalog-queue-item">
+                <div class="card-top">
+                  <div class="h3">{item.country}</div>
+                  <span class="badge">轮转分 {item.queueScore}</span>
+                </div>
+                <div class="muted mt-2">
+                  目标 {item.targetStructuredCoveragePercent}% · 当前 {item.structuredCoveragePercent}% · 还差 {item.targetGapPercent}%
+                </div>
+                <div class="muted mt-2">
+                  建议方向：{item.focusRecommendations.map((focus) => focus.major).join(" / ") || "先补基础覆盖"}
+                </div>
+                <div class="muted mt-2">
+                  国家冷却：{item.lastCountryRunAt ? `${admissionsStrategy.countryCooldownHours}h 内降权，最近一次 ${item.lastCountryRunAt.slice(0, 16).replace("T", " ")}` : "未补过，当前没有国家冷却"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div class="mt-4">
+          {admissionsCountryTargetPlans.length ? (
+            admissionsCountryTargetPlans.map((item) => (
+              <div class="faq">
+                <div class="card-top">
+                  <div class="h3">{item.country}</div>
+                  <span class="badge">{admissionsCountryTargetStatusLabel(item.status)}</span>
+                </div>
+                <div class="muted mt-2">
+                  当前结构化覆盖 {item.structuredCoveragePercent}% · 目标 {item.targetStructuredCoveragePercent}% · 还差 {item.targetGapPercent}%
+                </div>
+                <div class="muted mt-2">
+                  项目 {item.totalPrograms} 个 · 已同步 {item.syncedCoveragePercent}% · 结构化字段 {item.structuredPrograms} 个 · 预计至少再补 {item.targetProgramGap} 个
+                </div>
+                <div class="muted mt-2">
+                  {item.note}
+                </div>
+                {item.focusRecommendations.length ? (
+                  <div class="mt-3">
+                    <div class="muted">建议先补方向：</div>
+                    <div class="mt-2">
+                      {item.focusRecommendations.map((focus) => (
+                        <div class="faq">
+                          <div class="h3">{focus.major}</div>
+                          <div class="muted mt-1">
+                            项目 {focus.totalPrograms} 个 · 结构化覆盖 {focus.structuredCoveragePercent}% ·
+                            待补抓 {focus.missingPrograms} 个
+                          </div>
+                          <div class="muted mt-1">
+                            {focus.coolingDown
+                              ? `冷却中 ${focus.cooldownRemainingHours}h · 上次 ${focus.lastRecommendationRunLabel}`
+                              : `上次补齐：${focus.lastRecommendationRunLabel}`}
+                          </div>
+                          <div class="muted mt-1">
+                            推荐分 {focus.recommendationScore} = 缺口 {focus.gapScore} + 久未执行 {focus.recencyBoostScore} - 冷却扣分 {focus.recencyPenaltyScore}
+                          </div>
+                          <div class="muted mt-1">
+                            缺口拆解：缺失 {focus.missingGapScore} + 结构化 {focus.structuredGapScore} + 完整 {focus.completeGapScore} + 国家目标 {focus.targetGapScore} + 优先级 {focus.priorityScore} + 规模 {focus.volumeScore}
+                          </div>
+                          <div class="muted mt-2">{focus.description}</div>
+                          <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots} class="mt-3">
+                            <input type="hidden" name="country" value={focus.country} />
+                            <input type="hidden" name="degree" value={focus.degree} />
+                            <input type="hidden" name="major" value={focus.major} />
+                            <input type="hidden" name="mode" value="missing-first" />
+                            <input type="hidden" name="maxPrograms" value={focus.maxPrograms} />
+                            <input type="hidden" name="recordHistory" value="true" />
+                            <button class="btn btn-ghost" type="submit">优先补这个方向</button>
+                          </form>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan} class="mt-4">
+                  <input type="hidden" name="country" value={item.country} />
+                  <input type="hidden" name="degree" value="硕士" />
+                  <input
+                    type="hidden"
+                    name="maxFocusPerCountry"
+                    value={Math.min(3, Math.max(1, item.focusRecommendations.length || 1))}
+                  />
+                  <button class="btn" type="submit">按国家目标补推荐方向</button>
+                </form>
+                <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots} class="mt-4">
+                  <input type="hidden" name="country" value={item.country} />
+                  <input type="hidden" name="degree" value="硕士" />
+                  <input type="hidden" name="mode" value="missing-first" />
+                  <input type="hidden" name="recordHistory" value="true" />
+                  <input
+                    type="hidden"
+                    name="maxPrograms"
+                    value={Math.min(12, Math.max(4, item.targetProgramGap || 4))}
+                  />
+                  <button class="btn btn-ghost" type="submit">优先补这个国家</button>
+                </form>
+              </div>
+            ))
+          ) : (
+            <div class="faq">
+              <div class="h3">还没有可展示的国家目标进度</div>
+              <div class="muted mt-1">等更多国家进入项目层后，这里会开始显示每个重点国家的目标差值。</div>
+            </div>
+          )}
+        </div>
+
+        <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan} class="mt-4">
+          <input type="hidden" name="degree" value="硕士" />
+          <input type="hidden" name="maxCountries" value="3" />
+          <input type="hidden" name="maxFocusPerCountry" value="2" />
+          <button class="btn btn-ghost" type="submit">按国家目标自动补前 3 个国家</button>
+        </form>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">最近预热记录</div>
+            <div class="muted mt-1">这里会记住最近跑过哪些国家和方向，智能预热会尽量避开刚补过的组合。</div>
+          </div>
+          <span class="badge">History</span>
+        </div>
+
+        <div class="mt-4">
+          {recentWarmupHistory.length ? (
+            recentWarmupHistory.map((item) => (
+              <div class="faq">
+                <div class="h3">{item.label}</div>
+                <div class="muted mt-1">
+                  {admissionsHistoryModeLabel(item.mode)} · {item.runAt.slice(0, 16).replace("T", " ")}
+                </div>
+                <div class="muted mt-2">
+                  同步 {item.syncedCount} 个 · 完整 {item.okCount} 个 · 部分 {item.partialCount} 个 · 待补抓 {item.unavailableCount} 个
+                </div>
+              </div>
+            ))
+          ) : (
+            <div class="faq">
+              <div class="h3">还没有预热记录</div>
+              <div class="muted mt-1">跑过一轮热门方向或智能预热后，这里会开始积累轮换历史。</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-8" id="catalog-gaps">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Admissions Gaps</div>
+          <h2 class="section-title">门槛覆盖缺口</h2>
+          <p class="section-desc">这两张表专门看“哪里项目多、但门槛还没补厚”，方便你先抓最有价值的一批。</p>
+        </div>
+      </div>
+
+      <div class="cards cards--2 mt-4">
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">按国家 / 地区看缺口</div>
+            <span class="badge">Top 8</span>
+          </div>
+
+          <div class="mt-4">
+            {topCountryGaps.map((item) => (
+              <div class="faq">
+                <div class="h3">{item.label}</div>
+                <div class="muted mt-1">
+                  项目 {item.totalPrograms} 个 · 已同步 {coveragePercent(item.syncedPrograms, item.totalPrograms)}% ·
+                  有结构化字段 {coveragePercent(item.structuredPrograms, item.totalPrograms)}%
+                </div>
+                <div class="muted mt-2">
+                  完整门槛 {item.completePrograms} 个 · 仍待补抓 {item.missingPrograms} 个
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">按专业方向看缺口</div>
+            <span class="badge">Top 8</span>
+          </div>
+
+          <div class="mt-4">
+            {topDisciplineGaps.map((item) => (
+              <div class="faq">
+                <div class="h3">{item.label}</div>
+                <div class="muted mt-1">
+                  项目 {item.totalPrograms} 个 · 已同步 {coveragePercent(item.syncedPrograms, item.totalPrograms)}% ·
+                  有结构化字段 {coveragePercent(item.structuredPrograms, item.totalPrograms)}%
+                </div>
+                <div class="muted mt-2">
+                  完整门槛 {item.completePrograms} 个 · 仍待补抓 {item.missingPrograms} 个
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-8" id="catalog-sources">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Sources</div>
+          <h2 class="section-title">数据源注册表</h2>
+          <p class="section-desc">先把每个来源的使用角色定清楚，后面接入时就不会边做边猜。</p>
+        </div>
+      </div>
+
+      <div class="cards mt-4">
+        {sources.map((source) => (
+          <article class="card">
+            <div class="card-top">
+              <div>
+                <div class="h3">{source.name}</div>
+                <div class="muted mt-1">
+                  {CATEGORY_LABELS[source.category]} / {ACCESS_LABELS[source.accessModel]} /{" "}
+                  {source.scope === "global" ? "全球" : "单一国家"}
+                </div>
+              </div>
+              <span class="badge">{STATUS_LABELS[source.status]}</span>
+            </div>
+
+            <p class="muted mt-3">{source.recommendedUse}</p>
+
+            <div class="mt-3">
+              <strong>覆盖地区：</strong>{source.regions.join("、")}
+            </div>
+            <div class="mt-2">
+              <strong>可补字段：</strong>{source.fieldCoverage.join("、")}
+            </div>
+            <div class="mt-2">
+              <strong>备注：</strong>{source.notes}
+            </div>
+
+            <div class="detail-actions mt-4">
+              <a class="btn btn-ghost" href={source.url} target="_blank" rel="noreferrer">
+                打开来源说明
+              </a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-8" id="catalog-preview">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Current Base</div>
+          <h2 class="section-title">当前底库预览</h2>
+          <p class="section-desc">这部分先从站内精选项目里拆出来，后面会逐步被正式数据源补强。</p>
+        </div>
+      </div>
+
+      <div class="cards cards--2 mt-4">
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">学校底库预览</div>
+            <span class="badge">{universityPreview.length}</span>
+          </div>
+
+          <div class="mt-4">
+            {universityPreview.map((item) => (
+              <div class="faq">
+                <div class="h3">{item.name}</div>
+                <div class="muted mt-1">
+                  {item.country}
+                  {item.stateOrProvince ? ` / ${item.stateOrProvince}` : ""}
+                  {item.city ? ` / ${item.city}` : ""}
+                  {` / ${item.websiteDomain || "官网待补"}`}
+                </div>
+                <div class="muted mt-2">
+                  QS 排名：{item.qsRank ?? "待接入"} {item.rankingSource ? `(${item.rankingSource})` : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">项目底库预览</div>
+            <span class="badge">{programPreview.length}</span>
+          </div>
+
+          <div class="mt-4">
+            {programPreview.map((item) => (
+              <div class="faq">
+                <div class="h3">{item.programName}</div>
+                <div class="muted mt-1">
+                  {item.schoolName} / {item.country}
+                  {item.stateOrProvince ? ` / ${item.stateOrProvince}` : ""}
+                  / {item.degree}
+                </div>
+                <div class="muted mt-2">
+                  学科：{item.discipline} · 学费：{item.tuitionAmount || "待补"}{" "}
+                  {item.tuitionCurrency || ""}
+                </div>
+                <div class="muted mt-2">
+                  {admissionsStatusLabel(item.admissionsSnapshot?.extractionStatus)}
+                  {item.admissionsSnapshot?.gpaMin
+                    ? ` · GPA ${item.admissionsSnapshot.gpaMin}/${item.admissionsSnapshot.gpaScale || "4.0"}`
+                    : ""}
+                  {item.admissionsSnapshot?.ieltsMin
+                    ? ` · IELTS ${item.admissionsSnapshot.ieltsMin}`
+                    : ""}
+                  {item.admissionsSnapshot?.toeflMin
+                    ? ` · TOEFL ${item.admissionsSnapshot.toeflMin}`
+                    : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="mt-8">
+      <div class="card">
+        <div class="h3">接下来最该做什么</div>
+        <p class="muted mt-2">
+          先把美国方向接成完整链路：大学底库、学校官网域名、项目层、学费字段、招生页字段、门槛快照覆盖率。等这条链路打通，再复制到英国和加拿大。
+        </p>
+        <div class="mt-4">
+          {topSources.map((source) => (
+            <div class="faq">
+              <div class="h3">{source.name}</div>
+              <div class="muted mt-1">{source.recommendedUse}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

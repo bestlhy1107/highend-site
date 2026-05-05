@@ -16,9 +16,23 @@ import {
   type LeadStatus,
 } from "../lib/leads-store";
 import { sendBusinessMail } from "../lib/mail";
+import { syncUsStudyAbroadCatalog } from "../lib/study-abroad-us-import";
+import { syncGlobalStudyAbroadUniversityCatalog } from "../lib/study-abroad-global-import";
+import { syncUkStudyAbroadPilotPrograms } from "../lib/study-abroad-uk-seed";
+import { executeStudyAbroadCatalogSync } from "../lib/study-abroad-catalog-sync";
+import {
+  executeStudyAbroadAdmissionsCampaignCadence,
+  executeStudyAbroadAdmissionsCoverageRoadmap,
+  executeStudyAbroadAdmissionsCoverageSprint,
+  executeStudyAbroadAdmissionsCountryTargetPlan,
+  updateStudyAbroadAdmissionsStrategy,
+  smartWarmStudyAbroadAdmissionsCoverage,
+  syncStudyAbroadAdmissionsSnapshots,
+  warmStudyAbroadAdmissionsCoverage,
+} from "../lib/study-abroad-admissions-sync";
 
-const ADMIN_USERNAME = import.meta.env.ADMIN_USERNAME;
-const ADMIN_PASSWORD = import.meta.env.ADMIN_PASSWORD;
+const ADMIN_USERNAME = import.meta.env?.ADMIN_USERNAME;
+const ADMIN_PASSWORD = import.meta.env?.ADMIN_PASSWORD;
 
 async function requireAdmin(context: {
   session?: {
@@ -376,6 +390,206 @@ contactLead: defineAction({
         ok: true,
         message: "咨询记录已删除",
       };
+    },
+  }),
+
+  syncUsStudyAbroadCatalog: defineAction({
+    accept: "form",
+    input: z.object({
+      maxPages: z.coerce.number().min(1).max(30).optional(),
+      perPage: z.coerce.number().min(20).max(100).optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return syncUsStudyAbroadCatalog({
+        maxPages: input.maxPages,
+        perPage: input.perPage,
+      });
+    },
+  }),
+
+  syncGlobalStudyAbroadUniversities: defineAction({
+    accept: "form",
+    input: z.object({}),
+    handler: async (_input, context) => {
+      await requireAdmin(context);
+      return syncGlobalStudyAbroadUniversityCatalog();
+    },
+  }),
+
+  syncUkStudyAbroadPilotPrograms: defineAction({
+    accept: "form",
+    input: z.object({}),
+    handler: async (_input, context) => {
+      await requireAdmin(context);
+      return syncUkStudyAbroadPilotPrograms();
+    },
+  }),
+
+  syncStudyAbroadCatalogSources: defineAction({
+    accept: "form",
+    input: z.object({
+      includeGlobal: z.coerce.boolean().optional(),
+      includeUs: z.coerce.boolean().optional(),
+      includeUk: z.coerce.boolean().optional(),
+      usMaxPages: z.coerce.number().min(1).max(30).optional(),
+      usPerPage: z.coerce.number().min(20).max(100).optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return executeStudyAbroadCatalogSync({
+        includeGlobal: input.includeGlobal,
+        includeUs: input.includeUs,
+        includeUk: input.includeUk,
+        usMaxPages: input.usMaxPages,
+        usPerPage: input.usPerPage,
+        mode: "manual",
+        trigger: "dashboard",
+      });
+    },
+  }),
+
+  syncStudyAbroadAdmissionsSnapshots: defineAction({
+    accept: "form",
+    input: z.object({
+      maxPrograms: z.coerce.number().min(1).max(40).optional(),
+      mode: z.enum(["missing-first", "refresh-all"]).optional(),
+      country: z.string().optional(),
+      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      major: z.string().optional(),
+      specialization: z.string().optional(),
+      recordHistory: z.coerce.boolean().optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return syncStudyAbroadAdmissionsSnapshots({
+        maxPrograms: input.maxPrograms,
+        mode: input.mode,
+        country: input.country,
+        degree: input.degree,
+        major: input.major,
+        specialization: input.specialization,
+        recordHistory: input.recordHistory,
+      });
+    },
+  }),
+
+  warmStudyAbroadAdmissionsCoverage: defineAction({
+    accept: "form",
+    input: z.object({
+      presetId: z.string().optional(),
+      maxPresets: z.coerce.number().min(1).max(12).optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return warmStudyAbroadAdmissionsCoverage({
+        presetId: input.presetId,
+        maxPresets: input.maxPresets,
+      });
+    },
+  }),
+
+  smartWarmStudyAbroadAdmissionsCoverage: defineAction({
+    accept: "form",
+    input: z.object({
+      recommendationId: z.string().optional(),
+      maxRecommendations: z.coerce.number().min(1).max(10).optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return smartWarmStudyAbroadAdmissionsCoverage({
+        recommendationId: input.recommendationId,
+        maxRecommendations: input.maxRecommendations,
+      });
+    },
+  }),
+
+  executeStudyAbroadAdmissionsCountryTargetPlan: defineAction({
+    accept: "form",
+    input: z.object({
+      country: z.string().optional(),
+      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      maxCountries: z.coerce.number().min(1).max(6).optional(),
+      maxFocusPerCountry: z.coerce.number().min(1).max(4).optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return executeStudyAbroadAdmissionsCountryTargetPlan({
+        country: input.country,
+        degree: input.degree,
+        maxCountries: input.maxCountries,
+        maxFocusPerCountry: input.maxFocusPerCountry,
+      });
+    },
+  }),
+
+  executeStudyAbroadAdmissionsCoverageSprint: defineAction({
+    accept: "form",
+    input: z.object({
+      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      maxCountries: z.coerce.number().min(1).max(4).optional(),
+      maxFocusPerCountry: z.coerce.number().min(1).max(3).optional(),
+      maxRecommendations: z.coerce.number().min(1).max(6).optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return executeStudyAbroadAdmissionsCoverageSprint({
+        degree: input.degree,
+        maxCountries: input.maxCountries,
+        maxFocusPerCountry: input.maxFocusPerCountry,
+        maxRecommendations: input.maxRecommendations,
+      });
+    },
+  }),
+
+  executeStudyAbroadAdmissionsCoverageRoadmap: defineAction({
+    accept: "form",
+    input: z.object({
+      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      rounds: z.coerce.number().min(1).max(5).optional(),
+      maxCountries: z.coerce.number().min(1).max(4).optional(),
+      maxFocusPerCountry: z.coerce.number().min(1).max(3).optional(),
+      maxRecommendations: z.coerce.number().min(1).max(6).optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return executeStudyAbroadAdmissionsCoverageRoadmap({
+        degree: input.degree,
+        rounds: input.rounds,
+        maxCountries: input.maxCountries,
+        maxFocusPerCountry: input.maxFocusPerCountry,
+        maxRecommendations: input.maxRecommendations,
+      });
+    },
+  }),
+
+  executeStudyAbroadAdmissionsCampaignCadence: defineAction({
+    accept: "form",
+    input: z.object({
+      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return executeStudyAbroadAdmissionsCampaignCadence({
+        degree: input.degree,
+      });
+    },
+  }),
+
+  updateStudyAbroadAdmissionsStrategy: defineAction({
+    accept: "form",
+    input: z.object({
+      focusCooldownHours: z.coerce.number().min(1).max(168),
+      countryCooldownHours: z.coerce.number().min(1).max(168),
+      smartRecommendationCooldownHours: z.coerce.number().min(1).max(336),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return updateStudyAbroadAdmissionsStrategy({
+        focusCooldownHours: input.focusCooldownHours,
+        countryCooldownHours: input.countryCooldownHours,
+        smartRecommendationCooldownHours: input.smartRecommendationCooldownHours,
+      });
     },
   }),
 };
