@@ -129,6 +129,30 @@ export const STUDY_ABROAD_SPECIALIZATION_OPTIONS = Object.values(
   STUDY_ABROAD_MAJOR_SPECIALIZATIONS
 ).flat();
 
+export const SPECIALIZATION_TO_MAJOR = Object.fromEntries(
+  Object.entries(STUDY_ABROAD_MAJOR_SPECIALIZATIONS).flatMap(([major, specializations]) =>
+    specializations.map((specialization) => [specialization, major])
+  )
+);
+
+export const CANONICAL_DISCIPLINE_OVERRIDES: Record<string, string> = {
+  "计算机科学": "计算机 / AI",
+  "人工智能": "计算机 / AI",
+  "信息技术": "计算机 / AI",
+  "信息技术 / AI": "计算机 / AI",
+  "金融 / 金融工程": "金融",
+  "金融工程": "金融",
+  "金融工程 / 量化金融": "金融",
+  "量化金融": "金融",
+  "商业分析": "商业分析 / 数据",
+  "数据科学": "商业分析 / 数据",
+  "数据分析": "商业分析 / 数据",
+  "信息系统": "商业分析 / 数据",
+  "信息 / UX / 数据": "商业分析 / 数据",
+  "市场营销": "市场营销 / 传媒",
+  "商科 / 金融 / 管理": "商科 / 管理",
+};
+
 export const POPULAR_MAJOR_HINTS = STUDY_ABROAD_MAJOR_OPTIONS;
 
 export const MAJOR_FAMILIES: Record<string, string[]> = {
@@ -595,7 +619,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "Carnegie Mellon University",
     programName: "M.S. in Computer Science",
     degree: "硕士",
-    discipline: "计算机科学",
+    discipline: "计算机 / AI",
     summary:
       "CMU 计算机系官网显示，该项目面向具备数学、编程和逻辑基础的申请者，课程可在导师指导下灵活组合，研究为可选项。",
     duration: "3 学期",
@@ -653,7 +677,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "Princeton University",
     programName: "Master in Finance",
     degree: "硕士",
-    discipline: "金融 / 金融工程",
+    discipline: "金融",
     summary:
       "普林斯顿官网显示，Master in Finance 覆盖金融工程、风险管理、量化资管、宏观金融预测、量化交易和应用研究，项目竞争非常激烈。",
     duration: "2 年",
@@ -683,7 +707,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "University of California, Berkeley",
     programName: "Master of Financial Engineering",
     degree: "硕士",
-    discipline: "金融工程 / 量化金融",
+    discipline: "金融",
     summary:
       "Berkeley Haas 官网显示，MFE 是一到两年的项目，面向金融、经济、统计、数学、工程和计算机等量化背景申请者，春季入学。",
     duration: "1-2 年",
@@ -798,7 +822,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "University College London",
     programName: "Computer Science MSc",
     degree: "硕士",
-    discipline: "计算机科学",
+    discipline: "计算机 / AI",
     summary:
       "UCL 官网显示，该项目覆盖编程、App Engineering、计算机体系结构、操作系统、算法和数据库，并包含产业或研究项目。",
     duration: "1 年",
@@ -881,7 +905,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "University of Toronto",
     programName: "Master of Information",
     degree: "硕士",
-    discipline: "信息 / UX / 数据",
+    discipline: "商业分析 / 数据",
     summary:
       "多伦多大学官网显示，MI 是两年制职业硕士，包含 Human-Centered Data Science、User Experience Design、Information Systems & Design 等多个 concentration。",
     duration: "2 年",
@@ -938,7 +962,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "The University of Melbourne",
     programName: "Master of Information Technology",
     degree: "硕士",
-    discipline: "信息技术 / AI",
+    discipline: "计算机 / AI",
     summary:
       "墨尔本大学官网显示，MIT 提供 Computing、Cybersecurity、Distributed Computing、Human-Computer Interaction、Artificial Intelligence 等方向，并包含 industry-based learning。",
     duration: "2 年",
@@ -968,7 +992,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "UNSW Sydney",
     programName: "Master of Commerce",
     degree: "硕士",
-    discipline: "商科 / 金融 / 管理",
+    discipline: "商科 / 管理",
     summary:
       "UNSW 官网显示，Master of Commerce 为 1.7 年全日制项目，可在 Finance、Marketing、Business Analytics 等方向中组合专长，课程强调行业实践。",
     duration: "1.7 年",
@@ -997,7 +1021,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "The University of Hong Kong",
     programName: "Master of Science in Computer Science",
     degree: "硕士",
-    discipline: "计算机科学",
+    discipline: "计算机 / AI",
     summary:
       "HKU 官网显示，该项目提供 applied 与 fundamental 两类课程，也可进入更加聚焦的 ICT stream，适合希望系统进阶计算机方向的申请者。",
     keywords: [
@@ -1048,7 +1072,7 @@ export const STUDY_ABROAD_PROGRAMS: StudyAbroadProgram[] = [
     schoolName: "The Chinese University of Hong Kong",
     programName: "MSc in Marketing",
     degree: "硕士",
-    discipline: "市场营销",
+    discipline: "市场营销 / 传媒",
     summary:
       "CUHK 官网显示，MSc in Marketing 同时覆盖品牌、公关与国际营销，也提供 AI and Quantitative Marketing 路径，适合传统营销与数字营销双向发展。",
     keywords: [

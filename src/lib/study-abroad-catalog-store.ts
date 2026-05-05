@@ -4,9 +4,13 @@ import {
   writeJsonArrayFile,
 } from "./json-file-store";
 import {
+  CANONICAL_DISCIPLINE_OVERRIDES,
+  MAJOR_QUERY_ALIASES,
   MAJOR_FAMILIES,
   SPECIALIZATION_QUERY_ALIASES,
+  SPECIALIZATION_TO_MAJOR,
   STUDY_ABROAD_MAJOR_OPTIONS,
+  STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
   STUDY_ABROAD_PROGRAMS,
   STUDY_ABROAD_DATA_UPDATED_AT,
   type StudyAbroadProgram,
@@ -110,6 +114,18 @@ const UNIVERSITY_FILE = "study-abroad-universities.json";
 const PROGRAM_FILE = "study-abroad-programs.json";
 
 const derivedCatalogCache = new Map<string, Promise<unknown>>();
+const canonicalDisciplineOverrideMap = new Map(
+  Object.entries(CANONICAL_DISCIPLINE_OVERRIDES).map(([label, major]) => [
+    normalizeLookupText(label),
+    major,
+  ])
+);
+const specializationToMajorMap = new Map(
+  Object.entries(SPECIALIZATION_TO_MAJOR).map(([specialization, major]) => [
+    normalizeLookupText(specialization),
+    major,
+  ])
+);
 
 function readDerivedCatalogCache<T>(key: string, load: () => Promise<T>) {
   const cached = derivedCatalogCache.get(key);
@@ -148,11 +164,19 @@ function normalizeDisciplineLabel(input: {
   const discipline = String(input.discipline ?? "").trim();
   if (!discipline) return "";
 
-  if (
-    STUDY_ABROAD_MAJOR_OPTIONS.includes(discipline) ||
-    /[\u4e00-\u9fff]/.test(discipline)
-  ) {
+  if (STUDY_ABROAD_MAJOR_OPTIONS.includes(discipline)) {
     return discipline;
+  }
+
+  const normalizedDiscipline = normalizeLookupText(discipline);
+  const directOverride = canonicalDisciplineOverrideMap.get(normalizedDiscipline);
+  if (directOverride) {
+    return directOverride;
+  }
+
+  const directSpecializationMajor = specializationToMajorMap.get(normalizedDiscipline);
+  if (directSpecializationMajor) {
+    return directSpecializationMajor;
   }
 
   const searchText = normalizeLookupText(
@@ -167,32 +191,81 @@ function normalizeDisciplineLabel(input: {
       .join(" ")
   );
 
+  const scoreMap = new Map<string, number>();
+
+  const addScore = (major: string, score: number) => {
+    if (!major || score <= 0) return;
+    scoreMap.set(major, (scoreMap.get(major) ?? 0) + score);
+  };
+
+  const scoreAliases = (
+    major: string,
+    aliases: string[],
+    options: { exactBonus?: number; longBonus?: number; mediumBonus?: number; shortBonus?: number } = {}
+  ) => {
+    aliases.forEach((alias) => {
+      const normalizedAlias = normalizeLookupText(alias);
+      if (!normalizedAlias) return;
+
+      if (normalizedDiscipline === normalizedAlias) {
+        addScore(major, options.exactBonus ?? 8);
+      }
+
+      if (!searchText.includes(normalizedAlias)) {
+        return;
+      }
+
+      if (normalizedAlias.length >= 10) {
+        addScore(major, options.longBonus ?? 4);
+      } else if (normalizedAlias.length >= 5) {
+        addScore(major, options.mediumBonus ?? 3);
+      } else {
+        addScore(major, options.shortBonus ?? 2);
+      }
+    });
+  };
+
+  Object.entries(STUDY_ABROAD_MAJOR_SPECIALIZATIONS).forEach(([major, specializations]) => {
+    scoreAliases(major, specializations, { exactBonus: 9, longBonus: 4, mediumBonus: 3, shortBonus: 2 });
+  });
+
+  Object.entries(SPECIALIZATION_QUERY_ALIASES).forEach(([specialization, aliases]) => {
+    const major = SPECIALIZATION_TO_MAJOR[specialization];
+    if (!major) return;
+    scoreAliases(major, [specialization, ...aliases], {
+      exactBonus: 9,
+      longBonus: 4,
+      mediumBonus: 3,
+      shortBonus: 2,
+    });
+  });
+
+  Object.entries(MAJOR_QUERY_ALIASES).forEach(([major, aliases]) => {
+    scoreAliases(major, [major, ...aliases], {
+      exactBonus: 8,
+      longBonus: 4,
+      mediumBonus: 3,
+      shortBonus: 2,
+    });
+  });
+
+  Object.entries(MAJOR_FAMILIES).forEach(([major, aliases]) => {
+    scoreAliases(major, [major, ...aliases], {
+      exactBonus: 7,
+      longBonus: 3,
+      mediumBonus: 2,
+      shortBonus: 1,
+    });
+  });
+
   let bestLabel = discipline;
   let bestScore = 0;
 
-  [SPECIALIZATION_QUERY_ALIASES, MAJOR_FAMILIES].forEach((aliasGroup, groupIndex) => {
-    Object.entries(aliasGroup).forEach(([label, aliases]) => {
-      let score = 0;
-      const normalizedLabel = normalizeLookupText(label);
-
-      if (normalizedLabel && searchText.includes(normalizedLabel)) {
-        score += groupIndex === 0 ? 7 : 5;
-      }
-
-      aliases.forEach((alias) => {
-        const normalizedAlias = normalizeLookupText(alias);
-        if (!normalizedAlias || !searchText.includes(normalizedAlias)) {
-          return;
-        }
-
-        score += normalizedAlias.length >= 10 ? 4 : normalizedAlias.length >= 5 ? 3 : 2;
-      });
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestLabel = label;
-      }
-    });
+  scoreMap.forEach((score, label) => {
+    if (score > bestScore) {
+      bestScore = score;
+      bestLabel = label;
+    }
   });
 
   return bestScore >= 3 ? bestLabel : discipline;
