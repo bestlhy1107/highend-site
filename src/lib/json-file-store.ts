@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const DATA_DIR = join(process.cwd(), "data");
+const arrayFileCache = new Map<string, Promise<unknown[]>>();
 
 export function dataFilePath(fileName: string) {
   return join(DATA_DIR, fileName);
@@ -22,16 +23,32 @@ export async function readJsonArrayFile<T>({
   isValid,
   compare,
 }: JsonArrayOptions<T>): Promise<T[]> {
+  const cached = arrayFileCache.get(fileName);
+  if (cached) {
+    return (await cached) as T[];
+  }
+
+  const nextPromise = (async () => {
+    try {
+      const raw = await readFile(dataFilePath(fileName), "utf8");
+      const parsed = JSON.parse(raw);
+
+      if (!Array.isArray(parsed)) return fallback;
+
+      const items = parsed.map(normalize).filter(isValid);
+      return compare ? items.sort(compare) : items;
+    } catch {
+      return fallback;
+    }
+  })();
+
+  arrayFileCache.set(fileName, nextPromise as Promise<unknown[]>);
+
   try {
-    const raw = await readFile(dataFilePath(fileName), "utf8");
-    const parsed = JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) return fallback;
-
-    const items = parsed.map(normalize).filter(isValid);
-    return compare ? items.sort(compare) : items;
-  } catch {
-    return fallback;
+    return await nextPromise;
+  } catch (error) {
+    arrayFileCache.delete(fileName);
+    throw error;
   }
 }
 
@@ -45,7 +62,17 @@ export async function writeJsonArrayFile<T>(
   const sorted = compare ? normalized.sort(compare) : normalized;
 
   await writeFile(dataFilePath(fileName), JSON.stringify(sorted, null, 2), "utf8");
+  arrayFileCache.set(fileName, Promise.resolve(sorted as unknown[]));
   return sorted;
+}
+
+export function invalidateJsonArrayFileCache(fileName?: string) {
+  if (fileName) {
+    arrayFileCache.delete(fileName);
+    return;
+  }
+
+  arrayFileCache.clear();
 }
 
 export function compareByOrder(a: { order: number }, b: { order: number }) {

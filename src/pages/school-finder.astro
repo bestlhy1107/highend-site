@@ -3,9 +3,16 @@ export const prerender = false;
 
 import BaseLayout from "../layouts/BaseLayout.astro";
 import UniversityFinder from "../components/UniversityFinder.astro";
-import { readStudyAbroadCatalogSummary } from "../lib/study-abroad-catalog-store";
+import { readStudyAbroadCatalogSyncState } from "../lib/study-abroad-catalog-sync";
+import { STUDY_ABROAD_PROGRAMS } from "../lib/study-abroad-programs";
 
-const { stats } = await readStudyAbroadCatalogSummary();
+const syncState = await readStudyAbroadCatalogSyncState();
+const latestSnapshot = syncState.runs[0]?.after;
+const stats = {
+  countryCount: latestSnapshot?.countryCount ?? new Set(STUDY_ABROAD_PROGRAMS.map((item) => item.country)).size,
+  universityCount: latestSnapshot?.universityCount ?? 0,
+  programCount: latestSnapshot?.programCount ?? STUDY_ABROAD_PROGRAMS.length,
+};
 ---
 
 <BaseLayout
@@ -72,7 +79,7 @@ const { stats } = await readStudyAbroadCatalogSummary();
     </section>
 
     <section class="section-block compact-top">
-      <UniversityFinder anchorId="school-finder-page" />
+      <UniversityFinder anchorId="school-finder-page" totalPrograms={stats.programCount} />
     </section>
   </main>
 </BaseLayout>

@@ -3,30 +3,82 @@ import {
   STUDY_ABROAD_MAJOR_GROUPS,
   STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
   STUDY_ABROAD_DATA_UPDATED_AT,
+  STUDY_ABROAD_PROGRAMS,
 } from "../lib/study-abroad-programs";
 import {
   readStudyAbroadFinderCountries,
-  readStudyAbroadFinderPrograms,
   type StudyAbroadFinderProgram,
 } from "../lib/study-abroad-catalog-store";
+import { getStudyAbroadUniversityNameZh } from "../lib/study-abroad-university-names";
 
 type Props = {
   anchorId?: string;
   compact?: boolean;
+  totalPrograms?: number;
 };
 
-const { anchorId = "school-match", compact = false } = Astro.props as Props;
+const { anchorId = "school-match", compact = false, totalPrograms = 0 } = Astro.props as Props;
 
-const [countryOptions, finderPrograms] = await Promise.all([
-  readStudyAbroadFinderCountries(),
-  readStudyAbroadFinderPrograms(),
-]);
+const countryOptions = await readStudyAbroadFinderCountries();
 const finderId = `school-match-${Math.random().toString(36).slice(2, 10)}`;
-const totalPrograms = finderPrograms.length;
-const initialResults = finderPrograms.slice(0, compact ? 4 : 6);
+
+const safeOrigin = (input: string) => {
+  try {
+    return new URL(input).origin;
+  } catch {
+    return "";
+  }
+};
+
+const safeHost = (input: string) => {
+  try {
+    return new URL(input).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+};
+
+const buildSeedFinderPrograms = (limit: number): StudyAbroadFinderProgram[] =>
+  STUDY_ABROAD_PROGRAMS.slice(0, limit).map((program) => ({
+    id: program.id,
+    universityId: `${program.country}-${program.schoolName}`
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+      .replace(/^-+|-+$/g, ""),
+    schoolName: program.schoolName,
+    schoolNameZh: getStudyAbroadUniversityNameZh(program.schoolName),
+    country: program.country,
+    city: program.city,
+    stateOrProvince: "",
+    programName: program.programName,
+    degree: program.degree,
+    discipline: program.discipline,
+    summary: program.summary,
+    duration: program.duration,
+    intake: program.intake,
+    tuitionAmount: "",
+    tuitionCurrency: "",
+    tuitionNotes: "",
+    overviewUrl: program.overviewUrl,
+    admissionsUrl: program.admissionsUrl,
+    tuitionUrl: "",
+    keywords: program.keywords,
+    tags: program.tags,
+    sourceIds: ["curated-manual"],
+    checkedAt: program.checkedAt,
+    priority: program.priority,
+    officialWebsite: safeOrigin(program.overviewUrl),
+    websiteDomain: safeHost(program.overviewUrl),
+    qsRank: null,
+    qsRankingYear: null,
+    rankingSource: "",
+    admissionsSnapshot: null,
+  }));
+
+const initialResults = buildSeedFinderPrograms(compact ? 4 : 6);
 const seedResults = initialResults;
 const latestCheckedAt =
-  finderPrograms.reduce(
+  initialResults.reduce(
     (latest, program) => (program.checkedAt > latest ? program.checkedAt : latest),
     ""
   ) || STUDY_ABROAD_DATA_UPDATED_AT;

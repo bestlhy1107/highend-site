@@ -5,8 +5,13 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import UniversityFinder from "../../components/UniversityFinder.astro";
 import { readSiteSettings } from "../../lib/site-store";
 import { readServiceById } from "../../lib/services-store";
+import { readStudyAbroadCatalogSyncState } from "../../lib/study-abroad-catalog-sync";
+import { STUDY_ABROAD_PROGRAMS } from "../../lib/study-abroad-programs";
 
 const site = await readSiteSettings();
+const syncState = await readStudyAbroadCatalogSyncState();
+const catalogProgramCount =
+  syncState.runs[0]?.after?.programCount ?? STUDY_ABROAD_PROGRAMS.length;
 
 const id = Astro.params.id;
 if (!id) {
@@ -120,7 +125,7 @@ const summaryParagraphs = String(service.summary ?? "")
 
     {service.category === "abroad" ? (
       <section class="mt-8">
-        <UniversityFinder anchorId="study-abroad-finder" compact />
+        <UniversityFinder anchorId="study-abroad-finder" compact totalPrograms={catalogProgramCount} />
       </section>
     ) : null}
   </main>

@@ -2,22 +2,20 @@
 import { normalizeImageUrl } from "../lib/image-url";
 import type { RuntimeService } from "../lib/services-store";
 import {
+  STUDY_ABROAD_PROGRAMS,
   STUDY_ABROAD_MAJOR_OPTIONS,
 } from "../lib/study-abroad-programs";
-import {
-  readStudyAbroadFinderCountries,
-  readStudyAbroadFinderPrograms,
-} from "../lib/study-abroad-catalog-store";
+import { getStudyAbroadUniversityNameZh } from "../lib/study-abroad-university-names";
+import { readStudyAbroadCatalogSyncState } from "../lib/study-abroad-catalog-sync";
 
 type Props = {
   services?: RuntimeService[];
 };
 
 const { services = [] } = Astro.props as Props;
-const [countryOptions, finderPrograms] = await Promise.all([
-  readStudyAbroadFinderCountries(),
-  readStudyAbroadFinderPrograms(),
-]);
+const syncState = await readStudyAbroadCatalogSyncState();
+const latestSnapshot = syncState.runs[0]?.after;
+const fallbackCountryCount = new Set(STUDY_ABROAD_PROGRAMS.map((program) => program.country)).size;
 
 const abroadServices = Array.isArray(services)
   ? services
@@ -35,11 +33,11 @@ const summaryParagraphs = String(featuredService?.summary ?? "")
 
 const sectionStats = [
   {
-    value: `${finderPrograms.length}+`,
+    value: `${latestSnapshot?.programCount ?? STUDY_ABROAD_PROGRAMS.length}+`,
     label: "项目底库",
   },
   {
-    value: `${countryOptions.length}`,
+    value: `${latestSnapshot?.countryCount ?? fallbackCountryCount}`,
     label: "国家 / 地区",
   },
   {
@@ -66,10 +64,11 @@ const journeySteps = [
   },
 ];
 
-const featuredPrograms = finderPrograms.slice(0, 3);
-const featuredCountries = ["美国", "英国", "中国香港", "新加坡", "加拿大", "澳大利亚"].filter(
-  (country) => countryOptions.includes(country)
-);
+const featuredPrograms = STUDY_ABROAD_PROGRAMS.slice(0, 3).map((program) => ({
+  ...program,
+  schoolNameZh: getStudyAbroadUniversityNameZh(program.schoolName),
+}));
+const featuredCountries = ["美国", "英国", "中国香港", "新加坡", "加拿大", "澳大利亚"];
 const refinedHighlights = (
   featuredService?.highlights?.length
     ? featuredService.highlights

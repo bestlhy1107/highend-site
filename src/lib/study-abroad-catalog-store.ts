@@ -1,4 +1,8 @@
-import { readJsonArrayFile, writeJsonArrayFile } from "./json-file-store";
+import {
+  invalidateJsonArrayFileCache,
+  readJsonArrayFile,
+  writeJsonArrayFile,
+} from "./json-file-store";
 import {
   MAJOR_FAMILIES,
   SPECIALIZATION_QUERY_ALIASES,
@@ -104,6 +108,26 @@ export type StudyAbroadAdmissionsCoverageGroup = {
 const SOURCE_FILE = "study-abroad-sources.json";
 const UNIVERSITY_FILE = "study-abroad-universities.json";
 const PROGRAM_FILE = "study-abroad-programs.json";
+
+const derivedCatalogCache = new Map<string, Promise<unknown>>();
+
+function readDerivedCatalogCache<T>(key: string, load: () => Promise<T>) {
+  const cached = derivedCatalogCache.get(key);
+  if (cached) {
+    return cached as Promise<T>;
+  }
+
+  const nextPromise = load().catch((error) => {
+    derivedCatalogCache.delete(key);
+    throw error;
+  });
+  derivedCatalogCache.set(key, nextPromise as Promise<unknown>);
+  return nextPromise;
+}
+
+function invalidateStudyAbroadCatalogDerivedCache() {
+  derivedCatalogCache.clear();
+}
 
 function normalizeLookupText(value: string) {
   return String(value || "")
@@ -464,38 +488,46 @@ const DEFAULT_UNIVERSITIES = buildFallbackUniversities();
 const DEFAULT_PROGRAMS = buildFallbackPrograms();
 
 export async function readStudyAbroadCatalogSources() {
-  return readJsonArrayFile({
-    fileName: SOURCE_FILE,
-    fallback: [],
-    normalize: normalizeSource,
-    isValid: isValidSource,
-    compare: compareByPriority,
-  });
+  return readDerivedCatalogCache("catalog:sources", () =>
+    readJsonArrayFile({
+      fileName: SOURCE_FILE,
+      fallback: [],
+      normalize: normalizeSource,
+      isValid: isValidSource,
+      compare: compareByPriority,
+    })
+  );
 }
 
 export async function readStudyAbroadCatalogUniversities() {
-  return readJsonArrayFile({
-    fileName: UNIVERSITY_FILE,
-    fallback: DEFAULT_UNIVERSITIES,
-    normalize: normalizeUniversity,
-    isValid: isValidUniversity,
-    compare: compareUniversities,
-  });
+  return readDerivedCatalogCache("catalog:universities", () =>
+    readJsonArrayFile({
+      fileName: UNIVERSITY_FILE,
+      fallback: DEFAULT_UNIVERSITIES,
+      normalize: normalizeUniversity,
+      isValid: isValidUniversity,
+      compare: compareUniversities,
+    })
+  );
 }
 
 export async function readStudyAbroadCatalogPrograms() {
-  return readJsonArrayFile({
-    fileName: PROGRAM_FILE,
-    fallback: DEFAULT_PROGRAMS,
-    normalize: normalizeProgram,
-    isValid: isValidProgram,
-    compare: comparePrograms,
-  });
+  return readDerivedCatalogCache("catalog:programs", () =>
+    readJsonArrayFile({
+      fileName: PROGRAM_FILE,
+      fallback: DEFAULT_PROGRAMS,
+      normalize: normalizeProgram,
+      isValid: isValidProgram,
+      compare: comparePrograms,
+    })
+  );
 }
 
 export async function writeStudyAbroadCatalogUniversities(
   universities: StudyAbroadCatalogUniversity[]
 ) {
+  invalidateJsonArrayFileCache(UNIVERSITY_FILE);
+  invalidateStudyAbroadCatalogDerivedCache();
   return writeJsonArrayFile(universities, {
     fileName: UNIVERSITY_FILE,
     normalize: normalizeUniversity,
@@ -505,6 +537,8 @@ export async function writeStudyAbroadCatalogUniversities(
 }
 
 export async function writeStudyAbroadCatalogPrograms(programs: StudyAbroadCatalogProgram[]) {
+  invalidateJsonArrayFileCache(PROGRAM_FILE);
+  invalidateStudyAbroadCatalogDerivedCache();
   return writeJsonArrayFile(programs, {
     fileName: PROGRAM_FILE,
     normalize: normalizeProgram,
@@ -514,11 +548,12 @@ export async function writeStudyAbroadCatalogPrograms(programs: StudyAbroadCatal
 }
 
 export async function readStudyAbroadCatalogSummary() {
-  const [sources, universities, programs] = await Promise.all([
-    readStudyAbroadCatalogSources(),
-    readStudyAbroadCatalogUniversities(),
-    readStudyAbroadCatalogPrograms(),
-  ]);
+  return readDerivedCatalogCache("catalog:summary", async () => {
+    const [sources, universities, programs] = await Promise.all([
+      readStudyAbroadCatalogSources(),
+      readStudyAbroadCatalogUniversities(),
+      readStudyAbroadCatalogPrograms(),
+    ]);
 
   const countries = new Set(universities.map((item) => item.country));
   const qsCoverage = universities.filter((item) => item.qsRank !== null).length;
@@ -602,57 +637,62 @@ export async function readStudyAbroadCatalogSummary() {
   const countryAdmissionsCoverage = buildCoverageGroups((program) => program.country);
   const disciplineAdmissionsCoverage = buildCoverageGroups((program) => program.discipline);
 
-  return {
-    sources,
-    universities,
-    programs,
-    stats: {
-      sourceCount: sources.length,
-      universityCount: universities.length,
-      programCount: programs.length,
-      countryCount: countries.size,
-      qsCoverage,
-      tuitionCoverage,
-      admissionsCoverage,
-      structuredAdmissionsCoverage,
-      completeAdmissionsCoverage,
-      sourceStatusCounts,
-      countryAdmissionsCoverage,
-      disciplineAdmissionsCoverage,
-    },
-  };
+    return {
+      sources,
+      universities,
+      programs,
+      stats: {
+        sourceCount: sources.length,
+        universityCount: universities.length,
+        programCount: programs.length,
+        countryCount: countries.size,
+        qsCoverage,
+        tuitionCoverage,
+        admissionsCoverage,
+        structuredAdmissionsCoverage,
+        completeAdmissionsCoverage,
+        sourceStatusCounts,
+        countryAdmissionsCoverage,
+        disciplineAdmissionsCoverage,
+      },
+    };
+  });
 }
 
 export async function readStudyAbroadFinderPrograms() {
-  const [universities, programs] = await Promise.all([
-    readStudyAbroadCatalogUniversities(),
-    readStudyAbroadCatalogPrograms(),
-  ]);
+  return readDerivedCatalogCache("finder:programs", async () => {
+    const [universities, programs] = await Promise.all([
+      readStudyAbroadCatalogUniversities(),
+      readStudyAbroadCatalogPrograms(),
+    ]);
 
-  const universityMap = new Map(universities.map((item) => [item.id, item]));
+    const universityMap = new Map(universities.map((item) => [item.id, item]));
 
-  return programs
-    .map((program) => {
-      const university = universityMap.get(program.universityId);
+    return programs
+      .map((program) => {
+        const university = universityMap.get(program.universityId);
 
-      return {
-        ...program,
-        schoolNameZh: university?.nameZh || program.schoolNameZh || "",
-        officialWebsite: university?.officialWebsite ?? safeOrigin(program.overviewUrl),
-        websiteDomain: university?.websiteDomain ?? safeHost(program.overviewUrl),
-        qsRank: university?.qsRank ?? null,
-        qsRankingYear: university?.qsRankingYear ?? null,
-        rankingSource: university?.rankingSource ?? "",
-      } satisfies StudyAbroadFinderProgram;
-    })
-    .sort(compareFinderPrograms);
+        return {
+          ...program,
+          schoolNameZh: university?.nameZh || program.schoolNameZh || "",
+          officialWebsite: university?.officialWebsite ?? safeOrigin(program.overviewUrl),
+          websiteDomain: university?.websiteDomain ?? safeHost(program.overviewUrl),
+          qsRank: university?.qsRank ?? null,
+          qsRankingYear: university?.qsRankingYear ?? null,
+          rankingSource: university?.rankingSource ?? "",
+        } satisfies StudyAbroadFinderProgram;
+      })
+      .sort(compareFinderPrograms);
+  });
 }
 
 export async function readStudyAbroadFinderCountries() {
-  const universities = await readStudyAbroadCatalogUniversities();
-  return Array.from(
-    new Set(universities.map((item) => item.country).filter(Boolean))
-  ).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  return readDerivedCatalogCache("finder:countries", async () => {
+    const universities = await readStudyAbroadCatalogUniversities();
+    return Array.from(
+      new Set(universities.map((item) => item.country).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  });
 }
 
 export async function readStudyAbroadFinderProgramById(programId: string) {
