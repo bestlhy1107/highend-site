@@ -1,6 +1,113 @@
 {
-  "updatedAt": "2026-05-06T03:45:23.557Z",
+  "updatedAt": "2026-05-06T04:03:58.532Z",
   "runs": [
+    {
+      "runAt": "2026-05-06T04:03:58.532Z",
+      "mode": "auto",
+      "trigger": "script",
+      "ok": true,
+      "sourceRuns": [
+        {
+          "id": "us-pilot",
+          "label": "美国试点底库",
+          "ok": true,
+          "message": "当前未配置正式 COLLEGE_SCORECARD_API_KEY，已安全跳过美国源，避免 demo key 在后台或自动同步里撞到限流。",
+          "startedAt": "2026-05-06T04:03:50.391Z",
+          "finishedAt": "2026-05-06T04:03:50.391Z",
+          "durationMs": 0,
+          "metrics": {
+            "skipped": true,
+            "reason": "demo-key-skip-us"
+          }
+        },
+        {
+          "id": "global-universities",
+          "label": "全球学校底库",
+          "ok": true,
+          "message": "已同步全球学校底库：当前共 10370 所学校，覆盖 201 个国家 / 地区；其中美国外学校 7870 所。",
+          "startedAt": "2026-05-06T04:03:50.391Z",
+          "finishedAt": "2026-05-06T04:03:54.524Z",
+          "durationMs": 4133,
+          "metrics": {
+            "ok": true,
+            "importedRecordCount": 10224,
+            "totalUniversityCount": 10370,
+            "nonUsUniversityCount": 7870,
+            "countryCount": 201,
+            "message": "已同步全球学校底库：当前共 10370 所学校，覆盖 201 个国家 / 地区；其中美国外学校 7870 所。"
+          }
+        },
+        {
+          "id": "uk-pilot",
+          "label": "英国硕士项目种子",
+          "ok": true,
+          "message": "已同步英国硕士项目种子：当前英国学校 195 所，其中 7 所已补项目层，共 9 个项目。",
+          "startedAt": "2026-05-06T04:03:54.524Z",
+          "finishedAt": "2026-05-06T04:03:55.879Z",
+          "durationMs": 1355,
+          "metrics": {
+            "ok": true,
+            "importedProgramCount": 9,
+            "ukUniversityCount": 195,
+            "ukSchoolWithProgramCount": 7,
+            "message": "已同步英国硕士项目种子：当前英国学校 195 所，其中 7 所已补项目层，共 9 个项目。"
+          }
+        },
+        {
+          "id": "focus-pilot",
+          "label": "重点国家官方项目种子",
+          "ok": true,
+          "message": "已同步重点国家官方项目种子：当前中国香港 / 新加坡 / 加拿大 / 澳大利亚共 251 所学校，其中 18 所已补项目层，共 24 个项目。",
+          "startedAt": "2026-05-06T04:03:55.879Z",
+          "finishedAt": "2026-05-06T04:03:57.213Z",
+          "durationMs": 1334,
+          "metrics": {
+            "ok": true,
+            "importedProgramCount": 24,
+            "focusUniversityCount": 251,
+            "focusSchoolWithProgramCount": 18,
+            "message": "已同步重点国家官方项目种子：当前中国香港 / 新加坡 / 加拿大 / 澳大利亚共 251 所学校，其中 18 所已补项目层，共 24 个项目。"
+          }
+        },
+        {
+          "id": "cache-restore",
+          "label": "门槛缓存回填",
+          "ok": true,
+          "message": "已从本地 admissions cache 回填 6 个项目的门槛快照。",
+          "startedAt": "2026-05-06T04:03:57.223Z",
+          "finishedAt": "2026-05-06T04:03:58.522Z",
+          "durationMs": 1299,
+          "metrics": {
+            "restoredCount": 6
+          }
+        }
+      ],
+      "before": {
+        "universityCount": 10370,
+        "programCount": 23610,
+        "countryCount": 201,
+        "tuitionCoverage": 23575,
+        "admissionsCoverage": 355,
+        "structuredAdmissionsCoverage": 27
+      },
+      "after": {
+        "universityCount": 10370,
+        "programCount": 23615,
+        "countryCount": 201,
+        "tuitionCoverage": 23575,
+        "admissionsCoverage": 355,
+        "structuredAdmissionsCoverage": 27
+      },
+      "delta": {
+        "universityCount": 0,
+        "programCount": 5,
+        "countryCount": 0,
+        "tuitionCoverage": 0,
+        "admissionsCoverage": 0,
+        "structuredAdmissionsCoverage": 0
+      },
+      "message": "底库同步完成：成功 4/4 个执行来源，当前共 10370 所学校、23615 个项目，覆盖 201 个国家 / 地区。本轮净增学校 0 所、项目 5 个、国家 0 个。 安全跳过：美国试点底库。"
+    },
     {
       "runAt": "2026-05-06T03:45:23.557Z",
       "mode": "auto",

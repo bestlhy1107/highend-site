@@ -8395,7 +8395,7 @@
     "sourceIds": [
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "torrens-university-australia-au-south-australia",
@@ -8600,7 +8600,7 @@
       "hipolabs-university-domains",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "university-of-tasmania-au-tasmania",
@@ -8622,9 +8622,9 @@
   {
     "id": "university-of-technology-sydney-au-new-south-wales",
     "name": "University of Technology Sydney",
-    "nameZh": "",
+    "nameZh": "悉尼科技大学",
     "country": "澳大利亚",
-    "city": "",
+    "city": "Sydney",
     "stateOrProvince": "New South Wales",
     "officialWebsite": "http://www.uts.edu.au/",
     "websiteDomain": "uts.edu.au",
@@ -8632,7 +8632,8 @@
     "qsRankingYear": 0,
     "rankingSource": "",
     "sourceIds": [
-      "hipolabs-university-domains"
+      "hipolabs-university-domains",
+      "focus-country-official-pages"
     ],
     "updatedAt": "2026-05-06"
   },
@@ -8720,7 +8721,7 @@
       "curated-manual",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "victoria-university-au-victoria",
@@ -52717,7 +52718,7 @@
       "hipolabs-university-domains",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "southern-alberta-institute-of-technology-ca-alberta",
@@ -53585,7 +53586,7 @@
       "hipolabs-university-domains",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "university-of-toronto-mississauga-ca-ontario",
@@ -53641,9 +53642,9 @@
   {
     "id": "university-of-victoria-ca-british-columbia",
     "name": "University of Victoria",
-    "nameZh": "",
+    "nameZh": "维多利亚大学",
     "country": "加拿大",
-    "city": "",
+    "city": "Victoria",
     "stateOrProvince": "British Columbia",
     "officialWebsite": "http://www.uvic.ca/",
     "websiteDomain": "uvic.ca",
@@ -53651,7 +53652,8 @@
     "qsRankingYear": 0,
     "rankingSource": "",
     "sourceIds": [
-      "hipolabs-university-domains"
+      "hipolabs-university-domains",
+      "focus-country-official-pages"
     ],
     "updatedAt": "2026-05-06"
   },
@@ -53688,7 +53690,7 @@
       "hipolabs-university-domains",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "university-of-windsor-ca-ontario",
@@ -143395,7 +143397,7 @@
       "hipolabs-university-domains",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "national-university-of-singapore",
@@ -143414,7 +143416,7 @@
       "hipolabs-university-domains",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "ngee-ann-polytechnic-sg-global",
@@ -143498,7 +143500,8 @@
     "rankingSource": "待接入",
     "sourceIds": [
       "curated-manual",
-      "hipolabs-university-domains"
+      "hipolabs-university-domains",
+      "focus-country-official-pages"
     ],
     "updatedAt": "2026-05-06"
   },
@@ -176932,9 +176935,9 @@
   {
     "id": "city-university-of-hong-kong-hk-global",
     "name": "City University of Hong Kong",
-    "nameZh": "",
+    "nameZh": "香港城市大学",
     "country": "中国香港",
-    "city": "",
+    "city": "Hong Kong",
     "stateOrProvince": "",
     "officialWebsite": "https://www.cityu.edu.hk/",
     "websiteDomain": "cityu.edu.hk",
@@ -176942,7 +176945,8 @@
     "qsRankingYear": 0,
     "rankingSource": "",
     "sourceIds": [
-      "hipolabs-university-domains"
+      "hipolabs-university-domains",
+      "focus-country-official-pages"
     ],
     "updatedAt": "2026-05-06"
   },
@@ -177048,7 +177052,7 @@
       "hipolabs-university-domains",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "the-education-university-of-hong-kong-hk-global",
@@ -177104,9 +177108,9 @@
   {
     "id": "the-hong-kong-polytechnic-university-hk-global",
     "name": "The Hong Kong Polytechnic University",
-    "nameZh": "",
+    "nameZh": "香港理工大学",
     "country": "中国香港",
-    "city": "",
+    "city": "Hong Kong",
     "stateOrProvince": "",
     "officialWebsite": "https://www.polyu.edu.hk/",
     "websiteDomain": "polyu.edu.hk",
@@ -177114,7 +177118,8 @@
     "qsRankingYear": 0,
     "rankingSource": "",
     "sourceIds": [
-      "hipolabs-university-domains"
+      "hipolabs-university-domains",
+      "focus-country-official-pages"
     ],
     "updatedAt": "2026-05-06"
   },
@@ -177135,7 +177140,7 @@
       "hipolabs-university-domains",
       "focus-country-official-pages"
     ],
-    "updatedAt": "2026-05-05"
+    "updatedAt": "2026-05-06"
   },
   {
     "id": "the-university-of-hong-kong",

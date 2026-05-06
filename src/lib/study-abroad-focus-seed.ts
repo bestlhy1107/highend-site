@@ -9,7 +9,7 @@ import {
 import { getStudyAbroadUniversityNameZh } from "./study-abroad-university-names";
 import { slugify } from "./text-fields";
 
-const FOCUS_SEED_CHECKED_AT = "2026-05-05";
+const FOCUS_SEED_CHECKED_AT = "2026-05-06";
 const FOCUS_SOURCE_ID = "focus-country-official-pages";
 
 type FocusSeedProgram = {
@@ -30,6 +30,30 @@ type FocusSeedProgram = {
 };
 
 const FOCUS_SEED_PROGRAMS: FocusSeedProgram[] = [
+  {
+    id: "cityu-msc-cs",
+    country: "中国香港",
+    schoolName: "City University of Hong Kong",
+    city: "Hong Kong",
+    programName: "Master of Science in Computer Science",
+    discipline: "计算机 / AI",
+    summary:
+      "香港城市大学官网显示，该项目面向希望系统进阶 computer science 与 software systems 的申请者，课程覆盖算法、系统、数据与智能计算方向。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "computer science",
+      "计算机科学",
+      "software systems",
+      "algorithms",
+      "data",
+      "intelligent computing",
+    ],
+    tags: ["中国香港", "计算机", "官方课程页"],
+    overviewUrl: "https://www.cs.cityu.edu.hk/en/academic-programmes/msc-computer-science/aims",
+    admissionsUrl: "https://www.cs.cityu.edu.hk/academic-programmes/msc-computer-science/admissions",
+    priority: 88,
+  },
   {
     id: "hkust-msba",
     country: "中国香港",
@@ -53,6 +77,30 @@ const FOCUS_SEED_PROGRAMS: FocusSeedProgram[] = [
     overviewUrl: "https://msba.hkust.edu.hk/program/overview-schedule",
     admissionsUrl: "https://msba.hkust.edu.hk/admission/admission-requirements",
     priority: 90,
+  },
+  {
+    id: "polyu-msc-dsa",
+    country: "中国香港",
+    schoolName: "The Hong Kong Polytechnic University",
+    city: "Hong Kong",
+    programName: "Master of Science in Data Science and Analytics",
+    discipline: "商业分析 / 数据",
+    summary:
+      "香港理工大学官网显示，该项目围绕 data science、analytics methods 与 business applications，强调把统计、编程与数据决策结合到真实应用中。",
+    duration: "1.5 年",
+    intake: "9 月",
+    keywords: [
+      "data science",
+      "analytics",
+      "数据科学",
+      "统计",
+      "programming",
+      "business applications",
+    ],
+    tags: ["中国香港", "数据科学", "官方课程页"],
+    overviewUrl: "https://www.polyu.edu.hk/dsai/study/tpg/mscdsa-/?sc_lang=en",
+    admissionsUrl: "https://www.polyu.edu.hk/dsai/study/tpg/mscdsa-/?sc_lang=en",
+    priority: 87,
   },
   {
     id: "cuhk-mscitm",
@@ -155,6 +203,30 @@ const FOCUS_SEED_PROGRAMS: FocusSeedProgram[] = [
     priority: 90,
   },
   {
+    id: "smu-mitb",
+    country: "新加坡",
+    schoolName: "Singapore Management University",
+    city: "Singapore",
+    programName: "Master of IT in Business",
+    discipline: "商业分析 / 数据",
+    summary:
+      "SMU 官网显示，MITB 以 analytics、digital transformation 与 AI-enabled business applications 为核心，适合希望站在 business 与 technology 交叉点发展的申请者。",
+    duration: "12-18 个月",
+    intake: "8 月",
+    keywords: [
+      "IT in business",
+      "business analytics",
+      "data analytics",
+      "digital transformation",
+      "artificial intelligence",
+      "fintech",
+    ],
+    tags: ["新加坡", "商业分析", "数字化", "官方课程页"],
+    overviewUrl: "https://masters.smu.edu.sg/programme/master-of-it-in-business",
+    admissionsUrl: "https://masters.smu.edu.sg/programme/master-of-it-in-business",
+    priority: 88,
+  },
+  {
     id: "rotman-mma",
     country: "加拿大",
     schoolName: "University of Toronto",
@@ -179,6 +251,30 @@ const FOCUS_SEED_PROGRAMS: FocusSeedProgram[] = [
     admissionsUrl:
       "https://www.rotman.utoronto.ca/programs/specialized-programs/master-of-management-analytics/",
     priority: 89,
+  },
+  {
+    id: "uvic-mads",
+    country: "加拿大",
+    schoolName: "University of Victoria",
+    city: "Victoria",
+    programName: "Master of Engineering in Applied Data Science",
+    discipline: "商业分析 / 数据",
+    summary:
+      "维多利亚大学官网显示，Applied Data Science 项目结合 statistics、machine learning 与 applied computing，强调以工程化方式解决真实数据问题。",
+    duration: "16 个月",
+    intake: "9 月",
+    keywords: [
+      "applied data science",
+      "数据科学",
+      "machine learning",
+      "statistics",
+      "applied computing",
+      "data engineering",
+    ],
+    tags: ["加拿大", "数据科学", "官方课程页"],
+    overviewUrl: "https://www.uvic.ca/ecs/programs/professional-programs/meng-mads/index.php",
+    admissionsUrl: "https://www.uvic.ca/ecs/programs/professional-programs/meng-mads/index.php",
+    priority: 84,
   },
   {
     id: "western-mda",
@@ -228,6 +324,30 @@ const FOCUS_SEED_PROGRAMS: FocusSeedProgram[] = [
       "https://www.sfu.ca/fas/study/future-graduates/programs/master-big-data.html",
     admissionsUrl:
       "https://www.sfu.ca/fas/study/future-graduates/programs/master-big-data.html",
+    priority: 84,
+  },
+  {
+    id: "uts-mdsi",
+    country: "澳大利亚",
+    schoolName: "University of Technology Sydney",
+    city: "Sydney",
+    programName: "Master of Data Science and Innovation",
+    discipline: "商业分析 / 数据",
+    summary:
+      "悉尼科技大学官网显示，该项目强调 data science、analytics、innovation 与商业应用的结合，适合希望在 industry-facing data roles 中发展的申请者。",
+    duration: "2 年",
+    intake: "2 月 / 8 月",
+    keywords: [
+      "data science",
+      "innovation",
+      "analytics",
+      "数据科学",
+      "business applications",
+      "machine learning",
+    ],
+    tags: ["澳大利亚", "数据科学", "创新", "官方课程页"],
+    overviewUrl: "https://www.uts.edu.au/courses/master-of-data-science-and-innovation",
+    admissionsUrl: "https://www.uts.edu.au/courses/master-of-data-science-and-innovation",
     priority: 84,
   },
   {
