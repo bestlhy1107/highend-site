@@ -9,6 +9,7 @@ import {
 import { syncGlobalStudyAbroadUniversityCatalog } from "./study-abroad-global-import";
 import { syncUsStudyAbroadCatalog } from "./study-abroad-us-import";
 import { syncUkStudyAbroadPilotPrograms } from "./study-abroad-uk-seed";
+import { syncFocusStudyAbroadPilotPrograms } from "./study-abroad-focus-seed";
 import { readStudyAbroadCachedAdmissionsInsights } from "./study-abroad-admissions";
 
 const CATALOG_SYNC_STATE_FILE = "study-abroad-catalog-sync-state.json";
@@ -21,6 +22,7 @@ type CatalogSyncSourceId =
   | "global-universities"
   | "us-pilot"
   | "uk-pilot"
+  | "focus-pilot"
   | "cache-restore";
 
 export type StudyAbroadCatalogSyncSnapshot = {
@@ -71,6 +73,7 @@ export type StudyAbroadCatalogSyncOptions = {
   includeGlobal?: boolean;
   includeUs?: boolean;
   includeUk?: boolean;
+  includeFocus?: boolean;
   usMaxPages?: number;
   usPerPage?: number;
   mode?: "manual" | "auto";
@@ -81,6 +84,7 @@ export type StudyAbroadCatalogSyncSelection = {
   includeGlobal: boolean;
   includeUs: boolean;
   includeUk: boolean;
+  includeFocus: boolean;
   skippedUsForDemoKey: boolean;
   scorecardMode: "official-key" | "demo-key-skip-us";
 };
@@ -100,6 +104,7 @@ export function resolveStudyAbroadCatalogSyncSelection(
 ): StudyAbroadCatalogSyncSelection {
   const includeGlobal = options.includeGlobal !== false;
   const includeUk = options.includeUk !== false;
+  const includeFocus = options.includeFocus !== false;
   const requestedUs = options.includeUs !== false;
   const hasOfficialScorecardKey = hasOfficialCollegeScorecardApiKey();
   const includeUs = requestedUs && hasOfficialScorecardKey;
@@ -108,6 +113,7 @@ export function resolveStudyAbroadCatalogSyncSelection(
     includeGlobal,
     includeUs,
     includeUk,
+    includeFocus,
     skippedUsForDemoKey: requestedUs && !hasOfficialScorecardKey,
     scorecardMode: hasOfficialScorecardKey ? "official-key" : "demo-key-skip-us",
   };
@@ -145,6 +151,7 @@ function normalizeSyncState(
                     id:
                       sourceRun?.id === "global-universities" ||
                       sourceRun?.id === "uk-pilot" ||
+                      sourceRun?.id === "focus-pilot" ||
                       sourceRun?.id === "cache-restore"
                         ? sourceRun.id
                         : "us-pilot",
@@ -334,6 +341,13 @@ export async function executeStudyAbroadCatalogSync(
           id: "uk-pilot" as const,
           label: "英国硕士项目种子",
           run: () => syncUkStudyAbroadPilotPrograms(),
+        }
+      : null,
+    selection.includeFocus
+      ? {
+          id: "focus-pilot" as const,
+          label: "重点国家官方项目种子",
+          run: () => syncFocusStudyAbroadPilotPrograms(),
         }
       : null,
   ].filter(Boolean);

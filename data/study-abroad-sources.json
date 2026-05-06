@@ -60,6 +60,21 @@
     "reviewedAt": "2026-04-29"
   },
   {
+    "id": "focus-country-official-pages",
+    "name": "Focus Country Official Graduate Pages",
+    "scope": "country",
+    "category": "official",
+    "accessModel": "manual",
+    "status": "pilot",
+    "regions": ["中国香港", "新加坡", "加拿大", "澳大利亚"],
+    "fieldCoverage": ["项目名称", "项目页", "招生要求页", "硕士项目摘要"],
+    "recommendedUse": "作为重点国家项目层的官方种子，优先补齐商业分析、计算机 / AI、信息技术等高频方向。",
+    "url": "https://msba.hkust.edu.hk/program/overview-schedule",
+    "notes": "适合作为香港、新加坡、加拿大、澳大利亚的第一批官方项目页来源，再逐步扩充到更多学校和更多专业方向。",
+    "priority": 5,
+    "reviewedAt": "2026-05-05"
+  },
+  {
     "id": "ucas-courses-data",
     "name": "UCAS Courses Data Service",
     "scope": "country",
