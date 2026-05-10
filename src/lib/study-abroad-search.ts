@@ -47,6 +47,14 @@ export type StudyAbroadSearchResult = {
   message: string;
 };
 
+export type StudyAbroadSearchExpansionResult = {
+  candidateResults: StudyAbroadReviewCandidate[];
+  expansionEnabled: boolean;
+  expansionAttempted: boolean;
+  pendingReviewCount: number;
+  message: string;
+};
+
 export type StudyAbroadUniversityMatch = {
   universityId: string;
   schoolName: string;
@@ -216,6 +224,7 @@ const DEGREE_CONFLICT_HINTS: Record<string, string[]> = {
 
 const MIN_CANDIDATE_SCORE = 42;
 const MAX_CANDIDATE_RESULTS = 8;
+const MAX_REVIEW_QUEUE_CANDIDATES = 4;
 const MAX_VERIFIED_RESULTS = 60;
 
 function hasStructuredFitInput(query: ReturnType<typeof normalizeStudyAbroadQuery>) {
@@ -445,7 +454,7 @@ function matchesBudgetTier(tuitionAmount: string, budgetTier: string) {
   }
 }
 
-function matchesIntake(intakeText: string, intakeFilter: string) {
+function matchesIntake(intakeText?: string, intakeFilter?: string) {
   if (!intakeFilter) return true;
 
   const normalized = normalizeText(intakeText);
@@ -463,7 +472,7 @@ function matchesIntake(intakeText: string, intakeFilter: string) {
   return hints.some((hint) => normalized.includes(normalizeText(hint)));
 }
 
-function normalizeText(value: string) {
+function normalizeText(value?: string) {
   return String(value || "")
     .toLowerCase()
     .trim()
@@ -750,7 +759,10 @@ async function buildCountryCatalogUniversityMatches(
 }
 
 export async function searchStudyAbroadPrograms(
-  input: StudyAbroadSearchInput
+  input: StudyAbroadSearchInput,
+  options?: {
+    includeExternalCandidates?: boolean;
+  }
 ): Promise<StudyAbroadSearchResult> {
   const query = normalizeStudyAbroadQuery(input);
   const sourcePrograms = await readStudyAbroadFinderPrograms();
@@ -777,11 +789,16 @@ export async function searchStudyAbroadPrograms(
       : buildUniversityMatches(allVerifiedResults);
   const universityMatches = allUniversityMatches;
   const expansionEnabled = canUseExternalSearch();
+  const includeExternalCandidates = options?.includeExternalCandidates === true;
+  const shouldExpand =
+    includeExternalCandidates &&
+    shouldRunExternalSearch(query, verifiedResults) &&
+    expansionEnabled;
   let pendingReviewCount = 0;
   let expansionAttempted = false;
   let candidateResults: SearchWebCandidate[] = [];
 
-  if (shouldRunExternalSearch(query, verifiedResults) && expansionEnabled) {
+  if (shouldExpand) {
     expansionAttempted = true;
     const candidates = await searchExternalOfficialCandidates(query, verifiedResults);
     candidateResults = candidates;
@@ -789,11 +806,14 @@ export async function searchStudyAbroadPrograms(
     if (candidates.length) {
       const queued = await enqueueStudyAbroadReview({
         ...query,
-        candidates,
+        candidates: selectCandidatesForReviewQueue(candidates),
       });
 
       if (queued.saved) {
-        pendingReviewCount = candidates.length;
+        pendingReviewCount = Math.min(
+          candidates.length,
+          MAX_REVIEW_QUEUE_CANDIDATES
+        );
       }
     }
   }
@@ -823,6 +843,65 @@ export async function searchStudyAbroadPrograms(
       fitSummary,
     }),
   };
+}
+
+export async function expandStudyAbroadSearchCandidates(
+  input: StudyAbroadSearchInput
+): Promise<StudyAbroadSearchExpansionResult> {
+  const query = normalizeStudyAbroadQuery(input);
+  const expansionEnabled = canUseExternalSearch();
+
+  if (!expansionEnabled || !shouldRunExternalSearch(query, [])) {
+    return {
+      candidateResults: [],
+      expansionEnabled,
+      expansionAttempted: false,
+      pendingReviewCount: 0,
+      message: "",
+    };
+  }
+
+  const sourcePrograms = await readStudyAbroadFinderPrograms();
+  const verifiedResults = await searchVerifiedStudyAbroadPrograms(query, sourcePrograms);
+  const candidateResults = await searchExternalOfficialCandidates(query, verifiedResults);
+  let pendingReviewCount = 0;
+
+  if (candidateResults.length) {
+    const queued = await enqueueStudyAbroadReview({
+      ...query,
+      candidates: selectCandidatesForReviewQueue(candidateResults),
+    });
+
+    if (queued.saved) {
+      pendingReviewCount = Math.min(
+        candidateResults.length,
+        MAX_REVIEW_QUEUE_CANDIDATES
+      );
+    }
+  }
+
+  return {
+    candidateResults,
+    expansionEnabled,
+    expansionAttempted: true,
+    pendingReviewCount,
+    message:
+      candidateResults.length > 0
+        ? pendingReviewCount
+          ? `后台已补充 ${candidateResults.length} 条候选官网页，并同步到审核队列。`
+          : `后台已补充 ${candidateResults.length} 条候选官网页。`
+        : "后台候选官网页扩展未补充到更高质量结果。",
+  };
+}
+
+function selectCandidatesForReviewQueue(candidates: SearchWebCandidate[]) {
+  return candidates.slice(0, MAX_REVIEW_QUEUE_CANDIDATES).map((candidate) => ({
+    title: candidate.title,
+    link: candidate.link,
+    displayLink: candidate.displayLink,
+    snippet: candidate.snippet,
+    provider: candidate.provider,
+  }));
 }
 
 function shouldRunExternalSearch(

@@ -43,15 +43,31 @@ const widgetConfig = {
 
 <div class="consult-widget" data-consult-widget>
   <button
+    class="consult-backdrop"
+    type="button"
+    aria-label="关闭咨询窗口"
+    data-consult-backdrop
+    hidden
+  ></button>
+
+  <button
     class="consult-launcher"
     type="button"
     aria-label="打开咨询窗口"
+    aria-controls="consult-panel"
+    aria-expanded="false"
     data-consult-open
   >
     在线咨询
   </button>
 
-  <section class="consult-panel" aria-label="留学咨询窗口" data-consult-panel hidden>
+  <section
+    id="consult-panel"
+    class="consult-panel"
+    aria-label="留学咨询窗口"
+    data-consult-panel
+    hidden
+  >
     <div class="consult-topline"></div>
 
     <div class="consult-header">
@@ -64,7 +80,7 @@ const widgetConfig = {
           −
         </button>
         <button type="button" aria-label="关闭" data-consult-close>
-          □
+          x
         </button>
       </div>
     </div>
@@ -92,9 +108,12 @@ const widgetConfig = {
       </div>
     </form>
 
-    <script type="application/json" data-consult-config>
-      {JSON.stringify(widgetConfig)}
-    </script>
+    <script
+      type="application/json"
+      data-consult-config
+      is:inline
+      set:html={JSON.stringify(widgetConfig)}
+    ></script>
   </section>
 </div>
 
@@ -103,6 +122,7 @@ const widgetConfig = {
     const root = document.querySelector("[data-consult-widget]");
     if (!(root instanceof HTMLElement)) return;
 
+    const backdrop = root.querySelector("[data-consult-backdrop]");
     const panel = root.querySelector("[data-consult-panel]");
     const openButton = root.querySelector("[data-consult-open]");
     const minimizeButton = root.querySelector("[data-consult-minimize]");
@@ -114,6 +134,7 @@ const widgetConfig = {
     const sendButton = root.querySelector("[data-consult-send]");
     const configEl = root.querySelector("[data-consult-config]");
 
+    if (!(backdrop instanceof HTMLButtonElement)) return;
     if (!(panel instanceof HTMLElement)) return;
     if (!(openButton instanceof HTMLButtonElement)) return;
     if (!(minimizeButton instanceof HTMLButtonElement)) return;
@@ -158,6 +179,7 @@ const widgetConfig = {
 
     const closedKey = "consult-widget-closed";
     const sessionKey = "consult-widget-session";
+    const consultHash = "#consult";
     const messages = [];
     let selectedCountry = "";
     let selectedStage = "";
@@ -187,6 +209,11 @@ const widgetConfig = {
         window.sessionStorage.removeItem(key);
       } catch {}
     };
+
+    const mobileMedia =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(max-width: 720px)")
+        : null;
 
     const sessionId = (() => {
       const existing = readStorage(sessionKey);
@@ -236,6 +263,20 @@ const widgetConfig = {
       String(config.teacherName || "顾")
         .trim()
         .charAt(0) || "顾";
+
+    const syncOpenState = (expanded) => {
+      root.classList.toggle("is-open", expanded);
+      openButton.setAttribute("aria-expanded", expanded ? "true" : "false");
+      backdrop.hidden = !(expanded && mobileMedia?.matches);
+      document.documentElement.classList.toggle(
+        "consult-scroll-locked",
+        expanded && Boolean(mobileMedia?.matches),
+      );
+      document.body.classList.toggle(
+        "consult-scroll-locked",
+        expanded && Boolean(mobileMedia?.matches),
+      );
+    };
 
     const syncComposerState = () => {
       const hasValue = Boolean(input.value.trim());
@@ -580,16 +621,19 @@ const widgetConfig = {
     const openPanel = () => {
       bootMessages();
       panel.hidden = false;
-      root.classList.add("is-open");
+      syncOpenState(true);
       openButton.hidden = true;
       clearStorage(closedKey);
       scheduleIdleMessage();
       scrollToBottom();
+      window.requestAnimationFrame(() => {
+        input.focus({ preventScroll: true });
+      });
     };
 
     const minimizePanel = () => {
       clearIdleTimer();
-      root.classList.remove("is-open");
+      syncOpenState(false);
       panel.hidden = true;
       openButton.hidden = false;
     };
@@ -600,6 +644,7 @@ const widgetConfig = {
     };
 
     openButton.addEventListener("click", openPanel);
+    backdrop.addEventListener("click", closePanel);
     minimizeButton.addEventListener("click", minimizePanel);
     closeButton.addEventListener("click", closePanel);
 
@@ -620,22 +665,56 @@ const widgetConfig = {
       handleTextMessage(input.value);
     });
 
-    syncComposerState();
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && root.classList.contains("is-open")) {
+        closePanel();
+      }
+    });
 
-    if (readStorage(closedKey) === "1") {
-      minimizePanel();
-    } else {
-      window.setTimeout(openPanel, 700);
+    const handleViewportChange = () => {
+      syncOpenState(root.classList.contains("is-open"));
+    };
+
+    if (mobileMedia) {
+      if (typeof mobileMedia.addEventListener === "function") {
+        mobileMedia.addEventListener("change", handleViewportChange);
+      }
+    }
+
+    syncComposerState();
+    minimizePanel();
+
+    if (window.location.hash === consultHash && readStorage(closedKey) !== "1") {
+      openPanel();
     }
   })();
 </script>
 
 <style is:global>
+  .consult-scroll-locked {
+    overflow: hidden;
+  }
+
   .consult-widget {
     position: fixed;
     right: 16px;
-    bottom: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
     z-index: 120;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+    max-width: calc(100vw - 24px);
+  }
+
+  .consult-backdrop {
+    display: none;
+  }
+
+  .consult-launcher,
+  .consult-panel {
+    position: relative;
+    z-index: 1;
   }
 
   .consult-launcher {
@@ -646,13 +725,13 @@ const widgetConfig = {
     min-width: 112px;
     min-height: 46px;
     padding: 0 18px;
-    border: 1px solid rgba(255, 255, 255, 0.26);
+    border: 1px solid rgba(255, 255, 255, 0.24);
     border-radius: 999px;
-    background: linear-gradient(135deg, #ff6849, #ff4d4f);
+    background: linear-gradient(180deg, #1994ff 0%, #0071e3 100%);
     color: #fff;
     font-size: 14px;
     font-weight: 800;
-    box-shadow: 0 14px 34px rgba(255, 95, 77, 0.22);
+    box-shadow: 0 18px 38px rgba(0, 113, 227, 0.26);
     cursor: pointer;
     transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
   }
@@ -663,22 +742,24 @@ const widgetConfig = {
     height: 10px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.16);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.14);
   }
 
   .consult-panel {
-    width: min(360px, calc(100vw - 20px));
-    height: min(620px, calc(100vh - 20px));
-    border-radius: 8px;
+    width: min(360px, calc(100vw - 32px));
+    height: min(560px, calc(100vh - 96px));
+    max-height: calc(100vh - 96px);
+    border-radius: 20px;
     overflow: hidden;
-    background: #fff;
-    border: 1px solid rgba(70, 86, 145, 0.12);
-    box-shadow: 0 28px 72px rgba(45, 57, 120, 0.18);
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.86);
+    box-shadow: 0 30px 80px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(22px);
   }
 
   .consult-topline {
     height: 4px;
-    background: linear-gradient(90deg, #ff6849, #ff4d4f);
+    background: linear-gradient(90deg, #8bd6ff, #0071e3);
   }
 
   .consult-header {
@@ -688,14 +769,14 @@ const widgetConfig = {
     align-items: center;
     min-height: 60px;
     padding: 10px 14px 8px;
-    background: #fff;
+    background: rgba(255, 255, 255, 0.86);
   }
 
   .consult-status-pill {
     padding: 10px 18px;
     border-radius: 999px;
-    background: #f3f1fb;
-    color: #8993b1;
+    background: rgba(0, 113, 227, 0.08);
+    color: #48607b;
     font-size: 14px;
     font-weight: 800;
     text-align: center;
@@ -712,10 +793,10 @@ const widgetConfig = {
   .consult-header-actions button {
     width: 28px;
     height: 28px;
-    border: 1px solid rgba(70, 86, 145, 0.08);
+    border: 1px solid rgba(29, 29, 31, 0.06);
     border-radius: 999px;
-    background: #f7f8fd;
-    color: #8e96b1;
+    background: rgba(245, 245, 247, 0.92);
+    color: #7b8497;
     font-size: 16px;
     line-height: 1;
     cursor: pointer;
@@ -723,15 +804,15 @@ const widgetConfig = {
   }
 
   .consult-header-actions button:hover {
-    background: #eef1fa;
-    color: #5d688c;
+    background: rgba(0, 113, 227, 0.08);
+    color: #3d5f84;
     transform: translateY(-1px);
   }
 
   .consult-body {
     height: calc(100% - 160px);
     padding: 0 14px;
-    background: #fff;
+    background: transparent;
   }
 
   .consult-messages {
@@ -770,14 +851,14 @@ const widgetConfig = {
     height: 40px;
     border-radius: 999px;
     object-fit: cover;
-    background: linear-gradient(135deg, #ffd9d2, #ffb9ae);
-    box-shadow: 0 6px 18px rgba(45, 57, 120, 0.08);
+    background: linear-gradient(135deg, #d8ecff, #9ccfff);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
   }
 
   .consult-avatar-fallback {
     display: grid;
     place-items: center;
-    color: #ff5f4d;
+    color: #005cc5;
     font-size: 17px;
     font-weight: 900;
   }
@@ -791,7 +872,7 @@ const widgetConfig = {
     align-items: center;
     gap: 12px;
     margin-bottom: 6px;
-    color: #2e3240;
+    color: #1d1d1f;
     font-size: 15px;
     line-height: 1.2;
   }
@@ -802,7 +883,7 @@ const widgetConfig = {
   }
 
   .consult-message-meta span {
-    color: #434855;
+    color: #6e6e73;
     font-weight: 700;
   }
 
@@ -813,19 +894,19 @@ const widgetConfig = {
   .consult-bubble {
     max-width: min(92%, 286px);
     padding: 14px 16px;
-    border-radius: 8px;
+    border-radius: 18px;
     font-size: 15px;
     line-height: 1.62;
-    box-shadow: 0 8px 20px rgba(45, 57, 120, 0.1);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
   }
 
   .consult-bubble--bot {
-    background: #f3f2fb;
-    color: #222632;
+    background: rgba(245, 245, 247, 0.95);
+    color: #1d1d1f;
   }
 
   .consult-bubble--user {
-    background: linear-gradient(135deg, #ff6749, #ff4d4f);
+    background: linear-gradient(180deg, #1994ff 0%, #0071e3 100%);
     color: #fff;
     margin-left: auto;
   }
@@ -843,50 +924,50 @@ const widgetConfig = {
     justify-content: center;
     min-height: 36px;
     padding: 0 14px;
-    border: 1px solid rgba(255, 131, 78, 0.35);
+    border: 1px solid rgba(29, 29, 31, 0.08);
     border-radius: 999px;
-    background: linear-gradient(180deg, #fffdf8, #fff5ef);
-    color: #ff7836;
+    background: linear-gradient(180deg, #ffffff, #f3f4f7);
+    color: #2f425a;
     font-size: 13px;
     font-weight: 800;
     line-height: 1;
-    box-shadow: 0 8px 18px rgba(45, 57, 120, 0.06);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
     cursor: pointer;
     transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
   }
 
   .consult-action-btn--blue {
-    border-color: rgba(110, 160, 255, 0.32);
-    background: linear-gradient(180deg, #fbfdff, #eef5ff);
-    color: #5f89ff;
+    border-color: rgba(0, 113, 227, 0.18);
+    background: linear-gradient(180deg, #fbfdff, #edf5ff);
+    color: #005cc5;
   }
 
   .consult-action-btn--solid {
     border-color: transparent;
-    background: linear-gradient(135deg, #ff6849, #ff4d4f);
+    background: linear-gradient(180deg, #1994ff 0%, #0071e3 100%);
     color: #fff;
-    box-shadow: 0 14px 24px rgba(255, 95, 77, 0.18);
+    box-shadow: 0 14px 24px rgba(0, 113, 227, 0.18);
   }
 
   .consult-action-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 14px 26px rgba(45, 57, 120, 0.1);
+    box-shadow: 0 14px 26px rgba(15, 23, 42, 0.1);
   }
 
   .consult-action-btn--solid:hover {
-    box-shadow: 0 16px 28px rgba(255, 95, 77, 0.22);
+    box-shadow: 0 16px 28px rgba(0, 113, 227, 0.22);
   }
 
   .consult-form {
     padding: 12px 14px 14px;
-    border-top: 1px solid rgba(70, 86, 145, 0.08);
-    background: #fff;
+    border-top: 1px solid rgba(29, 29, 31, 0.06);
+    background: rgba(255, 255, 255, 0.84);
   }
 
   .consult-label {
     display: block;
     margin-bottom: 8px;
-    color: #a5adc4;
+    color: #8b95a7;
     font-size: 13px;
     font-weight: 700;
   }
@@ -899,13 +980,13 @@ const widgetConfig = {
     outline: 0;
     resize: none;
     background: transparent;
-    color: #1f2552;
+    color: #1d1d1f;
     font-size: 15px;
     line-height: 1.68;
   }
 
   .consult-input::placeholder {
-    color: #b0b7cd;
+    color: #99a2b3;
   }
 
   .consult-form-meta {
@@ -917,7 +998,7 @@ const widgetConfig = {
   }
 
   .consult-count {
-    color: #a3abc3;
+    color: #8b95a7;
     font-size: 13px;
     font-weight: 700;
   }
@@ -932,7 +1013,7 @@ const widgetConfig = {
     padding: 0 16px;
     border: 1px solid transparent;
     border-radius: 999px;
-    background: linear-gradient(180deg, #e4e8f3, #d5dbe9);
+    background: linear-gradient(180deg, #dce2ec, #cbd5e1);
     color: #fff;
     font-size: 14px;
     font-weight: 900;
@@ -947,8 +1028,8 @@ const widgetConfig = {
   }
 
   .consult-send.is-active {
-    background: linear-gradient(135deg, #ff6849, #ff4d4f);
-    box-shadow: 0 14px 28px rgba(255, 95, 77, 0.22);
+    background: linear-gradient(180deg, #1994ff 0%, #0071e3 100%);
+    box-shadow: 0 14px 28px rgba(0, 113, 227, 0.22);
   }
 
   .consult-send:disabled {
@@ -969,17 +1050,34 @@ const widgetConfig = {
   @media (max-width: 720px) {
     .consult-widget {
       right: 12px;
-      left: 12px;
-      bottom: 12px;
+      left: auto;
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      max-width: calc(100vw - 24px);
+    }
+
+    .consult-widget.is-open .consult-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      border: 0;
+      padding: 0;
+      background: rgba(15, 23, 42, 0.18);
+      backdrop-filter: blur(2px);
+      z-index: 0;
     }
 
     .consult-launcher {
-      width: 100%;
+      width: auto;
+      min-width: 0;
+      max-width: min(220px, calc(100vw - 24px));
+      padding: 0 16px;
     }
 
     .consult-panel {
-      width: 100%;
-      height: min(560px, calc(100vh - 24px));
+      width: min(380px, calc(100vw - 24px));
+      height: min(520px, calc(100vh - 104px - env(safe-area-inset-bottom)));
+      max-height: calc(100vh - 104px - env(safe-area-inset-bottom));
+      border-radius: 20px;
     }
 
     .consult-body {

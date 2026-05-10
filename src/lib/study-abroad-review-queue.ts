@@ -26,6 +26,7 @@ export type StudyAbroadReviewEntry = {
 
 const FILE_NAME = "study-abroad-review-queue.json";
 const MAX_QUEUE_ITEMS = 200;
+const MAX_CANDIDATES_PER_ENTRY = 8;
 
 function normalizeCandidate(input: Partial<StudyAbroadReviewCandidate>): StudyAbroadReviewCandidate {
   return {
@@ -88,7 +89,7 @@ export async function enqueueStudyAbroadReview(params: {
   const normalizedCandidates = params.candidates
     .map(normalizeCandidate)
     .filter(isValidCandidate)
-    .slice(0, 12);
+    .slice(0, MAX_CANDIDATES_PER_ENTRY);
 
   if (!normalizedCandidates.length) {
     return { saved: false, queueSize: 0 };
@@ -109,6 +110,17 @@ export async function enqueueStudyAbroadReview(params: {
       item.specialization === specialization &&
       item.degree === degree
   );
+
+  if (existing) {
+    const mergedCandidates = mergeCandidates(existing.candidates, normalizedCandidates);
+    const unchanged =
+      mergedCandidates.length === existing.candidates.length &&
+      mergedCandidates.every((candidate, index) => candidate.link === existing.candidates[index]?.link);
+
+    if (unchanged) {
+      return { saved: false, queueSize: queue.length };
+    }
+  }
 
   const next = existing
     ? queue.map((item) =>
@@ -158,5 +170,5 @@ function mergeCandidates(
     map.set(candidate.link, candidate);
   });
 
-  return Array.from(map.values()).slice(0, 12);
+  return Array.from(map.values()).slice(0, MAX_CANDIDATES_PER_ENTRY);
 }

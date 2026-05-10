@@ -214,7 +214,11 @@ const countryTargetPlanRunMap = new Map(
     unavailableCount?: number;
   }>) ?? []).map((item) => [item.country, item])
 );
-const admissionsSyncFilters = admissionsSyncSuccess?.filters ?? {};
+const admissionsSyncFilters = admissionsSyncSuccess?.filters ?? {
+  country: "",
+  major: "",
+  specialization: "",
+};
 const admissionsSyncCountry = String(admissionsSyncFilters.country ?? "").trim();
 const admissionsSyncMajor = String(admissionsSyncFilters.major ?? "").trim();
 const admissionsSyncSpecialization = String(admissionsSyncFilters.specialization ?? "").trim();
@@ -734,7 +738,7 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
                       <strong>下一批建议补齐</strong>
                       <span>
                         {country.displayFocusRecommendations.items.length
-                          ? `${country.displayFocusRecommendations.items.length} 个候选方向 · 目标线还差 ${country.targetPlan.targetProgramGap} 个项目`
+                          ? `${country.displayFocusRecommendations.items.length} 个候选方向 · 目标线还差 ${country.targetPlan?.targetProgramGap ?? 0} 个项目`
                           : "当前没有新建议"}
                       </span>
                     </div>

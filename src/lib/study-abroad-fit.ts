@@ -1,8 +1,9 @@
 import {
-  readStudyAbroadAdmissionsInsight,
   type StudyAbroadAdmissionsInsight,
   type StudyAbroadAdmissionsProfile,
+  readStudyAbroadCachedAdmissionsInsights,
 } from "./study-abroad-admissions";
+import { readStudyAbroadFinderPrograms } from "./study-abroad-catalog-store";
 
 export type StudyAbroadFitInput = {
   gpaProfile?: string;
@@ -16,6 +17,20 @@ export type StudyAbroadFitPreview = {
   details: string[];
   admissionsProfile: StudyAbroadAdmissionsProfile;
   extractionStatus: "ok" | "partial" | "unavailable";
+};
+
+type AdmissionsSnapshotLike = {
+  extractedAt?: string;
+  extractionStatus?: "ok" | "partial" | "unavailable";
+  gpaMin?: number | null;
+  gpaScale?: string;
+  ieltsMin?: number | null;
+  toeflMin?: number | null;
+  duolingoMin?: number | null;
+  pteMin?: number | null;
+  greStatus?: "required" | "recommended" | "optional" | "unknown";
+  gmatStatus?: "required" | "recommended" | "optional" | "unknown";
+  workExperienceYears?: number | null;
 };
 
 function parseUserGpaFloor(value: string) {
@@ -185,12 +200,8 @@ export async function buildStudyAbroadFitPreview(
   programId: string,
   input: StudyAbroadFitInput
 ) {
-  const insight = await readStudyAbroadAdmissionsInsight(programId);
-  if (!insight) {
-    return null;
-  }
-
-  return buildPreviewFromInsight(insight, input);
+  const previews = await buildStudyAbroadFitPreviews([programId], input);
+  return previews[0] ?? null;
 }
 
 export async function buildStudyAbroadFitPreviews(
@@ -198,9 +209,62 @@ export async function buildStudyAbroadFitPreviews(
   input: StudyAbroadFitInput
 ) {
   const ids = Array.from(new Set(programIds.filter(Boolean))).slice(0, 8);
-  const previews = await Promise.all(
-    ids.map((programId) => buildStudyAbroadFitPreview(programId, input))
-  );
+  if (!ids.length) {
+    return [];
+  }
 
-  return previews.filter((item): item is StudyAbroadFitPreview => Boolean(item));
+  const finderPrograms = await readStudyAbroadFinderPrograms();
+  const programMap = new Map(
+    finderPrograms
+      .filter((program) => ids.includes(program.id))
+      .map((program) => [program.id, program])
+  );
+  const previewMap = new Map<string, StudyAbroadFitPreview>();
+
+  const buildPreviewFromSnapshot = (
+    programId: string,
+    snapshot: AdmissionsSnapshotLike
+  ) =>
+    buildPreviewFromInsight(
+      {
+        programId,
+        admissionsProfile: {
+          gpaMin: snapshot.gpaMin ?? null,
+          gpaScale: snapshot.gpaScale ?? "",
+          ieltsMin: snapshot.ieltsMin ?? null,
+          toeflMin: snapshot.toeflMin ?? null,
+          duolingoMin: snapshot.duolingoMin ?? null,
+          pteMin: snapshot.pteMin ?? null,
+          greStatus: snapshot.greStatus ?? "unknown",
+          gmatStatus: snapshot.gmatStatus ?? "unknown",
+          workExperienceYears: snapshot.workExperienceYears ?? null,
+          academicSignals: [],
+          languageSignals: [],
+          testSignals: [],
+        },
+        extractionStatus: snapshot.extractionStatus ?? "unavailable",
+      },
+      input
+    );
+
+  ids.forEach((programId) => {
+    const snapshot = programMap.get(programId)?.admissionsSnapshot;
+    if (!snapshot?.extractedAt) {
+      return;
+    }
+
+    previewMap.set(programId, buildPreviewFromSnapshot(programId, snapshot));
+  });
+
+  const missingIds = ids.filter((programId) => !previewMap.has(programId));
+  if (missingIds.length) {
+    const cachedInsights = await readStudyAbroadCachedAdmissionsInsights(missingIds);
+    cachedInsights.forEach((insight) => {
+      previewMap.set(insight.programId, buildPreviewFromInsight(insight, input));
+    });
+  }
+
+  return ids
+    .map((programId) => previewMap.get(programId) ?? null)
+    .filter((item): item is StudyAbroadFitPreview => Boolean(item));
 }

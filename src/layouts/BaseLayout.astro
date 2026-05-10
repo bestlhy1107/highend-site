@@ -17,6 +17,7 @@ const {
 
 const site = await readSiteSettings();
 const currentPath = Astro.url.pathname;
+const bodyClass = currentPath === "/" ? "page-home" : "";
 ---
 
 <!doctype html>
@@ -24,12 +25,11 @@ const currentPath = Astro.url.pathname;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f5f7" />
     <title>{title}</title>
     <meta name="description" content={description} />
   </head>
-  <body>
-    <a class="skip-link" href="#main">跳到正文</a>
-
+  <body class={bodyClass} data-path={currentPath}>
     <SiteHeader brand={site.companyName} currentPath={currentPath} />
 
     <div id="main">

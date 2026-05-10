@@ -1,4 +1,5 @@
 import {
+  getJsonArrayFileVersion,
   invalidateJsonArrayFileCache,
   readJsonArrayFile,
   writeJsonArrayFile,
@@ -113,7 +114,13 @@ const SOURCE_FILE = "study-abroad-sources.json";
 const UNIVERSITY_FILE = "study-abroad-universities.json";
 const PROGRAM_FILE = "study-abroad-programs.json";
 
-const derivedCatalogCache = new Map<string, Promise<unknown>>();
+const derivedCatalogCache = new Map<
+  string,
+  {
+    version: string;
+    promise: Promise<unknown>;
+  }
+>();
 const canonicalDisciplineOverrideMap = new Map(
   Object.entries(CANONICAL_DISCIPLINE_OVERRIDES).map(([label, major]) => [
     normalizeLookupText(label),
@@ -127,17 +134,20 @@ const specializationToMajorMap = new Map(
   ])
 );
 
-function readDerivedCatalogCache<T>(key: string, load: () => Promise<T>) {
+function readDerivedCatalogCache<T>(key: string, version: string, load: () => Promise<T>) {
   const cached = derivedCatalogCache.get(key);
-  if (cached) {
-    return cached as Promise<T>;
+  if (cached && cached.version === version) {
+    return cached.promise as Promise<T>;
   }
 
   const nextPromise = load().catch((error) => {
     derivedCatalogCache.delete(key);
     throw error;
   });
-  derivedCatalogCache.set(key, nextPromise as Promise<unknown>);
+  derivedCatalogCache.set(key, {
+    version,
+    promise: nextPromise as Promise<unknown>,
+  });
   return nextPromise;
 }
 
@@ -164,7 +174,7 @@ function normalizeDisciplineLabel(input: {
   const discipline = String(input.discipline ?? "").trim();
   if (!discipline) return "";
 
-  if (STUDY_ABROAD_MAJOR_OPTIONS.includes(discipline)) {
+  if (STUDY_ABROAD_MAJOR_OPTIONS.some((option) => option === discipline)) {
     return discipline;
   }
 
@@ -561,7 +571,8 @@ const DEFAULT_UNIVERSITIES = buildFallbackUniversities();
 const DEFAULT_PROGRAMS = buildFallbackPrograms();
 
 export async function readStudyAbroadCatalogSources() {
-  return readDerivedCatalogCache("catalog:sources", () =>
+  const version = String(await getJsonArrayFileVersion(SOURCE_FILE));
+  return readDerivedCatalogCache("catalog:sources", version, () =>
     readJsonArrayFile({
       fileName: SOURCE_FILE,
       fallback: [],
@@ -573,7 +584,8 @@ export async function readStudyAbroadCatalogSources() {
 }
 
 export async function readStudyAbroadCatalogUniversities() {
-  return readDerivedCatalogCache("catalog:universities", () =>
+  const version = String(await getJsonArrayFileVersion(UNIVERSITY_FILE));
+  return readDerivedCatalogCache("catalog:universities", version, () =>
     readJsonArrayFile({
       fileName: UNIVERSITY_FILE,
       fallback: DEFAULT_UNIVERSITIES,
@@ -585,7 +597,8 @@ export async function readStudyAbroadCatalogUniversities() {
 }
 
 export async function readStudyAbroadCatalogPrograms() {
-  return readDerivedCatalogCache("catalog:programs", () =>
+  const version = String(await getJsonArrayFileVersion(PROGRAM_FILE));
+  return readDerivedCatalogCache("catalog:programs", version, () =>
     readJsonArrayFile({
       fileName: PROGRAM_FILE,
       fallback: DEFAULT_PROGRAMS,
@@ -621,7 +634,14 @@ export async function writeStudyAbroadCatalogPrograms(programs: StudyAbroadCatal
 }
 
 export async function readStudyAbroadCatalogSummary() {
-  return readDerivedCatalogCache("catalog:summary", async () => {
+  const [sourceVersion, universityVersion, programVersion] = await Promise.all([
+    getJsonArrayFileVersion(SOURCE_FILE),
+    getJsonArrayFileVersion(UNIVERSITY_FILE),
+    getJsonArrayFileVersion(PROGRAM_FILE),
+  ]);
+  const version = `${sourceVersion}:${universityVersion}:${programVersion}`;
+
+  return readDerivedCatalogCache("catalog:summary", version, async () => {
     const [sources, universities, programs] = await Promise.all([
       readStudyAbroadCatalogSources(),
       readStudyAbroadCatalogUniversities(),
@@ -733,7 +753,13 @@ export async function readStudyAbroadCatalogSummary() {
 }
 
 export async function readStudyAbroadFinderPrograms() {
-  return readDerivedCatalogCache("finder:programs", async () => {
+  const [universityVersion, programVersion] = await Promise.all([
+    getJsonArrayFileVersion(UNIVERSITY_FILE),
+    getJsonArrayFileVersion(PROGRAM_FILE),
+  ]);
+  const version = `${universityVersion}:${programVersion}`;
+
+  return readDerivedCatalogCache("finder:programs", version, async () => {
     const [universities, programs] = await Promise.all([
       readStudyAbroadCatalogUniversities(),
       readStudyAbroadCatalogPrograms(),
@@ -760,7 +786,9 @@ export async function readStudyAbroadFinderPrograms() {
 }
 
 export async function readStudyAbroadFinderCountries() {
-  return readDerivedCatalogCache("finder:countries", async () => {
+  const version = String(await getJsonArrayFileVersion(UNIVERSITY_FILE));
+
+  return readDerivedCatalogCache("finder:countries", version, async () => {
     const universities = await readStudyAbroadCatalogUniversities();
     return Array.from(
       new Set(universities.map((item) => item.country).filter(Boolean))

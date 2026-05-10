@@ -297,7 +297,7 @@ const FOCUS_SEED_PROGRAMS: FocusSeedProgram[] = [
     ],
     tags: ["加拿大", "数据分析", "官方课程页"],
     overviewUrl: "https://www.uwo.ca/mda/index.html",
-    admissionsUrl: "https://www.uwo.ca/mda/admission/index.html",
+    admissionsUrl: "https://www.uwo.ca/mda/admissions/index.html",
     priority: 85,
   },
   {

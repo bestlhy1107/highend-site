@@ -133,7 +133,7 @@ async function main() {
     partialCount: result.partialCount,
     unavailableCount: result.unavailableCount,
     delta: result.delta,
-    plan: result.plan,
+    plan: "plan" in result ? result.plan : null,
   });
 }
 

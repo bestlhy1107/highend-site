@@ -31,126 +31,144 @@ const normalizedExamOptions = Array.from(
 ---
 
 <section id="contact" class="container reveal">
-  <div class="section-head">
-    <div>
+  <div class="contact-stage">
+    <div class="contact-stage-copy">
       <div class="section-kicker">Appointment</div>
-      <h2 class="section-title">预约试听 / 咨询</h2>
+      <h2 class="section-title">把你的申请节奏，先拉清楚。</h2>
       <p class="section-desc">
-        提交预约后，我们会根据你的考试方向与时间安排尽快联系你。
+        提交预约后，我们会根据你的考试方向、留学目标和时间窗口，安排更合适的顾问或老师和你对接。
       </p>
+
+      <div class="contact-stage-tags">
+        <span>语言提分</span>
+        <span>留学申请</span>
+        <span>选校规划</span>
+        <span>文书递交</span>
+      </div>
+
+      <div class="contact-meta-grid">
+        <div class="contact-meta-card">
+          <span>电话</span>
+          <strong>{site.phone ?? "待填写"}</strong>
+        </div>
+        <div class="contact-meta-card">
+          <span>邮箱</span>
+          <strong>{site.email ?? "待填写"}</strong>
+        </div>
+        <div class="contact-meta-card">
+          <span>微信</span>
+          <strong>{site.wechat ?? "待填写"}</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="contact-stage-form">
+      {success && (
+        <div class="contact-notice contact-notice--success">
+          {success.message}
+        </div>
+      )}
+
+      {hasCommonError && (
+        <div class="contact-notice contact-notice--error">
+          提交失败，请稍后重试。
+        </div>
+      )}
+
+      <form method="POST" action={actions.contactLead} class="contact-shell">
+        <input type="hidden" name="source" value="homepage" />
+
+        <div class="form-grid">
+          <div class="form-item">
+            <label class="form-label" for="contact-name">姓名</label>
+            <input
+              class="input"
+              id="contact-name"
+              name="name"
+              type="text"
+              placeholder="如：张同学 / Li"
+              required
+            />
+            {inputErrors.name && (
+              <p class="form-error">{inputErrors.name.join("，")}</p>
+            )}
+          </div>
+
+          <div class="form-item">
+            <label class="form-label" for="contact-contact">联系方式</label>
+            <input
+              class="input"
+              id="contact-contact"
+              name="contact"
+              type="text"
+              placeholder="微信 / 手机 / 邮箱"
+              required
+            />
+            {inputErrors.contact && (
+              <p class="form-error">{inputErrors.contact.join("，")}</p>
+            )}
+          </div>
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label" for="appointment-type">预约类型</label>
+            <select class="input" id="appointment-type" name="appointmentType" required>
+              <option value="trial">预约试听</option>
+              <option value="consultation">预约咨询</option>
+            </select>
+            {inputErrors.appointmentType && (
+              <p class="form-error">{inputErrors.appointmentType.join("，")}</p>
+            )}
+          </div>
+
+          <div class="form-item">
+            <label class="form-label" for="exam-type">考试类型</label>
+            <select class="input" id="exam-type" name="examType" required>
+              <option value="">请选择</option>
+              {normalizedExamOptions.map((option) => (
+                <option value={option}>{option}</option>
+              ))}
+            </select>
+            {inputErrors.examType && (
+              <p class="form-error">{inputErrors.examType.join("，")}</p>
+            )}
+          </div>
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label" for="preferred-time">期望时间段</label>
+          <input
+            class="input"
+            id="preferred-time"
+            name="preferredTime"
+            type="text"
+            placeholder="如：本周六下午 / 工作日晚上 7 点后"
+            required
+          />
+          {inputErrors.preferredTime && (
+            <p class="form-error">{inputErrors.preferredTime.join("，")}</p>
+          )}
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label" for="contact-need">补充需求</label>
+          <textarea
+            class="input"
+            id="contact-need"
+            name="need"
+            placeholder="如：托福口语提分，目标 26+；想申请美国 CS 硕士，先看项目池"
+            required
+          ></textarea>
+          {inputErrors.need && (
+            <p class="form-error">{inputErrors.need.join("，")}</p>
+          )}
+        </div>
+
+        <div class="mt-4">
+          <button class="btn" type="submit">提交预约</button>
+        </div>
+      </form>
     </div>
   </div>
-
-  <div class="contact-meta mt-4">
-    <span>电话：{site.phone ?? "待填写"}</span>
-    <span>邮箱：{site.email ?? "待填写"}</span>
-    <span>微信：{site.wechat ?? "待填写"}</span>
-  </div>
-
-  {success && (
-    <div class="contact-notice contact-notice--success mt-4">
-      {success.message}
-    </div>
-  )}
-
-  {hasCommonError && (
-    <div class="contact-notice contact-notice--error mt-4">
-      提交失败，请稍后重试。
-    </div>
-  )}
-
-  <form method="POST" action={actions.contactLead} class="contact-shell mt-4">
-    <input type="hidden" name="source" value="homepage" />
-
-    <div class="form-grid">
-      <div class="form-item">
-        <label class="form-label" for="contact-name">姓名</label>
-        <input
-          class="input"
-          id="contact-name"
-          name="name"
-          type="text"
-          placeholder="如：张同学 / Li"
-          required
-        />
-        {inputErrors.name && (
-          <p class="form-error">{inputErrors.name.join("，")}</p>
-        )}
-      </div>
-
-      <div class="form-item">
-        <label class="form-label" for="contact-contact">联系方式</label>
-        <input
-          class="input"
-          id="contact-contact"
-          name="contact"
-          type="text"
-          placeholder="微信 / 手机 / 邮箱"
-          required
-        />
-        {inputErrors.contact && (
-          <p class="form-error">{inputErrors.contact.join("，")}</p>
-        )}
-      </div>
-    </div>
-
-    <div class="form-grid mt-4">
-      <div class="form-item">
-        <label class="form-label" for="appointment-type">预约类型</label>
-        <select class="input" id="appointment-type" name="appointmentType" required>
-          <option value="trial">预约试听</option>
-          <option value="consultation">预约咨询</option>
-        </select>
-        {inputErrors.appointmentType && (
-          <p class="form-error">{inputErrors.appointmentType.join("，")}</p>
-        )}
-      </div>
-
-      <div class="form-item">
-        <label class="form-label" for="exam-type">考试类型</label>
-        <select class="input" id="exam-type" name="examType" required>
-          <option value="">请选择</option>
-          {normalizedExamOptions.map((option) => (
-            <option value={option}>{option}</option>
-          ))}
-        </select>
-        {inputErrors.examType && (
-          <p class="form-error">{inputErrors.examType.join("，")}</p>
-        )}
-      </div>
-    </div>
-
-    <div class="form-item mt-4">
-      <label class="form-label" for="preferred-time">期望时间段</label>
-      <input
-        class="input"
-        id="preferred-time"
-        name="preferredTime"
-        type="text"
-        placeholder="如：本周六下午 / 工作日晚上 7 点后"
-        required
-      />
-      {inputErrors.preferredTime && (
-        <p class="form-error">{inputErrors.preferredTime.join("，")}</p>
-      )}
-    </div>
-
-    <div class="form-item mt-4">
-      <label class="form-label" for="contact-need">补充需求</label>
-      <textarea
-        class="input"
-        id="contact-need"
-        name="need"
-        placeholder="如：托福口语提分，目标 26+；想先试听再决定"
-        required
-      ></textarea>
-      {inputErrors.need && (
-        <p class="form-error">{inputErrors.need.join("，")}</p>
-      )}
-    </div>
-
-    <div class="mt-4">
-      <button class="btn" type="submit">提交预约</button>
-    </div>
-  </form>
 </section>

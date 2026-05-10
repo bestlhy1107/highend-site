@@ -206,6 +206,7 @@ async function fetchUsHipoUniversities() {
       return {
         id: makeUsUniversityId(name, stateOrProvince),
         name,
+        nameZh: "",
         country: "美国",
         city: "",
         stateOrProvince,
@@ -307,6 +308,7 @@ function mergeUsUniversities(
     const nextItem: StudyAbroadCatalogUniversity = {
       id: nextId,
       name,
+      nameZh: current?.nameZh || "",
       country: "美国",
       city,
       stateOrProvince,

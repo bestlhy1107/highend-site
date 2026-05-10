@@ -167,6 +167,7 @@ async function fetchGlobalHipoUniversities() {
       return {
         id: makeUniversityId(name, country, stateOrProvince, alpha2),
         name,
+        nameZh: "",
         country,
         city: "",
         stateOrProvince,

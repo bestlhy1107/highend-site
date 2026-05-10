@@ -89,6 +89,12 @@ export type StudyAbroadCatalogSyncSelection = {
   scorecardMode: "official-key" | "demo-key-skip-us";
 };
 
+type CatalogSyncTask = {
+  id: CatalogSyncSourceId;
+  label: string;
+  run: () => Promise<unknown>;
+};
+
 const DEFAULT_SYNC_STATE: StudyAbroadCatalogSyncState = {
   updatedAt: "",
   runs: [],
@@ -172,7 +178,7 @@ function normalizeSyncState(
                             ])
                           )
                         : {},
-                  }))
+                  } satisfies StudyAbroadCatalogSyncSourceRun))
                   .filter((sourceRun) => sourceRun.label)
               : [],
             before: {
@@ -207,7 +213,7 @@ function normalizeSyncState(
                 Number(run?.delta?.structuredAdmissionsCoverage) || 0,
             },
             message: String(run?.message ?? "").trim(),
-          }))
+          } satisfies StudyAbroadCatalogSyncRun))
           .filter((run) => run.runAt)
           .slice(0, 30)
       : [],
@@ -317,7 +323,7 @@ export async function executeStudyAbroadCatalogSync(
   const beforeSummary = await readStudyAbroadCatalogSummary();
   const before = toSnapshot(beforeSummary);
 
-  const tasks = [
+  const taskCandidates: Array<CatalogSyncTask | null> = [
     selection.includeGlobal
       ? {
           id: "global-universities" as const,
@@ -350,7 +356,8 @@ export async function executeStudyAbroadCatalogSync(
           run: () => syncFocusStudyAbroadPilotPrograms(),
         }
       : null,
-  ].filter(Boolean);
+  ];
+  const tasks = taskCandidates.filter((task): task is CatalogSyncTask => task !== null);
 
   if (!tasks.length) {
     return {
@@ -395,11 +402,18 @@ export async function executeStudyAbroadCatalogSync(
     try {
       const result = await task.run();
       const finishedAt = new Date();
+      const resultMessage =
+        result &&
+        typeof result === "object" &&
+        "message" in result &&
+        typeof result.message === "string"
+          ? result.message.trim()
+          : "";
       sourceRuns.push({
         id: task.id,
         label: task.label,
         ok: true,
-        message: String(result?.message ?? "").trim() || `${task.label} 同步成功。`,
+        message: resultMessage || `${task.label} 同步成功。`,
         startedAt: startedAt.toISOString(),
         finishedAt: finishedAt.toISOString(),
         durationMs: finishedAt.getTime() - startedAt.getTime(),

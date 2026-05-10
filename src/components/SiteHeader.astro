@@ -20,8 +20,11 @@ const nav = [
 <header class="site-header" data-header>
   <div class="container header-inner">
     <a class="brand" href="/" aria-label="Go to home">
-      <span class="brand-mark">◆</span>
-      <span class="brand-text">{brand}</span>
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-copy">
+        <span class="brand-text">{brand}</span>
+        <span class="brand-subtext">Study Abroad · Language</span>
+      </span>
     </a>
 
     <button class="nav-toggle" type="button" aria-label="Toggle menu" data-toggle>

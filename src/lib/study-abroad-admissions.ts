@@ -86,6 +86,17 @@ type StudyAbroadAdmissionsCacheEntry = StudyAbroadAdmissionsInsight & {
   updatedAt: string;
 };
 
+type ManualAdmissionsOverride = {
+  sourceUrl?: string;
+  sourceTitle?: string;
+  summary: string;
+  highlights: string[];
+  requirementGroups: StudyAbroadRequirementGroup[];
+  admissionsProfile?: Partial<StudyAbroadAdmissionsProfile>;
+  extractionStatus?: "ok" | "partial";
+  note: string;
+};
+
 type ProcessedTextItem = {
   text: string;
   normalized: string;
@@ -207,6 +218,369 @@ const REQUIREMENT_CATEGORIES: RequirementCategory[] = [
     ],
   },
 ];
+
+const MANUAL_ADMISSIONS_OVERRIDES: Record<string, ManualAdmissionsOverride> = {
+  "hkust-mfin": {
+    sourceUrl: "https://mfin.hkust.edu.hk/admissions/admissions-requirement",
+    sourceTitle: "Admission Requirements | HKUST MSc in Finance",
+    summary:
+      "已根据 HKUST MSc in Finance 官方招生页补入学术背景、语言要求与标化考试说明，可直接用于金融方向的初筛判断。",
+    highlights: [
+      "官方要求申请人具备受认可大学的学士学位与良好学术表现。",
+      "非英语授课背景申请人需满足 TOEFL iBT 80 或 IELTS 总分 6.5、单项不低于 5.5。",
+      "GMAT / GRE 并非强制，但官网明确说明强分会提升竞争力。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "Applicants must possess a Bachelor's degree with satisfactory academic performance from a recognized university or approved institution.",
+        ],
+      },
+      {
+        label: "语言要求",
+        items: [
+          "TOEFL iBT: 80；IELTS Academic: overall 6.5，all sub-scores 5.5（适用于本科授课语言非英语的申请人）。",
+        ],
+      },
+      {
+        label: "标化考试",
+        items: [
+          "GMAT / GRE scores are not required, but strong GMAT / GRE scores will enhance the application.",
+        ],
+      },
+      {
+        label: "经验要求",
+        items: [
+          "Part-time applicants should have at least one year of full-time post-qualification work experience; full-time applicants do not need work experience but relevant experience is preferred.",
+        ],
+      },
+    ],
+    admissionsProfile: {
+      ieltsMin: 6.5,
+      toeflMin: 80,
+      greStatus: "optional",
+      gmatStatus: "optional",
+    },
+    extractionStatus: "ok",
+    note: "已根据 HKUST 官方招生页人工整理关键门槛，适合前台初筛与顾问快速判断。",
+  },
+  "nus-mcomp-cs": {
+    sourceUrl:
+      "https://masters.nus.edu.sg/programmes/master-of-computing/mcomp---computer-science-specialisation",
+    sourceTitle: "Computer Science Specialisation | NUS Master of Computing",
+    summary:
+      "已根据 NUS Master of Computing 官方项目页与 Coursework Programme Guide 补入语言、标化与背景要求。",
+    highlights: [
+      "申请人需具备 Computing 或相关学科 honours 本科；非 Honours Computing 背景通常需要 2 年 IT 行业经验。",
+      "非英语授课背景申请人需满足 TOEFL 90 或 IELTS 6.0。",
+      "官网列明 GRE 320 + AW 3.5 或 GMAT 650（或印度院校 GATE）作为 Other requirement。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "Bachelor’s Degree (preferably with Honours) in Computing, or Bachelor’s Degree with Honours in a related discipline, or Bachelor’s Degree (preferably with Honours) in a business-related discipline.",
+          "For holders of undergraduate qualifications other than a Bachelor’s Degree with Honours in Computing, two years of IT industry experience.",
+        ],
+      },
+      {
+        label: "语言要求",
+        items: [
+          "Applicants whose medium of university instruction is not completely in English: TOEFL minimum 90 (Internet-based) or IELTS Academic minimum 6.0.",
+        ],
+      },
+      {
+        label: "标化考试",
+        items: [
+          "GRE minimum 320 (Verbal + Quantitative) and 3.5 Analytical Writing, or GMAT minimum 650, or GATE scores for graduates from Indian universities.",
+        ],
+      },
+    ],
+    admissionsProfile: {
+      ieltsMin: 6.0,
+      toeflMin: 90,
+      greStatus: "required",
+      gmatStatus: "required",
+      workExperienceYears: 2,
+    },
+    extractionStatus: "ok",
+    note: "已根据 NUS 官方项目页与官方 coursework guide 人工整理快照，适合计算机方向初筛。",
+  },
+  "nus-msba": {
+    sourceUrl: "https://msba.nus.edu.sg/",
+    sourceTitle: "Application Guide for MSBA AY2026/27",
+    summary:
+      "已根据 NUS MSBA 官方 application guide 与 programme 页面补入申请材料与考试策略，适合商业分析方向初筛。",
+    highlights: [
+      "官方 guide 明确写明：Applicants do not have to submit any English Language Test (e.g. IELTS / TOEFL).",
+      "GMAT / GRE 在 programme 页面标注为 highly recommended，最新 application guide 标为 optional。",
+      "申请材料需提交完整学历材料、履历和个人陈述，且需在申请系统内一次性上传完整文件。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "请提交官方或官方认证的本科 / 研究生学历证书与成绩单，并在申请表中填写最终 cumulative GPA。",
+        ],
+      },
+      {
+        label: "标化考试",
+        items: [
+          "GMAT / GRE scores are optional in the latest application guide and highly recommended on the official programme page.",
+        ],
+      },
+      {
+        label: "申请材料",
+        items: [
+          "需提交最新 Resume / CV、学历证明、成绩单以及个人陈述；官方明确不接受提交后补交成绩和文档。",
+        ],
+      },
+    ],
+    admissionsProfile: {
+      greStatus: "recommended",
+      gmatStatus: "recommended",
+    },
+    extractionStatus: "ok",
+    note: "已根据 NUS MSBA 官方申请指南与项目页人工整理快照；该项目当前不要求 IELTS / TOEFL。",
+  },
+  "smu-applied-finance": {
+    sourceUrl: "https://masters.smu.edu.sg/programme/msc-in-applied-finance",
+    sourceTitle: "MSc in Applied Finance (MAF) | SMU PG Admissions",
+    summary:
+      "已根据 SMU Applied Finance 官方项目页补入基础门槛与材料要求，先让金融方向结果不再停留在 unavailable。",
+    highlights: [
+      "官方项目页列明 prerequisites 为 Bachelor’s Degree、GMAT / GRE / SMU Admissions Test、以及非英语授课背景下的 TOEFL / IELTS。",
+      "项目页明确写明 fresh graduates are welcome to apply。",
+      "申请材料需提交 updated Resume、官方成绩单、CFA / ACCA 证书（如有）以及两篇 personal statements。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "Pre-requisites include a Bachelor's Degree from a recognized institution.",
+        ],
+      },
+      {
+        label: "语言要求",
+        items: [
+          "TOEFL / IELTS is required if the medium of instruction of undergraduate studies was not in English.",
+        ],
+      },
+      {
+        label: "标化考试",
+        items: [
+          "A good GMAT / GRE / SMU Admissions Test score is part of the admissions requirements.",
+        ],
+      },
+      {
+        label: "申请材料",
+        items: [
+          "需提交 updated Resume、官方成绩单、CFA / ACCA 证书（如有）以及两篇 500-600 字 personal statements。",
+        ],
+      },
+      {
+        label: "经验要求",
+        items: ["Fresh graduates are welcome to apply."],
+      },
+    ],
+    admissionsProfile: {
+      greStatus: "required",
+      gmatStatus: "required",
+    },
+    extractionStatus: "partial",
+    note: "已根据 SMU 官方项目页人工整理；页面未给出 TOEFL / IELTS 最低分数，因此先标记为部分结构化快照。",
+  },
+  "smu-mitb": {
+    sourceUrl: "https://masters.smu.edu.sg/programme/master-of-it-in-business",
+    sourceTitle: "Master of IT in Business | SMU PG Admissions",
+    summary:
+      "已根据 SMU MITB 官方项目页补入语言要求、前置考试路径与学术门槛说明，可直接用于新加坡数据方向初筛。",
+    highlights: [
+      "官网列明 TOEFL 90 / IELTS 6.5 作为非英语授课背景申请人的最低语言门槛。",
+      "申请可通过 GMAT / GRE / SMU Admissions Test 路径完成，部分学校背景也可用 CGPA 替代。",
+      "MITB 更偏 business + technology 交叉，项目页要求提供更新版简历与成绩单。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "Bachelor's degree from a well-recognised university or tertiary institution with good academic standing.",
+          "Applicants from SMU and selected partner universities may use CGPA in lieu of GMAT / GRE / SMU Admissions Test when they meet the official threshold.",
+        ],
+      },
+      {
+        label: "语言要求",
+        items: [
+          "TOEFL minimum 90 or IELTS minimum 6.5 if the medium of instruction of undergraduate studies was not English.",
+        ],
+      },
+      {
+        label: "标化考试",
+        items: [
+          "GMAT / GRE / SMU Admissions Test is part of the admissions pathway unless the applicant qualifies for the official CGPA-based exemption route.",
+        ],
+      },
+      {
+        label: "申请材料",
+        items: [
+          "需要提交 updated Resume / CV 与正式 academic transcripts；项目页也要求完成官方在线申请材料上传。",
+        ],
+      },
+    ],
+    admissionsProfile: {
+      ieltsMin: 6.5,
+      toeflMin: 90,
+      greStatus: "required",
+      gmatStatus: "required",
+    },
+    extractionStatus: "ok",
+    note: "已根据 SMU 官方项目页人工整理关键门槛；GMAT / GRE / SMUAT 属于三选一路径。",
+  },
+  "ubc-mban": {
+    sourceUrl:
+      "https://org-www.sauder.ubc.ca/master-business-analytics/application-process/mban-admission-requirements",
+    sourceTitle: "MBAN admission requirements | UBC Sauder",
+    summary:
+      "已根据 UBC Sauder MBAN 官方 admission requirements 与 UBC Graduate School 语言最低要求补入核心门槛。",
+    highlights: [
+      "UBC 官方 IELTS minimum table 显示 MBAN 需 overall 7.0，且四项单项均 7.0。",
+      "UBC 官方 TOEFL minimum table 显示 MBAN 需总分 100，阅读 / 听力 / 写作 / 口语均至少 25。",
+      "Sauder admission requirements 页面明确写明：没有最低工作经验要求，较低学术平均分可由强 GMAT / GRE 或显著职业经历补强。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "Candidates with a lower academic average may be accepted if they have significant professional experience and/or a high GMAT / GRE score.",
+        ],
+      },
+      {
+        label: "语言要求",
+        items: [
+          "UBC Graduate School program minimums for MBAN: IELTS overall 7.0 with 7.0 in each component; TOEFL iBT total 100 with minimum 25 in each section.",
+        ],
+      },
+      {
+        label: "标化考试",
+        items: [
+          "Sauder programme materials mention GMAT / GRE waiver, indicating GMAT / GRE can strengthen the application but may be waived case by case.",
+        ],
+      },
+      {
+        label: "经验要求",
+        items: [
+          "There is no minimum work experience requirement for entry into the UBC MBAN.",
+        ],
+      },
+    ],
+    admissionsProfile: {
+      ieltsMin: 7.0,
+      toeflMin: 100,
+      greStatus: "recommended",
+      gmatStatus: "recommended",
+    },
+    extractionStatus: "ok",
+    note: "已结合 UBC Sauder 官方 admission requirements 与 UBC Graduate School 语言最低要求人工整理。",
+  },
+  "melbourne-mit": {
+    sourceUrl:
+      "https://study.unimelb.edu.au/find/courses/graduate/master-of-information-technology/entry-requirements",
+    sourceTitle: "Master of Information Technology : Entry requirements - The University of Melbourne",
+    summary:
+      "已根据墨尔本大学 MIT 官方 entry requirements 补入英语门槛与入学方式，可直接用于澳洲计算机方向初筛。",
+    highlights: [
+      "官方 entry requirements 页列明 IELTS 6.5，且写作 / 口语 / 阅读 / 听力均至少 6.0。",
+      "同页列明 TOEFL iBT 81，写作 19、口语 19、阅读 16、听力 16；PTE Academic 64，各单项 60。",
+      "项目支持不同 IT 背景申请人，并根据先前学习经历决定课长与 entry pathway。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "需具备认可本科学位；学校会根据申请人的前置学习背景评估课程长度与 entry pathway。",
+        ],
+      },
+      {
+        label: "语言要求",
+        items: [
+          "IELTS 6.5 with writing 6.0, speaking 6.0, reading 6.0, listening 6.0.",
+          "TOEFL iBT 81 with writing 19, speaking 19, reading 16, listening 16.",
+          "PTE Academic 64 with writing / speaking / reading / listening all 60.",
+        ],
+      },
+    ],
+    admissionsProfile: {
+      ieltsMin: 6.5,
+      toeflMin: 81,
+      pteMin: 64,
+    },
+    extractionStatus: "ok",
+    note: "已根据墨尔本大学官方 entry requirements 人工整理，规避了原站点 Cloudflare 动态阻挡。",
+  },
+  "western-mda": {
+    sourceUrl: "https://www.uwo.ca/mda/admissions/index.html",
+    sourceTitle: "Admissions - Master of Data Analytics - Western University",
+    summary:
+      "已根据 Western MDA 官方 admissions 页面与 admission requirements PDF 补入英语与先修要求。",
+    highlights: [
+      "官方要求最后两年课程平均通常不低于 75%，并建议具备统计、线性代数、微积分与编程先修背景。",
+      "官方英语门槛为 IELTS 7.0（单项不低于 6.5）、TOEFL iBT 94（R22 / L22 / S26 / W24）、Duolingo 120。",
+      "MDA 主页与 admissions 页面都强调项目为 12 个月 course-based 专业硕士，国际申请首轮截止更早。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "Applicants are typically expected to have a minimum 75% average in the last two years of study and prerequisite preparation in statistics, linear algebra, calculus and computer programming.",
+        ],
+      },
+      {
+        label: "语言要求",
+        items: [
+          "IELTS Academic overall 7.0 with no individual band below 6.5.",
+          "TOEFL iBT overall 94 with Reading 22, Listening 22, Speaking 26 and Writing 24.",
+          "Duolingo English Test minimum 120.",
+        ],
+      },
+    ],
+    admissionsProfile: {
+      ieltsMin: 7.0,
+      toeflMin: 94,
+      duolingoMin: 120,
+    },
+    extractionStatus: "ok",
+    note: "已根据 Western 官方 admissions 页面与官方 PDF 人工整理，并修正了原来 404 的招生链接。",
+  },
+  "toronto-mi": {
+    sourceUrl: "https://www.sgs.utoronto.ca/programs/information/",
+    sourceTitle: "Information – School of Graduate Studies | University of Toronto",
+    summary:
+      "已根据多伦多大学 SGS Information programme 页面与通用 graduate admission requirements 补入基础学术门槛。",
+    highlights: [
+      "官方 Information programme 页显示：MI 最低录取平均分为 B，成功申请者通常至少达到 B+。",
+      "SGS 通用硕士录取要求写明：需具备 appropriate bachelor’s degree 或同等学历，final-year average 至少达到 mid-B。",
+      "非英语授课背景申请人需按 SGS 英语能力测试政策提交 TOEFL / IELTS 等成绩。",
+    ],
+    requirementGroups: [
+      {
+        label: "学术背景",
+        items: [
+          "MI: minimum admission average is B; successful applicants generally hold a minimum of B+.",
+          "For master’s programs, an appropriate bachelor’s degree or equivalent with a final-year average of at least mid-B from a recognized university.",
+        ],
+      },
+      {
+        label: "语言要求",
+        items: [
+          "Applicants from universities outside Canada where English is not the primary language of instruction must provide results of an English language proficiency examination following SGS policy.",
+        ],
+      },
+    ],
+    extractionStatus: "partial",
+    note: "已根据 U of T SGS 官方 programme page 与通用 admission requirements 人工整理；具体 TOEFL / IELTS 分数仍建议进官网语言政策页核对。",
+  },
+};
 
 function normalizeWhitespace(value: string) {
   return String(value || "")
@@ -780,9 +1154,44 @@ function unavailableInsight(
   };
 }
 
+function buildManualAdmissionsInsight(
+  program: StudyAbroadFinderProgram,
+  override: ManualAdmissionsOverride
+): StudyAbroadAdmissionsInsight {
+  const sourceUrl =
+    override.sourceUrl || program.admissionsUrl || program.overviewUrl || program.officialWebsite;
+  const extractedAt = new Date().toISOString();
+
+  return {
+    programId: program.id,
+    schoolName: program.schoolName,
+    programName: program.programName,
+    officialWebsite: program.officialWebsite,
+    overviewUrl: program.overviewUrl,
+    admissionsUrl: program.admissionsUrl || "",
+    sourceUrl,
+    finalUrl: sourceUrl,
+    sourceTitle: override.sourceTitle || program.programName,
+    fetchedAt: extractedAt,
+    summary: normalizeWhitespace(override.summary),
+    highlights: uniqueItems(override.highlights),
+    requirementGroups: override.requirementGroups
+      .map((group) => ({
+        label: normalizeWhitespace(group.label),
+        items: uniqueItems(group.items),
+      }))
+      .filter((group) => group.label && group.items.length),
+    admissionsProfile: normalizeProfile(override.admissionsProfile ?? {}),
+    extractionStatus: override.extractionStatus ?? "ok",
+    note: normalizeWhitespace(override.note),
+  };
+}
+
 export async function readStudyAbroadAdmissionsInsight(programId: string) {
   const cached = await readCachedAdmissionsInsight(programId);
-  if (cached) {
+  const manualOverride = MANUAL_ADMISSIONS_OVERRIDES[programId];
+
+  if (cached && (!manualOverride || cached.note.includes("人工整理"))) {
     return cached;
   }
 
@@ -790,6 +1199,12 @@ export async function readStudyAbroadAdmissionsInsight(programId: string) {
 
   if (!program) {
     return null;
+  }
+
+  if (manualOverride) {
+    const insight = buildManualAdmissionsInsight(program, manualOverride);
+    await writeCachedAdmissionsInsight(insight);
+    return insight;
   }
 
   const sourceUrl = program.admissionsUrl || program.overviewUrl || program.officialWebsite;

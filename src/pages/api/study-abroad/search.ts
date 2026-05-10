@@ -26,6 +26,8 @@ export const POST: APIRoute = async ({ request }) => {
       fitMode: payload?.fitMode,
       snapshotQuality: payload?.snapshotQuality,
       universityId: payload?.universityId,
+    }, {
+      includeExternalCandidates: false,
     });
 
     return json({

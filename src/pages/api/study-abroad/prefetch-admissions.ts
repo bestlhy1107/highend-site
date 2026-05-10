@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { enqueueStudyAbroadAdmissionsPrefetch } from "../../../lib/study-abroad-admissions-prefetch-queue";
 import { prefetchStudyAbroadAdmissionsSnapshots } from "../../../lib/study-abroad-admissions-sync";
 
 function json(data: unknown, status = 200) {
@@ -14,17 +15,37 @@ function json(data: unknown, status = 200) {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const payload = await request.json();
-
-    const result = await prefetchStudyAbroadAdmissionsSnapshots({
+    const input = {
       maxPrograms: Number(payload?.maxPrograms) || undefined,
       country: payload?.country,
       degree: payload?.degree,
       major: payload?.major,
       specialization: payload?.specialization,
       programIds: Array.isArray(payload?.programIds) ? payload.programIds : [],
-    });
+    };
 
-    return json(result);
+    if (payload?.waitForCompletion === true) {
+      const result = await prefetchStudyAbroadAdmissionsSnapshots(input);
+      return json(result);
+    }
+
+    const queued = enqueueStudyAbroadAdmissionsPrefetch(input);
+
+    return json({
+      ok: true,
+      queued: queued.queued,
+      reused: queued.reused,
+      jobId: queued.jobId,
+      status: queued.status,
+      updatedPrograms: [],
+      message: queued.message,
+      filters: {
+        country: String(payload?.country ?? "").trim(),
+        degree: String(payload?.degree ?? "").trim(),
+        major: String(payload?.major ?? "").trim(),
+        specialization: String(payload?.specialization ?? "").trim(),
+      },
+    });
   } catch {
     return json(
       {

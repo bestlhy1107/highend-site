@@ -80,6 +80,7 @@ const ADMISSIONS_WARMUP_PRESETS = [
     country: "美国",
     degree: "硕士",
     major: "计算机 / AI",
+    specialization: "",
     maxPrograms: 8,
   },
   {
@@ -89,6 +90,7 @@ const ADMISSIONS_WARMUP_PRESETS = [
     country: "美国",
     degree: "硕士",
     major: "金融",
+    specialization: "",
     maxPrograms: 8,
   },
   {
@@ -98,6 +100,7 @@ const ADMISSIONS_WARMUP_PRESETS = [
     country: "英国",
     degree: "硕士",
     major: "商科 / 管理",
+    specialization: "",
     maxPrograms: 6,
   },
   {
@@ -107,6 +110,7 @@ const ADMISSIONS_WARMUP_PRESETS = [
     country: "英国",
     degree: "硕士",
     major: "计算机 / AI",
+    specialization: "",
     maxPrograms: 6,
   },
   {
@@ -116,6 +120,7 @@ const ADMISSIONS_WARMUP_PRESETS = [
     country: "中国香港",
     degree: "硕士",
     major: "金融",
+    specialization: "",
     maxPrograms: 5,
   },
   {
@@ -125,6 +130,7 @@ const ADMISSIONS_WARMUP_PRESETS = [
     country: "新加坡",
     degree: "硕士",
     major: "计算机 / AI",
+    specialization: "",
     maxPrograms: 4,
   },
 ] as const;
@@ -418,6 +424,27 @@ export type StudyAbroadAdmissionsStrategy = {
   focusCooldownHours: number;
   countryCooldownHours: number;
   smartRecommendationCooldownHours: number;
+};
+
+const EMPTY_COVERAGE_SNAPSHOT: StudyAbroadAdmissionsCoverageSnapshot = {
+  totalPrograms: 0,
+  syncedPrograms: 0,
+  structuredPrograms: 0,
+  completePrograms: 0,
+  syncedCoveragePercent: 0,
+  structuredCoveragePercent: 0,
+  completeCoveragePercent: 0,
+};
+
+const EMPTY_COVERAGE_DELTA: StudyAbroadAdmissionsCoverageSprintDelta = {
+  overall: {
+    before: EMPTY_COVERAGE_SNAPSHOT,
+    after: EMPTY_COVERAGE_SNAPSHOT,
+    syncedDelta: 0,
+    structuredDelta: 0,
+    completeDelta: 0,
+  },
+  countries: [],
 };
 export type StudyAbroadAdmissionsStrategyPreset = {
   id: string;
@@ -727,7 +754,7 @@ function normalizeCampaignState(
                   }))
                   .filter((entry) => entry.id && entry.country)
               : [],
-          }))
+          } satisfies StudyAbroadAdmissionsCampaignRun))
           .filter((item) => item.runAt)
           .slice(0, 40)
       : [],
@@ -2334,6 +2361,10 @@ export async function executeStudyAbroadAdmissionsCountryTargetPlan(options?: {
   if (!selectedPlans.length) {
     return {
       ok: false,
+      syncedCount: 0,
+      okCount: 0,
+      partialCount: 0,
+      unavailableCount: 0,
       message: "当前没有可执行的国家目标补齐计划。",
       countryRuns: [],
     };
@@ -2492,6 +2523,12 @@ export async function executeStudyAbroadAdmissionsCoverageSprint(options?: {
   if (!plan.items.length) {
     return {
       ok: false,
+      syncedCount: 0,
+      okCount: 0,
+      partialCount: 0,
+      unavailableCount: 0,
+      delta: EMPTY_COVERAGE_DELTA,
+      focusBreakdown: [],
       message: "当前没有可执行的覆盖冲刺计划。",
       plan,
       sprintRuns: [],
@@ -2682,6 +2719,11 @@ export async function executeStudyAbroadAdmissionsCoverageRoadmap(options?: {
       if (!roadmapRuns.length) {
         return {
           ok: false,
+          syncedCount: 0,
+          okCount: 0,
+          partialCount: 0,
+          unavailableCount: 0,
+          delta: EMPTY_COVERAGE_DELTA.overall,
           message: result.message || "当前没有可执行的长期补齐批处理。",
           roadmapRuns: [],
         };
@@ -2705,6 +2747,11 @@ export async function executeStudyAbroadAdmissionsCoverageRoadmap(options?: {
   if (!roadmapRuns.length) {
     return {
       ok: false,
+      syncedCount: 0,
+      okCount: 0,
+      partialCount: 0,
+      unavailableCount: 0,
+      delta: EMPTY_COVERAGE_DELTA.overall,
       message: "当前没有可执行的长期补齐批处理。",
       roadmapRuns: [],
     };
@@ -2992,7 +3039,7 @@ function normalizeProgramIdList(programIds: string[] | undefined) {
 
 function selectAdmissionsSyncCandidates(
   programs: StudyAbroadCatalogProgram[],
-  options: AdmissionsSyncOptions,
+  options: AdmissionsSyncOptions = {},
   limits?: { maxProgramsCap?: number }
 ) {
   const mode = normalizeSyncMode(String(options?.mode ?? ""));

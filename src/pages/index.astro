@@ -14,6 +14,8 @@ import TeacherShowcase from "../components/TeacherShowcase.astro";
 import NewsFeed from "../components/NewsFeed.astro";
 import ContactSection from "../components/ContactSection.astro";
 import { readExams } from "../lib/exams-store";
+import { STUDY_ABROAD_PROGRAMS } from "../lib/study-abroad-programs";
+import { getStudyAbroadUniversityNameZh } from "../lib/study-abroad-university-names";
 const site = await readSiteSettings();
 const teachers = await readTeachers();
 
@@ -23,14 +25,66 @@ const exams = await readExams();
 const abroadServices = services.filter((service) => service.category === "abroad");
 const contactOptions = Array.from(
   new Set(
-    [
-      ...exams.map((exam) => exam.title),
-      ...services.map((service) => service.title),
-    ]
+    exams
+      .map((exam) => exam.title)
       .map((item) => item.trim())
       .filter(Boolean)
   )
 );
+const studyAbroadCountryCount = new Set(STUDY_ABROAD_PROGRAMS.map((program) => program.country)).size;
+const featuredPrograms = STUDY_ABROAD_PROGRAMS.slice(0, 3).map((program) => ({
+  country: program.country,
+  degree: program.degree,
+  schoolName: getStudyAbroadUniversityNameZh(program.schoolName) || program.schoolName,
+  programName: program.programName,
+}));
+const heroMetrics = [
+  {
+    value: `${studyAbroadCountryCount}+`,
+    label: "国家 / 地区",
+  },
+  {
+    value: `${STUDY_ABROAD_PROGRAMS.length}+`,
+    label: "项目底库",
+  },
+  {
+    value: `${teachers.length || 3}+`,
+    label: "顾问 / 老师",
+  },
+];
+const journeyHighlights = [
+  "告诉我们目标国家、专业方向和当前成绩。",
+  "先帮你缩学校池，再看项目池和官网门槛。",
+  "再决定语言、文书和递交节奏，避免无效准备。",
+];
+const heroDeliverables = [
+  {
+    title: "首轮项目池",
+    body: "先给你一批值得继续看的学校和项目，不再从海量官网里盲找。",
+  },
+  {
+    title: "背景短板",
+    body: "把 GPA、语言、实习或课程背景里真正影响申请的部分挑出来。",
+  },
+  {
+    title: "申请节奏",
+    body: "知道下一步先补什么，再安排文书、推荐信和递交时间。",
+  },
+];
+const heroContactItems = [
+  {
+    label: "顾问",
+    value: String(site.consultTeacherName || "周老师").trim(),
+  },
+  {
+    label: "电话",
+    value: String(site.phone || "").trim(),
+  },
+  {
+    label: "微信",
+    value: String(site.wechat || "").trim(),
+  },
+].filter((item) => item.value && item.value !== "待填写");
 ---
 
 <BaseLayout
@@ -38,63 +92,102 @@ const contactOptions = Array.from(
   description={site.slogan ?? ""}
 >
   <main>
-    <section class="hero-section">
-      <div class="container hero-grid">
-        <div class="hero-copy">
-          <div class="hero-kicker">Wanhe Education</div>
-          <h1 class="hero-title">{site.companyName ?? "Wanhe Education"}</h1>
+    <section class="hero-section hero-section--immersive">
+      <div class="container hero-stack">
+        <div class="hero-copy hero-copy--centered">
+          <div class="hero-kicker hero-kicker--soft">2026 Intake · Wanhe Education</div>
+          <h1 class="hero-title">把留学申请，做成一眼看懂的系统。</h1>
           <p class="hero-subtitle">
-            {site.slogan ?? "高分出分 · 名师指导 · 留学申请一站式"}
+            {site.slogan ??
+              "从语言提分到留学申请，把国家、项目、门槛和时间线收拢到同一套更清楚的界面里。"}
           </p>
 
-          <div class="hero-actions">
-            <a class="btn" href="/services">查看服务</a>
-            <a class="btn btn-ghost-dark" href="#contact">联系我们</a>
+          <div class="hero-actions hero-actions--centered">
+            <a class="btn" href="/school-finder">开始选校</a>
+            <a class="btn btn-ghost-dark" href="#contact">预约咨询</a>
           </div>
 
-          <div class="hero-points">
-            <span class="hero-pill">TOEFL</span>
-            <span class="hero-pill">IELTS</span>
+          <div class="hero-points hero-points--centered">
+            <span class="hero-pill">官方项目页</span>
+            <span class="hero-pill">语言提分</span>
             <span class="hero-pill">留学申请</span>
             <span class="hero-pill">1v1 规划</span>
           </div>
         </div>
 
-        <div class="hero-panel">
-          <div class="hero-card">
-            <div class="hero-card-label">核心服务</div>
+        <div class="hero-showcase">
+          <div class="hero-spotlight-stack">
+            <article class="hero-spotlight-card">
+              <span class="hero-spotlight-label">Selection Engine</span>
+              <strong>国家、项目、门槛与申请节奏，同屏收拢。</strong>
+              <p>
+                先看清学校与项目池，再决定文书、递交和出分安排。复杂留学流程，也可以像消费电子产品页一样清楚、安静、好扫读。
+              </p>
 
-            <div class="hero-card-list">
-              <div class="hero-card-item">
-                <span>托福提分课程</span>
-                <strong>口语 / 写作 / 模考规划</strong>
+              <div class="hero-spotlight-metrics">
+                {heroMetrics.map((item) => (
+                  <div class="hero-spotlight-metric">
+                    <strong>{item.value}</strong>
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article class="hero-conversion-card">
+              <div class="hero-mini-kicker">Start Here</div>
+              <div class="hero-mini-title">先拿到一轮可执行的判断。</div>
+              <div class="hero-mini-list">
+                {journeyHighlights.map((item) => (
+                  <p>{item}</p>
+                ))}
               </div>
 
-              <div class="hero-card-item">
-                <span>雅思系统课程</span>
-                <strong>听说读写全科推进</strong>
-              </div>
+              {heroContactItems.length ? (
+                <div class="hero-contact-row">
+                  {heroContactItems.map((item) => (
+                    <div class="hero-contact-chip">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
-              <div class="hero-card-item">
-                <span>留学申请服务</span>
-                <strong>选校 / 文书 / 递交 / 签证</strong>
+              <div class="hero-conversion-actions">
+                <a class="btn" href="#contact">预约顾问咨询</a>
+                <a class="btn btn-ghost-dark" href="/school-finder">直接开始选校</a>
               </div>
-            </div>
+            </article>
+          </div>
 
-            <div class="hero-stats">
-              <div class="hero-stat">
-                <strong>{scores.length || 12}+</strong>
-                <span>出分案例</span>
+          <div class="hero-showcase-grid">
+            <article class="hero-mini-card">
+              <div class="hero-mini-kicker">Featured Programs</div>
+              <div class="hero-mini-title">你会先看到这些层级。</div>
+              <div class="hero-program-list">
+                {featuredPrograms.map((program) => (
+                  <div class="hero-program-item">
+                    <small>{program.country} · {program.degree}</small>
+                    <strong>{program.schoolName}</strong>
+                    <span>{program.programName}</span>
+                  </div>
+                ))}
               </div>
-              <div class="hero-stat">
-                <strong>{teachers.length || 3}+</strong>
-                <span>核心老师</span>
+            </article>
+
+            <article class="hero-mini-card">
+              <div class="hero-mini-kicker">What You Get</div>
+              <div class="hero-mini-title">不是泛泛介绍，而是明确下一步。</div>
+              <div class="hero-outcome-list">
+                {heroDeliverables.map((item) => (
+                  <div class="hero-outcome-item">
+                    <strong>{item.title}</strong>
+                    <p>{item.body}</p>
+                  </div>
+                ))}
               </div>
-              <div class="hero-stat">
-                <strong>{services.length || 5}+</strong>
-                <span>服务模块</span>
-              </div>
-            </div>
+            </article>
           </div>
         </div>
       </div>

@@ -19,7 +19,7 @@ type Props = {
 
 const { anchorId = "school-match", compact = false, totalPrograms = 0 } = Astro.props as Props;
 
-const countryOptions = await readStudyAbroadFinderCountries();
+const countryOptions: string[] = await readStudyAbroadFinderCountries();
 const finderId = `school-match-${Math.random().toString(36).slice(2, 10)}`;
 
 const safeOrigin = (input: string) => {
@@ -750,6 +750,9 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       let activeDetailProgramId = "";
       let fitPreviewToken = 0;
       let admissionsPrefetchToken = 0;
+      let admissionsPrefetchTimer = 0;
+      let candidateExpansionToken = 0;
+      let candidateExpansionController = null;
       const detailCache = new Map();
       const specializationMap =
         specializationOptionsByMajor &&
@@ -1086,6 +1089,9 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       const hasFitPreviewInput = (payload) =>
         Boolean(payload?.gpaProfile || payload?.languageProfile);
 
+      const hasCandidateExpansionInput = (payload) =>
+        Boolean((payload?.major || payload?.specialization) && !payload?.universityId);
+
       const fitBadgeLabel = (status) => {
         if (status === "match") return "匹配";
         if (status === "risk") return "偏紧";
@@ -1151,9 +1157,10 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         }
 
         const programIds = items
+          .filter((item) => item?.admissionsSnapshot?.extractedAt)
           .map((item) => String(item?.id || "").trim())
           .filter(Boolean)
-          .slice(0, 8);
+          .slice(0, 4);
 
         if (!programIds.length) {
           return;
@@ -1716,6 +1723,25 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         updateAdmissionsStatusNodes(updatedPrograms);
       };
 
+      const clearAdmissionsPrefetchSchedule = () => {
+        if (!admissionsPrefetchTimer) {
+          return;
+        }
+
+        window.clearTimeout(admissionsPrefetchTimer);
+        admissionsPrefetchTimer = 0;
+      };
+
+      const clearCandidateExpansion = () => {
+        candidateExpansionToken += 1;
+
+        if (candidateExpansionController instanceof AbortController) {
+          candidateExpansionController.abort();
+        }
+
+        candidateExpansionController = null;
+      };
+
       const runAdmissionsPrefetch = async (items, payload, options = {}) => {
         const currentResults = Array.isArray(items) ? items : [];
         if (!currentResults.length) {
@@ -1724,7 +1750,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
         const candidates = currentResults
           .filter((program) => !program?.admissionsSnapshot?.extractedAt)
-          .slice(0, 6);
+          .slice(0, 4);
 
         if (!candidates.length) {
           return;
@@ -1746,6 +1772,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
               specialization: payload?.specialization || "",
               maxPrograms: candidates.length,
               programIds: candidates.map((program) => program.id),
+              waitForCompletion: false,
             }),
           });
 
@@ -1760,6 +1787,9 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
           const updatedPrograms = Array.isArray(data.updatedPrograms) ? data.updatedPrograms : [];
           if (!updatedPrograms.length) {
+            if (!options?.silentStatus && data?.message) {
+              setStatus(`${statusNode?.textContent || ""} ${data.message}`.trim());
+            }
             return;
           }
 
@@ -1784,6 +1814,70 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           }
         } catch {
           return;
+        }
+      };
+
+      const scheduleAdmissionsPrefetch = (items, payload, options = {}) => {
+        clearAdmissionsPrefetchSchedule();
+
+        admissionsPrefetchTimer = window.setTimeout(() => {
+          admissionsPrefetchTimer = 0;
+          void runAdmissionsPrefetch(items, payload, options);
+        }, 900);
+      };
+
+      const runCandidateExpansion = async (payload, statusText) => {
+        if (!hasCandidateExpansionInput(payload)) {
+          return;
+        }
+
+        clearCandidateExpansion();
+        const token = candidateExpansionToken;
+        const controller = new AbortController();
+        candidateExpansionController = controller;
+        setStatus(`${statusText} 正在后台补充候选官网页...`);
+
+        try {
+          const response = await fetch("/api/study-abroad/expand-candidates", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            signal: controller.signal,
+            body: JSON.stringify(payload),
+          });
+
+          const data = await response.json();
+          if (token !== candidateExpansionToken) {
+            return;
+          }
+
+          if (!response.ok || !data?.ok) {
+            throw new Error(data?.message || "候选官网页补充失败。");
+          }
+
+          const nextCandidateResults = Array.isArray(data.candidateResults)
+            ? data.candidateResults
+            : [];
+          baseCandidateResults = nextCandidateResults;
+
+          if (!selectedUniversityId) {
+            renderCandidateResults(nextCandidateResults);
+          }
+
+          setStatus(
+            data.message ? `${statusText} ${data.message}`.trim() : statusText
+          );
+        } catch (error) {
+          if (error?.name === "AbortError" || token !== candidateExpansionToken) {
+            return;
+          }
+
+          setStatus(statusText);
+        } finally {
+          if (candidateExpansionController === controller) {
+            candidateExpansionController = null;
+          }
         }
       };
 
@@ -1855,6 +1949,8 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
       const resetToFeatured = () => {
         admissionsPrefetchToken += 1;
+        clearAdmissionsPrefetchSchedule();
+        clearCandidateExpansion();
         if (countrySelect instanceof HTMLSelectElement) countrySelect.value = "";
         if (degreeSelect instanceof HTMLSelectElement) degreeSelect.value = "";
         if (majorSelect instanceof HTMLSelectElement) majorSelect.value = "";
@@ -1907,6 +2003,8 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
       const runSearch = async (overridePayload = {}, options = {}) => {
         admissionsPrefetchToken += 1;
+        clearAdmissionsPrefetchSchedule();
+        clearCandidateExpansion();
         const payload = {
           ...collectPayload(),
           ...overridePayload,
@@ -1930,7 +2028,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         setStatus(
           fromSchoolFilter
             ? "正在切换学校并缩小项目范围..."
-            : "正在搜索已核验项目，并从全网筛选候选官网页..."
+            : "正在搜索已核验项目..."
         );
 
         try {
@@ -1983,7 +2081,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             renderCandidateResults([]);
             hideDetailPanel();
             renderSchoolSummary(selectedSchool);
-            runAdmissionsPrefetch(activeVerifiedResults, payload, {
+            scheduleAdmissionsPrefetch(activeVerifiedResults, payload, {
               silentStatus: true,
             });
             return;
@@ -2020,7 +2118,8 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           renderCandidateResults(baseCandidateResults);
           hideDetailPanel();
           hideSchoolSummary();
-          runAdmissionsPrefetch(baseVerifiedResults, lastBasePayload);
+          scheduleAdmissionsPrefetch(baseVerifiedResults, lastBasePayload);
+          void runCandidateExpansion(lastBasePayload, baseStatusText);
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "搜索失败，请稍后重试。");
           renderVerifiedResults([], "接口暂时不可用，请稍后重试。");
