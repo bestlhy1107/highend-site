@@ -52,11 +52,6 @@ const heroMetrics = [
     label: "顾问 / 老师",
   },
 ];
-const journeyHighlights = [
-  "告诉我们目标国家、专业方向和当前成绩。",
-  "先帮你缩学校池，再看项目池和官网门槛。",
-  "再决定语言、文书和递交节奏，避免无效准备。",
-];
 const heroDeliverables = [
   {
     title: "首轮项目池",
@@ -96,7 +91,7 @@ const heroContactItems = [
       <div class="container hero-stack">
         <div class="hero-copy hero-copy--centered">
           <div class="hero-kicker hero-kicker--soft">2026 Intake · Wanhe Education</div>
-          <h1 class="hero-title">把留学申请，做成一眼看懂的系统。</h1>
+          <h1 class="hero-title">让留学<br>更加简单<br>让语言<br>没有阻碍</h1>
           <p class="hero-subtitle">
             {site.slogan ??
               "从语言提分到留学申请，把国家、项目、门槛和时间线收拢到同一套更清楚的界面里。"}
@@ -116,30 +111,58 @@ const heroContactItems = [
         </div>
 
         <div class="hero-showcase">
-          <div class="hero-spotlight-stack">
-            <article class="hero-spotlight-card">
-              <span class="hero-spotlight-label">Selection Engine</span>
-              <strong>国家、项目、门槛与申请节奏，同屏收拢。</strong>
-              <p>
-                先看清学校与项目池，再决定文书、递交和出分安排。复杂留学流程，也可以像消费电子产品页一样清楚、安静、好扫读。
+          <article class="hero-spotlight-card">
+            <span class="hero-spotlight-label">Selection Engine</span>
+            <strong>国家、项目、门槛与申请节奏，同屏收拢。</strong>
+            <p>
+              先看清学校与项目池，再决定文书、递交和出分安排。复杂留学流程，也可以像消费电子产品页一样清楚、安静、好扫读。
+            </p>
+
+            <div class="hero-spotlight-metrics">
+              {heroMetrics.map((item) => (
+                <div class="hero-spotlight-metric">
+                  <strong>{item.value}</strong>
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article class="hero-mini-card">
+            <div class="hero-mini-kicker">Featured Programs</div>
+            <div class="hero-mini-title">你会先看到这些项目样例。</div>
+            <div class="hero-program-list">
+              {featuredPrograms.map((program) => (
+                <div class="hero-program-item">
+                  <small>{program.country} · {program.degree}</small>
+                  <strong>{program.schoolName}</strong>
+                  <span>{program.programName}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article class="hero-results-card">
+            <div class="hero-results-copy">
+              <div class="hero-mini-kicker">Consulting</div>
+              <div class="hero-mini-title">先拿到一轮判断，再决定要不要深入申请。</div>
+              <p class="hero-results-desc">
+                你不需要先看完所有学校官网。把目标国家、专业方向和当前成绩告诉我们，先拿到值得继续看的项目池和下一步建议。
               </p>
 
-              <div class="hero-spotlight-metrics">
-                {heroMetrics.map((item) => (
-                  <div class="hero-spotlight-metric">
-                    <strong>{item.value}</strong>
-                    <span>{item.label}</span>
-                  </div>
-                ))}
+              <div class="hero-conversion-actions">
+                <a class="btn" href="#contact">预约顾问咨询</a>
+                <a class="btn btn-ghost-dark" href="/school-finder">直接开始选校</a>
               </div>
-            </article>
+            </div>
 
-            <article class="hero-conversion-card">
-              <div class="hero-mini-kicker">Start Here</div>
-              <div class="hero-mini-title">先拿到一轮可执行的判断。</div>
-              <div class="hero-mini-list">
-                {journeyHighlights.map((item) => (
-                  <p>{item}</p>
+            <div class="hero-results-side">
+              <div class="hero-outcome-list">
+                {heroDeliverables.map((item) => (
+                  <div class="hero-outcome-item">
+                    <strong>{item.title}</strong>
+                    <p>{item.body}</p>
+                  </div>
                 ))}
               </div>
 
@@ -153,42 +176,8 @@ const heroContactItems = [
                   ))}
                 </div>
               ) : null}
-
-              <div class="hero-conversion-actions">
-                <a class="btn" href="#contact">预约顾问咨询</a>
-                <a class="btn btn-ghost-dark" href="/school-finder">直接开始选校</a>
-              </div>
-            </article>
-          </div>
-
-          <div class="hero-showcase-grid">
-            <article class="hero-mini-card">
-              <div class="hero-mini-kicker">Featured Programs</div>
-              <div class="hero-mini-title">你会先看到这些层级。</div>
-              <div class="hero-program-list">
-                {featuredPrograms.map((program) => (
-                  <div class="hero-program-item">
-                    <small>{program.country} · {program.degree}</small>
-                    <strong>{program.schoolName}</strong>
-                    <span>{program.programName}</span>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            <article class="hero-mini-card">
-              <div class="hero-mini-kicker">What You Get</div>
-              <div class="hero-mini-title">不是泛泛介绍，而是明确下一步。</div>
-              <div class="hero-outcome-list">
-                {heroDeliverables.map((item) => (
-                  <div class="hero-outcome-item">
-                    <strong>{item.title}</strong>
-                    <p>{item.body}</p>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
+            </div>
+          </article>
         </div>
       </div>
     </section>

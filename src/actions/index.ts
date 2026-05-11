@@ -30,6 +30,8 @@ import {
   syncStudyAbroadAdmissionsSnapshots,
   warmStudyAbroadAdmissionsCoverage,
 } from "../lib/study-abroad-admissions-sync";
+import { updateStudyAbroadReviewEntryStatus } from "../lib/study-abroad-review-queue";
+import { importStudyAbroadReviewCandidate } from "../lib/study-abroad-review-import";
 
 const ADMIN_USERNAME = import.meta.env?.ADMIN_USERNAME;
 const ADMIN_PASSWORD = import.meta.env?.ADMIN_PASSWORD;
@@ -589,6 +591,36 @@ contactLead: defineAction({
         focusCooldownHours: input.focusCooldownHours,
         countryCooldownHours: input.countryCooldownHours,
         smartRecommendationCooldownHours: input.smartRecommendationCooldownHours,
+      });
+    },
+  }),
+
+  updateStudyAbroadReviewQueueStatus: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().min(1, "缺少候选任务 ID"),
+      status: z.enum(["reviewed", "discarded"]),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return updateStudyAbroadReviewEntryStatus({
+        id: input.id,
+        status: input.status,
+      });
+    },
+  }),
+
+  importStudyAbroadReviewCandidate: defineAction({
+    accept: "form",
+    input: z.object({
+      entryId: z.string().min(1, "缺少候选任务 ID"),
+      candidateLink: z.string().url("缺少候选链接"),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return importStudyAbroadReviewCandidate({
+        entryId: input.entryId,
+        candidateLink: input.candidateLink,
       });
     },
   }),

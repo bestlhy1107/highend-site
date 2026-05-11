@@ -30,6 +30,99 @@ type UkSeedProgram = {
 
 const UK_SEED_PROGRAMS: UkSeedProgram[] = [
   {
+    id: "ual-design-management-ma",
+    schoolName: "University of the Arts London",
+    city: "London",
+    programName: "MA Design Management",
+    discipline: "设计 / 艺术",
+    summary:
+      "伦敦艺术大学官网显示，该项目将 design management 置于跨学科协作与组织变革语境中，强调设计研究、沟通分析与 leadership 能力，并鼓励把设计方法应用到 brand、strategy 与 business development 场景。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "设计管理",
+      "design management",
+      "strategic design",
+      "brand",
+      "design research",
+      "creative leadership",
+    ],
+    tags: ["英国", "设计", "设计管理", "官方课程页"],
+    overviewUrl: "https://www.arts.ac.uk/subjects/business-and-management-and-science/postgraduate/ma-design-management-lcc",
+    admissionsUrl:
+      "https://www.arts.ac.uk/subjects/business-and-management-and-science/postgraduate/ma-design-management-lcc",
+    priority: 89,
+  },
+  {
+    id: "brunel-design-strategy-innovation-ma",
+    schoolName: "Brunel University of London",
+    city: "London",
+    programName: "Design Strategy and Innovation MA",
+    discipline: "设计 / 艺术",
+    summary:
+      "布鲁内尔大学官网显示，该项目把 design thinking 作为 innovation catalyst，围绕 products、services、processes 与 creative collaboration 展开，适合希望把设计方法应用到组织创新与战略实践中的申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "设计策略",
+      "design strategy",
+      "innovation",
+      "design thinking",
+      "creative collaboration",
+      "service design",
+    ],
+    tags: ["英国", "设计", "创新", "官方课程页"],
+    overviewUrl: "https://www.brunel.ac.uk/study/courses/design-strategy-and-innovation-ma",
+    admissionsUrl: "https://www.brunel.ac.uk/study/courses/design-strategy-and-innovation-ma",
+    priority: 87,
+  },
+  {
+    id: "newcastle-advanced-architectural-design-msc",
+    schoolName: "Newcastle University",
+    city: "Newcastle upon Tyne",
+    programName: "Advanced Architectural Design MSc",
+    discipline: "建筑 / 城市规划",
+    summary:
+      "纽卡斯尔大学官网显示，该项目面向希望继续强化 architectural design 能力的国际申请者，强调 design and research skills，并依托 studio 与实践导向环境推进空间与建筑表达训练。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "建筑",
+      "architectural design",
+      "architecture",
+      "studio",
+      "spatial design",
+      "design research",
+    ],
+    tags: ["英国", "建筑", "建筑设计", "官方课程页"],
+    overviewUrl: "https://www.ncl.ac.uk/postgraduate/degrees/5383f/",
+    admissionsUrl: "https://www.ncl.ac.uk/postgraduate/degrees/5383f/",
+    priority: 86,
+  },
+  {
+    id: "manchester-planning-msc",
+    schoolName: "University of Manchester",
+    city: "Manchester",
+    programName: "MSc Planning",
+    discipline: "建筑 / 城市规划",
+    summary:
+      "曼彻斯特大学官网显示，该项目聚焦 urban and environmental planning，强调把 planning policies 与 theories 放到真实 development 场景中训练，适合希望进入规划与城市发展相关职业路径的申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "城市规划",
+      "planning",
+      "urban planning",
+      "environmental planning",
+      "development",
+      "policy",
+    ],
+    tags: ["英国", "城市规划", "空间发展", "官方课程页"],
+    overviewUrl: "https://www.manchester.ac.uk/study/masters/courses/list/09421/msc-planning/",
+    admissionsUrl: "https://www.manchester.ac.uk/study/masters/courses/list/09421/msc-planning/",
+    priority: 85,
+  },
+  {
     id: "imperial-advanced-computing-msc",
     schoolName: "Imperial College London",
     city: "London",
@@ -244,9 +337,17 @@ function ensureUkUniversities(
 
     if (matched) {
       const current = map.get(matched.id) || matched;
+      const nextName =
+        current.sourceIds.includes(UK_SOURCE_ID) && current.name
+          ? current.name
+          : program.schoolName || current.name;
       map.set(matched.id, {
         ...current,
-        nameZh: current.nameZh || getStudyAbroadUniversityNameZh(current.name),
+        name: nextName,
+        nameZh:
+          current.nameZh ||
+          getStudyAbroadUniversityNameZh(nextName) ||
+          getStudyAbroadUniversityNameZh(current.name),
         city: current.city || program.city,
         officialWebsite: current.officialWebsite || new URL(program.overviewUrl).origin,
         websiteDomain: current.websiteDomain || domain,

@@ -2,15 +2,49 @@
 export const prerender = false;
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions } from "astro:actions";
+import { readStudyAbroadCatalogPrograms } from "../../lib/study-abroad-catalog-store";
 import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
+
+function normalizeReviewLink(value?: string) {
+  try {
+    const url = new URL(String(value || "").trim());
+    url.hash = "";
+    url.search = "";
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return `${url.protocol}//${url.host}${pathname}`;
+  } catch {
+    return String(value || "").trim();
+  }
+}
 
 const adminUser = await Astro.session?.get("adminUser");
 if (!adminUser) {
   return Astro.redirect("/admin/login");
 }
 
+const importCandidateResult = Astro.getActionResult(actions.importStudyAbroadReviewCandidate);
+const importCandidateNotice =
+  importCandidateResult && !importCandidateResult.error ? importCandidateResult.data : null;
+const reviewQueueResult = Astro.getActionResult(actions.updateStudyAbroadReviewQueueStatus);
+const reviewQueueNotice =
+  reviewQueueResult && !reviewQueueResult.error ? reviewQueueResult.data : null;
 const queue = await readStudyAbroadReviewQueue();
+const catalogPrograms = await readStudyAbroadCatalogPrograms();
+const importedProgramByLink = new Map(
+  catalogPrograms.flatMap((program) =>
+    [program.overviewUrl, program.admissionsUrl, program.tuitionUrl]
+      .map((link) => normalizeReviewLink(link))
+      .filter(Boolean)
+      .map((link) => [link, program] as const)
+  )
+);
 const pendingItems = queue.filter((item) => item.status === "pending");
+const reviewedItems = queue.filter((item) => item.status === "reviewed");
+const discardedItems = queue.filter((item) => item.status === "discarded");
+const recentHandledItems = [...queue]
+  .filter((item) => item.status !== "pending")
+  .slice(0, 8);
 ---
 
 <BaseLayout title="管理员后台 - 选校候选" description="查看待核验选校候选结果">
@@ -37,14 +71,42 @@ const pendingItems = queue.filter((item) => item.status === "pending");
       </div>
 
       <div class="card">
-        <div class="muted text-sm">全部候选任务</div>
-        <div class="h2 mt-2">{queue.length}</div>
+        <div class="muted text-sm">已标记已入库</div>
+        <div class="h2 mt-2">{reviewedItems.length}</div>
       </div>
 
       <div class="card">
-        <div class="muted text-sm">当前逻辑</div>
-        <div class="mt-2">先返回已核验项目，再把全网候选结果送进后台。</div>
+        <div class="muted text-sm">已丢弃 / 全部任务</div>
+        <div class="h2 mt-2">{discardedItems.length} / {queue.length}</div>
       </div>
+    </div>
+
+    {importCandidateNotice && (
+      <div class:list={[
+        "contact-notice mt-4",
+        importCandidateNotice.ok ? "contact-notice--success" : "contact-notice--error",
+      ]}>
+        {importCandidateNotice.message}
+      </div>
+    )}
+
+    {reviewQueueNotice && (
+      <div class:list={[
+        "contact-notice mt-4",
+        reviewQueueNotice.ok ? "contact-notice--success" : "contact-notice--error",
+      ]}>
+        {reviewQueueNotice.message}
+      </div>
+    )}
+
+    <div class="card mt-6">
+      <div class="h3">处理说明</div>
+      <p class="muted mt-2">
+        这里的按钮是按“整组候选任务”处理，不是单条链接处理。如果这组候选已经入正式底库，就标记为已入库；如果确认无效或不打算采用，就标记为已丢弃。
+      </p>
+      <p class="muted mt-2">
+        标记后，这组任务会从待核验列表移走，但仍会保留历史状态，方便回头核对。
+      </p>
     </div>
 
     {pendingItems.length ? (
@@ -61,23 +123,70 @@ const pendingItems = queue.filter((item) => item.status === "pending");
                 <div class="muted mt-1">
                   创建时间：{new Date(item.createdAt).toLocaleString("zh-CN")}
                 </div>
+                <div class="muted mt-1">
+                  最近更新时间：{new Date(item.updatedAt).toLocaleString("zh-CN")}
+                </div>
+                <div class="muted mt-1">
+                  已在正式库：
+                  {
+                    item.candidates.filter((candidate) =>
+                      importedProgramByLink.has(normalizeReviewLink(candidate.link))
+                    ).length
+                  }
+                  /{item.candidates.length}
+                </div>
               </div>
               <span class="badge">{item.candidates.length} 条候选</span>
             </div>
 
+            <div class="detail-actions mt-4">
+              <form method="POST" action={actions.updateStudyAbroadReviewQueueStatus}>
+                <input type="hidden" name="id" value={item.id} />
+                <input type="hidden" name="status" value="reviewed" />
+                <button class="btn" type="submit">整组标记已入库</button>
+              </form>
+              <form method="POST" action={actions.updateStudyAbroadReviewQueueStatus}>
+                <input type="hidden" name="id" value={item.id} />
+                <input type="hidden" name="status" value="discarded" />
+                <button class="btn btn-ghost" type="submit">整组标记丢弃</button>
+              </form>
+            </div>
+
             <div class="mt-4">
-              {item.candidates.map((candidate) => (
-                <div class="faq">
-                  <div class="h3">{candidate.title}</div>
-                  <div class="muted mt-1">{candidate.displayLink || candidate.provider}</div>
-                  {candidate.snippet ? <p class="muted mt-2">{candidate.snippet}</p> : null}
-                  <div class="detail-actions mt-3">
-                    <a class="btn btn-ghost" href={candidate.link} target="_blank" rel="noreferrer">
-                      打开候选官网页
-                    </a>
+              {item.candidates.map((candidate) => {
+                const importedProgram = importedProgramByLink.get(
+                  normalizeReviewLink(candidate.link)
+                );
+
+                return (
+                  <div class="faq">
+                    <div class="h3">{candidate.title}</div>
+                    <div class="muted mt-1">{candidate.displayLink || candidate.provider}</div>
+                    {candidate.snippet ? <p class="muted mt-2">{candidate.snippet}</p> : null}
+                    <div class="detail-actions mt-3">
+                      {importedProgram ? (
+                        <span class="badge">
+                          已在正式库：{importedProgram.schoolName} / {importedProgram.programName}
+                        </span>
+                      ) : (
+                        <form method="POST" action={actions.importStudyAbroadReviewCandidate}>
+                          <input type="hidden" name="entryId" value={item.id} />
+                          <input type="hidden" name="candidateLink" value={candidate.link} />
+                          <button class="btn" type="submit">导入正式项目</button>
+                        </form>
+                      )}
+                      <a class="btn btn-ghost" href={candidate.link} target="_blank" rel="noreferrer">
+                        打开候选官网页
+                      </a>
+                      {importedProgram ? (
+                        <a class="btn btn-ghost" href="/admin/study-abroad-catalog">
+                          查看留学底库
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </article>
         ))}
@@ -90,5 +199,33 @@ const pendingItems = queue.filter((item) => item.status === "pending");
         </p>
       </div>
     )}
+
+    {recentHandledItems.length ? (
+      <div class="card mt-6">
+        <div class="card-top">
+          <div class="h3">最近已处理任务</div>
+          <span class="badge">{recentHandledItems.length} 条</span>
+        </div>
+        <div class="mt-4">
+          {recentHandledItems.map((item) => (
+            <div class="faq">
+              <div class="card-top">
+                <div class="h3">
+                  {item.country || "不限国家"}
+                  {item.major ? ` / ${item.major}` : ""}
+                  {item.degree ? ` / ${item.degree}` : ""}
+                </div>
+                <span class="badge">
+                  {item.status === "reviewed" ? "已入库" : "已丢弃"}
+                </span>
+              </div>
+              <div class="muted mt-1">
+                处理时间：{new Date(item.updatedAt).toLocaleString("zh-CN")} · 候选 {item.candidates.length} 条
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null}
   </main>
 </BaseLayout>

@@ -3572,20 +3572,14 @@ button.btn {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  grid-template-columns: minmax(0, 1.04fr) minmax(360px, 0.96fr);
   gap: 20px;
   align-items: start;
 }
 
-.hero-spotlight-stack {
-  display: grid;
-  gap: 20px;
-  align-content: start;
-}
-
 .hero-spotlight-card,
 .hero-mini-card,
-.hero-conversion-card {
+.hero-results-card {
   border-radius: 32px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   overflow: hidden;
@@ -3669,24 +3663,30 @@ button.btn {
   box-shadow: var(--shadow-sm);
 }
 
-.hero-conversion-card {
+.hero-results-card {
+  grid-column: 1 / -1;
   display: grid;
-  gap: 0;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 18px;
   padding: 24px;
   background: rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(16px);
 }
 
-.hero-conversion-card .hero-mini-kicker {
+.hero-results-card .hero-mini-kicker {
   color: rgba(170, 220, 255, 0.92);
 }
 
-.hero-conversion-card .hero-mini-title {
+.hero-results-card .hero-mini-title {
   color: #ffffff;
 }
 
-.hero-conversion-card .hero-mini-list p {
+.hero-results-desc {
+  margin: 14px 0 0;
+  max-width: 520px;
   color: rgba(255, 255, 255, 0.78);
+  font-size: 15px;
+  line-height: 1.8;
 }
 
 .hero-mini-kicker {
@@ -3701,7 +3701,6 @@ button.btn {
   color: var(--text);
 }
 
-.hero-mini-list,
 .hero-program-list,
 .hero-outcome-list {
   display: grid;
@@ -3709,7 +3708,6 @@ button.btn {
   margin-top: 18px;
 }
 
-.hero-mini-list p,
 .hero-program-item span,
 .hero-outcome-item p {
   margin: 0;
@@ -3743,6 +3741,15 @@ button.btn {
   color: var(--text);
 }
 
+.hero-results-side {
+  display: grid;
+  gap: 14px;
+}
+
+.hero-outcome-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .hero-outcome-item p {
   margin-top: 8px;
 }
@@ -3751,7 +3758,6 @@ button.btn {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 18px;
 }
 
 .hero-contact-chip strong {
@@ -3857,7 +3863,7 @@ button.btn {
   box-shadow: 0 28px 70px rgba(58, 78, 104, 0.12);
 }
 
-.page-home .hero-conversion-card {
+.page-home .hero-results-card {
   background: rgba(255, 255, 255, 0.12);
 }
 
@@ -4070,12 +4076,14 @@ button.btn {
     grid-template-columns: 1fr;
   }
 
-  .hero-spotlight-metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
+  .hero-results-card,
+  .hero-outcome-list,
   .hero-contact-row {
     grid-template-columns: 1fr;
+  }
+
+  .hero-spotlight-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -4121,7 +4129,7 @@ button.btn {
 
   .hero-spotlight-card,
   .hero-mini-card,
-  .hero-conversion-card {
+  .hero-results-card {
     padding: 22px;
     border-radius: 24px;
   }

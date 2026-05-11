@@ -4,6 +4,7 @@ import {
   MAJOR_QUERY_ALIASES,
   MAJOR_FAMILIES,
   SPECIALIZATION_QUERY_ALIASES,
+  SPECIALIZATION_TO_MAJOR,
 } from "./study-abroad-programs";
 import {
   readStudyAbroadCatalogUniversities,
@@ -490,6 +491,10 @@ function tokenizeText(value: string) {
   );
 }
 
+function isAsciiSingleTokenKeyword(value: string) {
+  return /^[a-z0-9]+$/i.test(value);
+}
+
 function matchNormalizedKeyword(
   searchText: string,
   tokenSet: Set<string>,
@@ -498,11 +503,16 @@ function matchNormalizedKeyword(
   const keyword = normalizeText(rawKeyword);
   if (!keyword) return false;
 
-  if (keyword.includes(" ") || keyword.length > 2) {
+  if (keyword.includes(" ")) {
     return searchText.includes(keyword);
   }
 
-  return tokenSet.has(keyword);
+  // English aliases should match full tokens so `art` won't hit `artificial`.
+  if (isAsciiSingleTokenKeyword(keyword)) {
+    return tokenSet.has(keyword);
+  }
+
+  return searchText.includes(keyword);
 }
 
 function expandQueryTokens(...values: string[]) {
@@ -567,6 +577,10 @@ export async function searchVerifiedStudyAbroadPrograms(
 ) {
   const query = normalizeStudyAbroadQuery(input);
   const queryTokens = expandQueryTokens(query.major, query.specialization);
+  const specializationMajor = query.specialization
+    ? SPECIALIZATION_TO_MAJOR[query.specialization] || ""
+    : "";
+  const expectedDiscipline = query.major || specializationMajor;
   const sourcePrograms = programs ?? (await readStudyAbroadFinderPrograms());
 
   return sourcePrograms.map((program) => {
@@ -579,6 +593,10 @@ export async function searchVerifiedStudyAbroadPrograms(
     }
 
     if (query.degree && program.degree !== query.degree) {
+      return null;
+    }
+
+    if (expectedDiscipline && program.discipline !== expectedDiscipline) {
       return null;
     }
 

@@ -79,6 +79,76 @@ export async function readStudyAbroadReviewQueue() {
   });
 }
 
+export async function updateStudyAbroadReviewEntryStatus(params: {
+  id: string;
+  status: "reviewed" | "discarded";
+}) {
+  const id = String(params.id ?? "").trim();
+  const status = params.status;
+
+  if (!id || (status !== "reviewed" && status !== "discarded")) {
+    return {
+      ok: false,
+      updated: false,
+      entry: null,
+      message: "缺少可更新的候选任务。",
+    };
+  }
+
+  const queue = await readStudyAbroadReviewQueue();
+  const target = queue.find((item) => item.id === id);
+
+  if (!target) {
+    return {
+      ok: false,
+      updated: false,
+      entry: null,
+      message: "这条候选任务不存在，可能已经被处理。",
+    };
+  }
+
+  if (target.status === status) {
+    return {
+      ok: true,
+      updated: false,
+      entry: target,
+      message:
+        status === "reviewed"
+          ? "这组候选已经标记为已入库。"
+          : "这组候选已经标记为已丢弃。",
+    };
+  }
+
+  const now = new Date().toISOString();
+  const nextQueue = queue.map((item) =>
+    item.id === id
+      ? normalizeEntry({
+          ...item,
+          status,
+          updatedAt: now,
+        })
+      : item
+  );
+  const updatedEntry = nextQueue.find((item) => item.id === id) ?? null;
+
+  await writeJsonArrayFile(nextQueue, {
+    fileName: FILE_NAME,
+    normalize: normalizeEntry,
+    isValid: isValidEntry,
+    compare: compareByUpdatedAt,
+  });
+
+  return {
+    ok: true,
+    updated: true,
+    entry: updatedEntry,
+    message:
+      status === "reviewed"
+        ? "这组候选已标记为已入库，不会继续停留在待核验列表。"
+        : "这组候选已标记为已丢弃，不会继续停留在待核验列表。",
+  };
+}
+
 export async function enqueueStudyAbroadReview(params: {
   country?: string;
   major?: string;
