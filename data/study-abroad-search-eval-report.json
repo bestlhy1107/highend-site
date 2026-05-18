@@ -1,0 +1,771 @@
+{
+  "generatedAt": "2026-05-18T11:34:36.787Z",
+  "totalCases": 14,
+  "passedCases": 14,
+  "failedCases": 0,
+  "passRate": 100,
+  "zeroResultCases": 0,
+  "lowResultCases": 5,
+  "candidateHeavyCases": 0,
+  "averageVerifiedCount": 70.4,
+  "averageUniversityCount": 180,
+  "averageCandidateCount": 0,
+  "cases": [
+    {
+      "id": "us-master-cs",
+      "label": "美国硕士 / 计算机 / AI",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "美国",
+        "major": "计算机 / AI",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 120,
+        "minUniversityCount": 300,
+        "minMeaningfulCount": 120,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "美国",
+          "degree": "硕士",
+          "major": "计算机 / AI",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "美国",
+        "major": "计算机 / AI",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 160,
+        "universityCount": 437,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 160
+      }
+    },
+    {
+      "id": "us-master-finance",
+      "label": "美国硕士 / 金融",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "美国",
+        "major": "金融",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 120,
+        "minUniversityCount": 200,
+        "minMeaningfulCount": 120,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "美国",
+          "degree": "硕士",
+          "major": "金融",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "美国",
+        "major": "金融",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 160,
+        "universityCount": 295,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 160
+      }
+    },
+    {
+      "id": "us-master-business-analytics",
+      "label": "美国硕士 / 商业分析 / 数据",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "美国",
+        "major": "商业分析 / 数据",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 120,
+        "minUniversityCount": 280,
+        "minMeaningfulCount": 120,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "美国",
+          "degree": "硕士",
+          "major": "商业分析 / 数据",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "美国",
+        "major": "商业分析 / 数据",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 160,
+        "universityCount": 365,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 160
+      }
+    },
+    {
+      "id": "us-master-education",
+      "label": "美国硕士 / 教育",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "美国",
+        "major": "教育",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 120,
+        "minUniversityCount": 450,
+        "minMeaningfulCount": 120,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "美国",
+          "degree": "硕士",
+          "major": "教育",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "美国",
+        "major": "教育",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 160,
+        "universityCount": 536,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 160
+      }
+    },
+    {
+      "id": "us-master-design-art",
+      "label": "美国硕士 / 设计 / 艺术",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "美国",
+        "major": "设计 / 艺术",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 120,
+        "minUniversityCount": 350,
+        "minMeaningfulCount": 120,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "美国",
+          "degree": "硕士",
+          "major": "设计 / 艺术",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "美国",
+        "major": "设计 / 艺术",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 160,
+        "universityCount": 428,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 160
+      }
+    },
+    {
+      "id": "uk-master-finance",
+      "label": "英国硕士 / 金融",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "英国",
+        "major": "金融",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 2,
+        "minUniversityCount": 2,
+        "minMeaningfulCount": 2,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "英国",
+          "degree": "硕士",
+          "major": "金融",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "英国",
+        "major": "金融",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 3,
+        "universityCount": 3,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 3
+      }
+    },
+    {
+      "id": "uk-master-design-art",
+      "label": "英国硕士 / 设计 / 艺术",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "英国",
+        "major": "设计 / 艺术",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 2,
+        "minUniversityCount": 2,
+        "minMeaningfulCount": 2,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "英国",
+          "degree": "硕士",
+          "major": "设计 / 艺术",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "英国",
+        "major": "设计 / 艺术",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 3,
+        "universityCount": 3,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 3
+      }
+    },
+    {
+      "id": "hk-master-media",
+      "label": "中国香港硕士 / 市场营销 / 传媒",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "中国香港",
+        "major": "市场营销 / 传媒",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 1,
+        "minUniversityCount": 1,
+        "minMeaningfulCount": 1,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "中国香港",
+          "degree": "硕士",
+          "major": "市场营销 / 传媒",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "中国香港",
+        "major": "市场营销 / 传媒",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 1,
+        "universityCount": 1,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 1
+      }
+    },
+    {
+      "id": "sg-master-business",
+      "label": "新加坡硕士 / 商科 / 管理",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "新加坡",
+        "major": "商科 / 管理",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 3,
+        "minUniversityCount": 2,
+        "minMeaningfulCount": 3,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "新加坡",
+          "degree": "硕士",
+          "major": "商科 / 管理",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "新加坡",
+        "major": "商科 / 管理",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 4,
+        "universityCount": 3,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 4
+      }
+    },
+    {
+      "id": "au-master-business",
+      "label": "澳大利亚硕士 / 商科 / 管理",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "",
+        "country": "澳大利亚",
+        "major": "商科 / 管理",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 2,
+        "minUniversityCount": 2,
+        "minMeaningfulCount": 2,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "澳大利亚",
+          "degree": "硕士",
+          "major": "商科 / 管理",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "",
+        "country": "澳大利亚",
+        "major": "商科 / 管理",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 2,
+        "universityCount": 2,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 2
+      }
+    },
+    {
+      "id": "free-text-uk-business-analytics",
+      "label": "自由输入 / 英国一年制商科硕士 / 偏商业分析",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "英国一年制商科硕士，GPA 3.5，偏商业分析",
+        "country": "",
+        "major": "",
+        "specialization": "",
+        "degree": "",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 5,
+        "minUniversityCount": 4,
+        "minMeaningfulCount": 5,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "英国",
+          "degree": "硕士",
+          "major": "商业分析 / 数据",
+          "specialization": "商业分析"
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "英国一年制商科硕士，GPA 3.5，偏商业分析",
+        "country": "英国",
+        "major": "商业分析 / 数据",
+        "specialization": "商业分析",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 8,
+        "universityCount": 6,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 8
+      }
+    },
+    {
+      "id": "free-text-hk-media",
+      "label": "自由输入 / 香港传媒硕士",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "香港传媒硕士",
+        "country": "",
+        "major": "",
+        "specialization": "",
+        "degree": "",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 1,
+        "minUniversityCount": 1,
+        "minMeaningfulCount": 1,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "中国香港",
+          "degree": "硕士",
+          "major": "市场营销 / 传媒",
+          "specialization": "传媒"
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "香港传媒硕士",
+        "country": "中国香港",
+        "major": "市场营销 / 传媒",
+        "specialization": "传媒",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 1,
+        "universityCount": 1,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 1
+      }
+    },
+    {
+      "id": "free-text-us-ai",
+      "label": "自由输入 / 美国计算机AI硕士",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "美国计算机AI硕士",
+        "country": "",
+        "major": "",
+        "specialization": "",
+        "degree": "",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 120,
+        "minUniversityCount": 300,
+        "minMeaningfulCount": 120,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "美国",
+          "degree": "硕士",
+          "major": "计算机 / AI",
+          "specialization": "人工智能"
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "美国计算机AI硕士",
+        "country": "美国",
+        "major": "计算机 / AI",
+        "specialization": "人工智能",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 160,
+        "universityCount": 437,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 160
+      }
+    },
+    {
+      "id": "free-text-sg-business",
+      "label": "自由输入 / 新加坡商科硕士",
+      "passed": true,
+      "reasons": [],
+      "input": {
+        "searchSessionId": "",
+        "freeText": "新加坡商科硕士",
+        "country": "",
+        "major": "",
+        "specialization": "",
+        "degree": "",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "expectations": {
+        "minVerifiedCount": 3,
+        "minUniversityCount": 2,
+        "minMeaningfulCount": 3,
+        "maxBlockedCount": 0,
+        "resolved": {
+          "country": "新加坡",
+          "degree": "硕士",
+          "major": "商科 / 管理",
+          "specialization": ""
+        }
+      },
+      "resolvedQuery": {
+        "freeText": "新加坡商科硕士",
+        "country": "新加坡",
+        "major": "商科 / 管理",
+        "specialization": "",
+        "degree": "硕士",
+        "budgetTier": "",
+        "intake": "",
+        "gpaProfile": "",
+        "languageProfile": "",
+        "fitMode": "",
+        "snapshotQuality": "",
+        "universityId": ""
+      },
+      "metrics": {
+        "verifiedCount": 4,
+        "universityCount": 3,
+        "candidateCount": 0,
+        "blockedCount": 0,
+        "meaningfulCount": 4
+      }
+    }
+  ]
+}

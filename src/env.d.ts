@@ -10,8 +10,11 @@ interface ImportMetaEnv {
   readonly SMTP_USER?: string;
   readonly SMTP_PASS?: string;
 
-  readonly CONTACT_TO?: string;
-  readonly CONTACT_FROM?: string;
+  readonly LEAD_TO_EMAIL?: string;
+  readonly MAIL_FROM?: string;
+
+  readonly ADMIN_USERNAME?: string;
+  readonly ADMIN_PASSWORD?: string;
 
   readonly BAIDU_APPBUILDER_API_KEY?: string;
   readonly BAIDU_SEARCH_API_KEY?: string;

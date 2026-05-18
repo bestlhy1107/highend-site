@@ -8,7 +8,9 @@
     "preview": "astro preview",
     "start": "npx @dotenvx/dotenvx run -- node ./dist/server/entry.mjs",
     "study-abroad:campaign": "tsx scripts/run-study-abroad-campaign.ts",
-    "study-abroad:catalog-sync": "npx @dotenvx/dotenvx run -- tsx scripts/run-study-abroad-catalog-sync.ts"
+    "study-abroad:catalog-sync": "npx @dotenvx/dotenvx run -- tsx scripts/run-study-abroad-catalog-sync.ts",
+    "study-abroad:eval": "tsx scripts/run-study-abroad-search-eval.ts",
+    "study-abroad:runtime-check": "npx @dotenvx/dotenvx run -- tsx scripts/check-study-abroad-search-runtime.ts"
   },
   "dependencies": {
     "@astrojs/db": "^0.20.1",

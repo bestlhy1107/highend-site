@@ -996,6 +996,10 @@ button.btn {
   gap: 8px;
 }
 
+.school-match-field--full {
+  grid-column: 1 / -1;
+}
+
 .school-match-field span {
   font-size: 13px;
   font-weight: 800;
@@ -1132,6 +1136,202 @@ button.btn {
   font-size: 14px;
   line-height: 1.7;
   color: var(--text-2);
+}
+
+.school-match-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.school-match-status-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 8px;
+  background: rgba(249, 248, 243, 0.96);
+  border: 1px solid rgba(186, 143, 99, 0.14);
+}
+
+.school-match-status-card span {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.school-match-status-card strong {
+  font-size: 28px;
+  line-height: 1;
+  color: var(--text);
+}
+
+.school-match-status-card p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.school-match-expansion {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 8px;
+  background: rgba(252, 247, 241, 0.96);
+  border: 1px solid rgba(200, 116, 58, 0.14);
+}
+
+.school-match-expansion-head {
+  display: grid;
+  gap: 6px;
+}
+
+.school-match-expansion-head strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.school-match-expansion-head p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.school-match-expansion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.school-match-expansion-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 116, 58, 0.16);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.school-match-expansion-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(200, 116, 58, 0.28);
+  box-shadow: var(--shadow-xs);
+}
+
+.school-match-intent {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 8px;
+  background: rgba(244, 247, 255, 0.92);
+  border: 1px solid rgba(90, 130, 255, 0.12);
+}
+
+.school-match-intent-head {
+  display: grid;
+  gap: 6px;
+}
+
+.school-match-intent-head strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.school-match-intent-head p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.school-match-intent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.school-match-intent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(90, 130, 255, 0.12);
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.school-match-intent-chip strong {
+  color: var(--accent-strong);
+}
+
+.school-match-intent-chip--free {
+  background: rgba(29, 29, 31, 0.05);
+  border-color: rgba(29, 29, 31, 0.08);
+}
+
+.school-match-intent-chip--interactive {
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.school-match-intent-chip--interactive:hover {
+  transform: translateY(-1px);
+  border-color: rgba(90, 130, 255, 0.24);
+  box-shadow: var(--shadow-xs);
+}
+
+.school-match-intent-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(29, 29, 31, 0.06);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.school-match-intent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.school-match-intent-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(90, 130, 255, 0.14);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.school-match-intent-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(90, 130, 255, 0.24);
+  box-shadow: var(--shadow-xs);
 }
 
 .school-match .btn:disabled,
@@ -1487,6 +1687,60 @@ button.btn {
   font-size: 14px;
   line-height: 1.8;
   color: var(--text-2);
+}
+
+.school-card-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.school-card-signal {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.school-card-signal--match {
+  color: #16774f;
+  background: rgba(38, 163, 109, 0.14);
+  border: 1px solid rgba(38, 163, 109, 0.18);
+}
+
+.school-card-signal--review {
+  color: #465691;
+  background: rgba(90, 130, 255, 0.12);
+  border: 1px solid rgba(90, 130, 255, 0.16);
+}
+
+.school-card-signal--soft {
+  color: rgba(29, 29, 31, 0.76);
+  background: rgba(29, 29, 31, 0.05);
+  border: 1px solid rgba(29, 29, 31, 0.08);
+}
+
+.school-card-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.school-card-reasons span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(29, 28, 26, 0.06);
+  border: 1px solid rgba(29, 28, 26, 0.08);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .school-card-tags {
@@ -3162,6 +3416,7 @@ textarea.input {
   .study-abroad-stats,
   .study-abroad-journey,
   .school-match-metrics,
+  .school-match-status-grid,
   .catalog-queue-grid,
   .catalog-overview-grid,
   .school-pool,
@@ -3217,6 +3472,7 @@ textarea.input {
   .study-abroad-picks-grid--minimal,
   .study-abroad-journey,
   .school-match-metrics,
+  .school-match-status-grid,
   .school-match-guidance--inline,
   .catalog-queue-grid,
   .school-pool,

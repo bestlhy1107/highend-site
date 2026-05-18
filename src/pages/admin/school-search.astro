@@ -5,17 +5,440 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import { actions } from "astro:actions";
 import { readStudyAbroadCatalogPrograms } from "../../lib/study-abroad-catalog-store";
 import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
+import { getStudyAbroadSearchRuntimeStatus } from "../../lib/study-abroad-search";
+import {
+  normalizeStudyAbroadGovernanceLink,
+  readStudyAbroadSearchAuditEntries,
+  readStudyAbroadSearchAvoidRules,
+  type StudyAbroadSearchAuditResult,
+} from "../../lib/study-abroad-search-governance";
+import {
+  readStudyAbroadSearchEvalHistory,
+  readStudyAbroadSearchEvalReport,
+  type StudyAbroadSearchEvalCaseReport,
+  type StudyAbroadSearchEvalHistoryItem,
+} from "../../lib/study-abroad-search-eval";
+import {
+  buildStudyAbroadSearchExecutionPlanId,
+  readStudyAbroadSearchExecutionPlanRecords,
+} from "../../lib/study-abroad-search-execution-plan";
 
 function normalizeReviewLink(value?: string) {
+  return normalizeStudyAbroadGovernanceLink(value);
+}
+
+function extractReviewDomain(value?: string) {
   try {
-    const url = new URL(String(value || "").trim());
-    url.hash = "";
-    url.search = "";
-    const pathname = url.pathname.replace(/\/+$/, "") || "/";
-    return `${url.protocol}//${url.host}${pathname}`;
+    return new URL(String(value || "").trim()).hostname.toLowerCase().replace(/^www\./, "");
   } catch {
-    return String(value || "").trim();
+    return "";
   }
+}
+
+function summarizeSearchQuery(query?: {
+  freeText?: string;
+  country?: string;
+  degree?: string;
+  major?: string;
+  specialization?: string;
+}) {
+  const summary = [
+    query?.country || "",
+    query?.degree || "",
+    query?.major || "",
+    query?.specialization || "",
+  ]
+    .filter(Boolean)
+    .join(" / ");
+
+  return summary || String(query?.freeText || "").trim() || "未命名搜索";
+}
+
+function countMeaningfulSearchResults(entry: {
+  displayedVerifiedCount: number;
+  candidateCount: number;
+}) {
+  return Number(entry.displayedVerifiedCount || 0) + Number(entry.candidateCount || 0);
+}
+
+function buildSearchGovernanceKey(query?: {
+  freeText?: string;
+  country?: string;
+  degree?: string;
+  major?: string;
+  specialization?: string;
+}) {
+  const normalizedFreeText = String(query?.freeText || "").trim().toLowerCase();
+  const structuredKey = [
+    query?.country || "",
+    query?.degree || "",
+    query?.major || "",
+    query?.specialization || "",
+  ]
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join("|");
+
+  return structuredKey || normalizedFreeText || "unlabeled";
+}
+
+function buildGovernanceSuggestion(input: {
+  zeroCount: number;
+  lowCount: number;
+  candidateHeavyCount: number;
+  blockedCount: number;
+  query: {
+    freeText: string;
+    country: string;
+    major: string;
+    specialization: string;
+    degree: string;
+  };
+}) {
+  if (input.zeroCount > 0) {
+    if (input.query.specialization) {
+      return "优先检查这个细分方向是否过窄，必要时补同大类项目，并增加更宽方向推荐。";
+    }
+
+    if (input.query.major) {
+      return "优先补这个专业大类的正式项目，并检查学科映射是否过严。";
+    }
+
+    return "优先补国家 / 学位组合的基础项目池，避免用户一上来就空结果。";
+  }
+
+  if (input.candidateHeavyCount > 0) {
+    return "这类查询常靠候选官网页撑结果，建议优先把热门候选导入正式库，并补门槛。";
+  }
+
+  if (input.blockedCount > 0) {
+    return "这类查询反复撞上规避名单，建议复查坏结果来源，并调整搜索扩展站点范围。";
+  }
+
+  if (input.lowCount > 0) {
+    return "这类查询结果偏少，建议补热门学校项目，并放宽同类专业映射。";
+  }
+
+  return "继续观察这类查询，暂时不需要优先处理。";
+}
+
+function matchesGovernanceQuery(
+  left: {
+    country?: string;
+    major?: string;
+    specialization?: string;
+    degree?: string;
+  },
+  right: {
+    country?: string;
+    major?: string;
+    specialization?: string;
+    degree?: string;
+  }
+) {
+  return (
+    String(left.country || "") === String(right.country || "") &&
+    String(left.major || "") === String(right.major || "") &&
+    String(left.specialization || "") === String(right.specialization || "") &&
+    String(left.degree || "") === String(right.degree || "")
+  );
+}
+
+function buildEvalHistoryItemFromReport(report: {
+  generatedAt: string;
+  totalCases: number;
+  passedCases: number;
+  failedCases: number;
+  passRate: number;
+  zeroResultCases: number;
+  lowResultCases: number;
+  candidateHeavyCases: number;
+  averageVerifiedCount: number;
+  averageUniversityCount: number;
+  averageCandidateCount: number;
+}): StudyAbroadSearchEvalHistoryItem {
+  return {
+    generatedAt: report.generatedAt,
+    totalCases: report.totalCases,
+    passedCases: report.passedCases,
+    failedCases: report.failedCases,
+    passRate: report.passRate,
+    zeroResultCases: report.zeroResultCases,
+    lowResultCases: report.lowResultCases,
+    candidateHeavyCases: report.candidateHeavyCases,
+    averageVerifiedCount: report.averageVerifiedCount,
+    averageUniversityCount: report.averageUniversityCount,
+    averageCandidateCount: report.averageCandidateCount,
+  };
+}
+
+function formatEvalTrendDelta(
+  currentValue: number,
+  previousValue: number | null,
+  options?: {
+    digits?: number;
+    higherIsBetter?: boolean;
+    unit?: string;
+  }
+) {
+  if (previousValue === null || Number.isNaN(previousValue)) {
+    return "还没有上一次评测可对比";
+  }
+
+  const digits = options?.digits ?? 1;
+  const unit = options?.unit || "";
+  const delta = Number((currentValue - previousValue).toFixed(digits));
+  const threshold = digits > 0 ? 1 / 10 ** digits : 0.5;
+
+  if (Math.abs(delta) < threshold) {
+    return "较上次基本持平";
+  }
+
+  const higherIsBetter = options?.higherIsBetter !== false;
+  const better = higherIsBetter ? delta > 0 : delta < 0;
+
+  return `较上次 ${delta > 0 ? "+" : ""}${delta}${unit}（${better ? "变好" : "变差"}）`;
+}
+
+function getStartOfWeek(date = new Date()) {
+  const next = new Date(date);
+  const day = next.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  next.setHours(0, 0, 0, 0);
+  next.setDate(next.getDate() + diff);
+  return next;
+}
+
+function isWithinCurrentWeek(value?: string, weekStart = getStartOfWeek()) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time >= weekStart.getTime();
+}
+
+function summarizeExecutionAction(value?: string) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+
+  const [head] = normalized.split("：");
+  return head || normalized;
+}
+
+function buildWeeklyExecutionSummary(input: {
+  touchedCount: number;
+  completedCount: number;
+  attentionCount: number;
+  topActionLabel?: string;
+  completedLabels?: string[];
+  attentionLabels?: string[];
+}) {
+  if (!input.touchedCount) {
+    return {
+      headline: "本周还没有实际推进记录。",
+      detail: "建议先从下周自动执行清单的前 1 到 3 组开始，先把最优先的国家和方向跑起来。",
+    };
+  }
+
+  const detailParts: string[] = [];
+
+  if (input.completedLabels?.length) {
+    detailParts.push(`已完成重点：${input.completedLabels.slice(0, 2).join("、")}`);
+  }
+
+  if (input.attentionLabels?.length) {
+    detailParts.push(`当前卡住：${input.attentionLabels.slice(0, 2).join("、")}`);
+  }
+
+  if (input.topActionLabel) {
+    detailParts.push(`最近最常执行：${input.topActionLabel}`);
+  }
+
+  return {
+    headline: `本周已推进 ${input.touchedCount} 组计划，完成 ${input.completedCount} 组，仍有 ${input.attentionCount} 组待跟进。`,
+    detail:
+      detailParts.join("；") ||
+      "这周已经有实际推进动作，建议优先清掉仍待推进的计划，让补库和补门槛节奏更稳定。",
+  };
+}
+
+function buildWeeklyRecommendationPlanStatus(plan?: {
+  status?: "pending" | "in_progress" | "completed";
+  lastActionSummary?: string;
+  lastActionAt?: string;
+  completedAt?: string;
+} | null) {
+  const status = plan?.status || "pending";
+
+  if (status === "completed") {
+    return {
+      label: "已完成",
+      detail: plan?.completedAt
+        ? `完成时间：${new Date(plan.completedAt).toLocaleString("zh-CN")}`
+        : "这组计划已经完成，可以把经验复制到同类方向。",
+    };
+  }
+
+  if (status === "in_progress") {
+    return {
+      label: "已开始执行",
+      detail: plan?.lastActionSummary
+        ? `最近动作：${plan.lastActionSummary}`
+        : plan?.lastActionAt
+          ? `最近更新时间：${new Date(plan.lastActionAt).toLocaleString("zh-CN")}`
+          : "这组计划已经在推进中，建议继续收口。",
+    };
+  }
+
+  return {
+    label: "待执行",
+    detail: "这组计划还没正式开始，适合直接从这里发起动作。",
+  };
+}
+
+function buildWeeklyExecutionRecommendations(input: {
+  touchedCount: number;
+  completedCount: number;
+  attentionCount: number;
+  topActionLabel?: string;
+  completedLabels?: string[];
+  attentionLabels?: string[];
+  primaryPlan?: {
+    id: string;
+    label: string;
+    query: {
+      country: string;
+      degree: string;
+      major: string;
+      specialization: string;
+    };
+    status?: "pending" | "in_progress" | "completed";
+    lastActionSummary?: string;
+    lastActionAt?: string;
+    completedAt?: string;
+    } | null;
+  }) {
+  const primaryPlanStatus = input.primaryPlan?.status || "pending";
+  const primaryPlanActionable = Boolean(input.primaryPlan && primaryPlanStatus !== "completed");
+  const recommendations: Array<{
+    title: string;
+    detail: string;
+    actionLabel: string;
+    actionType: "anchor" | "sync" | "country";
+    actionHref?: string;
+    plan?: {
+      id: string;
+      label: string;
+      query: {
+        country: string;
+        degree: string;
+        major: string;
+        specialization: string;
+      };
+    } | null;
+    statusLabel?: string;
+    statusDetail?: string;
+  }> = [];
+
+  if (!input.touchedCount) {
+    recommendations.push({
+      title: "先把本周第一组计划跑起来",
+      detail: "先从下周自动执行清单的前 1 组开始，把最优先的国家和方向真正跑起来。",
+      actionLabel: primaryPlanActionable ? "直接去补这组门槛" : "去执行清单处理",
+      actionType: primaryPlanActionable ? "sync" : "anchor",
+      actionHref: primaryPlanActionable ? undefined : "#eval-next-week-plan",
+      plan: input.primaryPlan || null,
+      statusLabel: buildWeeklyRecommendationPlanStatus(input.primaryPlan).label,
+      statusDetail: buildWeeklyRecommendationPlanStatus(input.primaryPlan).detail,
+    });
+    recommendations.push({
+      title: "优先拿到第一条完成记录",
+      detail: "优先选择一组能快速见效的补门槛任务，先让周报里出现第一条已完成记录。",
+      actionLabel:
+        primaryPlanActionable && input.primaryPlan?.query.country
+          ? "按国家推进这组"
+          : "查看本周补库榜单",
+      actionType:
+        primaryPlanActionable && input.primaryPlan?.query.country ? "country" : "anchor",
+      actionHref:
+        primaryPlanActionable && input.primaryPlan?.query.country
+          ? undefined
+          : "#eval-weekly-focus",
+      plan: input.primaryPlan || null,
+      statusLabel: buildWeeklyRecommendationPlanStatus(input.primaryPlan).label,
+      statusDetail: buildWeeklyRecommendationPlanStatus(input.primaryPlan).detail,
+    });
+    return recommendations;
+  }
+
+  if (input.attentionCount > 0) {
+    const stuckLabels = input.attentionLabels?.slice(0, 2).join("、");
+    recommendations.push({
+      title: "先清掉还卡着的计划",
+      detail: stuckLabels
+        ? `优先回到执行清单处理 ${input.attentionCount} 组未完成计划，先清掉 ${stuckLabels}。`
+        : `优先回到执行清单处理 ${input.attentionCount} 组未完成计划，避免这周动作只停留在“处理中”。`,
+      actionLabel: "去执行清单处理",
+      actionType: "anchor",
+      actionHref: "#eval-next-week-plan",
+      plan: null,
+    });
+    if (primaryPlanActionable && input.primaryPlan) {
+      recommendations.push({
+        title: "先把第一组待推进计划补起来",
+        detail: `建议先推进 ${input.primaryPlan.label}，这样最容易把周报里的待办数量降下来。`,
+        actionLabel: "直接去补这组门槛",
+        actionType: "sync",
+        plan: input.primaryPlan,
+        statusLabel: buildWeeklyRecommendationPlanStatus(input.primaryPlan).label,
+        statusDetail: buildWeeklyRecommendationPlanStatus(input.primaryPlan).detail,
+      });
+    }
+  }
+
+  if (input.touchedCount > 0 && input.completedCount === 0) {
+    recommendations.push({
+      title: "先收口一组已完成计划",
+      detail: "这周已经开始推进，但还没有形成已完成计划，建议先把 1 组最接近收口的任务标记完成。",
+      actionLabel: "回到执行清单收口",
+      actionType: "anchor",
+      actionHref: "#eval-next-week-plan",
+      plan: null,
+    });
+  }
+
+  if (input.completedLabels?.length && recommendations.length < 3) {
+    recommendations.push({
+      title: "把已完成节奏复制到同类方向",
+      detail: `已完成的节奏开始形成了，下一步建议复制到同类方向，比如 ${input.completedLabels.slice(0, 2).join("、")}。`,
+      actionLabel: "查看本周补库榜单",
+      actionType: "anchor",
+      actionHref: "#eval-weekly-focus",
+      plan: null,
+    });
+  }
+
+  if (!input.attentionCount && input.completedCount > 0 && recommendations.length < 3) {
+    recommendations.push({
+      title: "当前优先计划已经做完，切到下一组方向",
+      detail: "这周最核心的执行计划已经完成，下一步建议回到本周补库榜单，从下一组国家 / 专业方向继续推进。",
+      actionLabel: "查看本周补库榜单",
+      actionType: "anchor",
+      actionHref: "#eval-weekly-focus",
+      plan: null,
+    });
+  }
+
+  if (input.topActionLabel && recommendations.length < 3) {
+    recommendations.push({
+      title: "沿着最近有效动作继续推进",
+      detail: `延续最近最常执行的“${input.topActionLabel}”节奏，同时补上一组能明确收口的已完成结果。`,
+      actionLabel: "回到执行清单继续推进",
+      actionType: "anchor",
+      actionHref: "#eval-next-week-plan",
+      plan: null,
+    });
+  }
+
+  return recommendations.slice(0, 3);
 }
 
 const adminUser = await Astro.session?.get("adminUser");
@@ -29,8 +452,41 @@ const importCandidateNotice =
 const reviewQueueResult = Astro.getActionResult(actions.updateStudyAbroadReviewQueueStatus);
 const reviewQueueNotice =
   reviewQueueResult && !reviewQueueResult.error ? reviewQueueResult.data : null;
-const queue = await readStudyAbroadReviewQueue();
-const catalogPrograms = await readStudyAbroadCatalogPrograms();
+const admissionsSyncResult = Astro.getActionResult(actions.syncStudyAbroadAdmissionsSnapshots);
+const admissionsSyncNotice =
+  admissionsSyncResult && !admissionsSyncResult.error ? admissionsSyncResult.data : null;
+const admissionsCountryTargetResult = Astro.getActionResult(
+  actions.executeStudyAbroadAdmissionsCountryTargetPlan
+);
+const admissionsCountryTargetNotice =
+  admissionsCountryTargetResult && !admissionsCountryTargetResult.error
+    ? admissionsCountryTargetResult.data
+    : null;
+const createAvoidRuleResult = Astro.getActionResult(actions.createStudyAbroadSearchAvoidRule);
+const createAvoidRuleNotice =
+  createAvoidRuleResult && !createAvoidRuleResult.error ? createAvoidRuleResult.data : null;
+const updateAvoidRuleResult = Astro.getActionResult(actions.updateStudyAbroadSearchAvoidRuleStatus);
+const updateAvoidRuleNotice =
+  updateAvoidRuleResult && !updateAvoidRuleResult.error ? updateAvoidRuleResult.data : null;
+const updateExecutionPlanStatusResult = Astro.getActionResult(
+  actions.updateStudyAbroadSearchExecutionPlanStatus
+);
+const updateExecutionPlanStatusNotice =
+  updateExecutionPlanStatusResult && !updateExecutionPlanStatusResult.error
+    ? updateExecutionPlanStatusResult.data
+    : null;
+
+const [queue, catalogPrograms, auditEntries, avoidRules, evalReport, evalHistoryRaw, executionPlanRecords] = await Promise.all([
+  readStudyAbroadReviewQueue(),
+  readStudyAbroadCatalogPrograms(),
+  readStudyAbroadSearchAuditEntries(),
+  readStudyAbroadSearchAvoidRules(),
+  readStudyAbroadSearchEvalReport(),
+  readStudyAbroadSearchEvalHistory(),
+  readStudyAbroadSearchExecutionPlanRecords(),
+]);
+const studyAbroadSearchRuntime = getStudyAbroadSearchRuntimeStatus();
+
 const importedProgramByLink = new Map(
   catalogPrograms.flatMap((program) =>
     [program.overviewUrl, program.admissionsUrl, program.tuitionUrl]
@@ -39,12 +495,708 @@ const importedProgramByLink = new Map(
       .map((link) => [link, program] as const)
   )
 );
+
 const pendingItems = queue.filter((item) => item.status === "pending");
 const reviewedItems = queue.filter((item) => item.status === "reviewed");
 const discardedItems = queue.filter((item) => item.status === "discarded");
 const recentHandledItems = [...queue]
   .filter((item) => item.status !== "pending")
   .slice(0, 8);
+const recentAuditEntries = auditEntries.slice(0, 12);
+const lowYieldAuditEntries = auditEntries
+  .filter((entry) => countMeaningfulSearchResults(entry) > 0 && countMeaningfulSearchResults(entry) <= 3)
+  .slice(0, 8);
+const zeroYieldAuditEntries = auditEntries
+  .filter((entry) => countMeaningfulSearchResults(entry) === 0)
+  .slice(0, 8);
+const highBlockedAuditEntries = auditEntries
+  .filter((entry) => Number(entry.blockedResultCount) > 0)
+  .slice(0, 8);
+const activeAvoidRules = avoidRules.filter((rule) => rule.status === "active");
+const activeRuleByProgramId = new Map(
+  activeAvoidRules
+    .filter((rule) => rule.targetType === "program" && rule.programId)
+    .map((rule) => [rule.programId, rule] as const)
+);
+const activeRuleByLink = new Map(
+  activeAvoidRules
+    .filter((rule) => rule.targetType === "link" && rule.link)
+    .map((rule) => [normalizeReviewLink(rule.link), rule] as const)
+);
+const activeRuleByDomain = new Map(
+  activeAvoidRules
+    .filter((rule) => rule.targetType === "domain" && rule.domain)
+    .map((rule) => [rule.domain, rule] as const)
+);
+
+function findActiveAvoidRuleForLink(link?: string) {
+  const normalizedLink = normalizeReviewLink(link);
+  if (normalizedLink && activeRuleByLink.has(normalizedLink)) {
+    return activeRuleByLink.get(normalizedLink) || null;
+  }
+
+  const domain = extractReviewDomain(normalizedLink || link);
+  if (domain && activeRuleByDomain.has(domain)) {
+    return activeRuleByDomain.get(domain) || null;
+  }
+
+  return null;
+}
+
+function findActiveAvoidRuleForResult(result: StudyAbroadSearchAuditResult) {
+  if (result.programId && activeRuleByProgramId.has(result.programId)) {
+    return activeRuleByProgramId.get(result.programId) || null;
+  }
+
+  return findActiveAvoidRuleForLink(result.link);
+}
+
+const executionPlanRecordById = new Map(
+  executionPlanRecords.map((item) => [item.id, item] as const)
+);
+
+const governanceBuckets = Array.from(
+  auditEntries.reduce((map, entry) => {
+    const key = buildSearchGovernanceKey(entry.query);
+    const current = map.get(key) || {
+      key,
+      label: summarizeSearchQuery(entry.query),
+      latestUpdatedAt: entry.updatedAt,
+      searchCount: 0,
+      zeroCount: 0,
+      lowCount: 0,
+      candidateHeavyCount: 0,
+      blockedCount: 0,
+      verifiedCount: 0,
+      candidateCount: 0,
+      totalUniversityCount: 0,
+      query: {
+        freeText: entry.query.freeText || "",
+        country: entry.query.country || "",
+        major: entry.query.major || "",
+        specialization: entry.query.specialization || "",
+        degree: entry.query.degree || "",
+      },
+    };
+
+    const meaningfulCount = countMeaningfulSearchResults(entry);
+    const candidateHeavy =
+      Number(entry.candidateCount || 0) > 0 &&
+      Number(entry.displayedVerifiedCount || 0) <= Number(entry.candidateCount || 0);
+
+    current.searchCount += 1;
+    current.zeroCount += meaningfulCount === 0 ? 1 : 0;
+    current.lowCount += meaningfulCount > 0 && meaningfulCount <= 3 ? 1 : 0;
+    current.candidateHeavyCount += candidateHeavy ? 1 : 0;
+    current.blockedCount += Number(entry.blockedResultCount || 0);
+    current.verifiedCount += Number(entry.displayedVerifiedCount || 0);
+    current.candidateCount += Number(entry.candidateCount || 0);
+    current.totalUniversityCount += Number(entry.totalUniversityCount || 0);
+
+    if (new Date(entry.updatedAt).getTime() > new Date(current.latestUpdatedAt).getTime()) {
+      current.latestUpdatedAt = entry.updatedAt;
+      current.label = summarizeSearchQuery(entry.query);
+      current.query = {
+        freeText: entry.query.freeText || "",
+        country: entry.query.country || "",
+        major: entry.query.major || "",
+        specialization: entry.query.specialization || "",
+        degree: entry.query.degree || "",
+      };
+    }
+
+    map.set(key, current);
+    return map;
+  }, new Map())
+).map(([, bucket]) => ({
+  ...bucket,
+  averageVerifiedCount:
+    bucket.searchCount > 0 ? Number((bucket.verifiedCount / bucket.searchCount).toFixed(1)) : 0,
+  averageCandidateCount:
+    bucket.searchCount > 0 ? Number((bucket.candidateCount / bucket.searchCount).toFixed(1)) : 0,
+  averageUniversityCount:
+    bucket.searchCount > 0
+      ? Number((bucket.totalUniversityCount / bucket.searchCount).toFixed(1))
+      : 0,
+  suggestion: buildGovernanceSuggestion(bucket),
+}));
+
+const zeroGovernanceBuckets = [...governanceBuckets]
+  .filter((bucket) => bucket.zeroCount > 0)
+  .sort(
+    (left, right) =>
+      right.zeroCount - left.zeroCount ||
+      new Date(right.latestUpdatedAt).getTime() - new Date(left.latestUpdatedAt).getTime()
+  )
+  .slice(0, 8);
+
+const lowGovernanceBuckets = [...governanceBuckets]
+  .filter((bucket) => bucket.lowCount > 0)
+  .sort(
+    (left, right) =>
+      right.lowCount - left.lowCount ||
+      right.searchCount - left.searchCount ||
+      new Date(right.latestUpdatedAt).getTime() - new Date(left.latestUpdatedAt).getTime()
+  )
+  .slice(0, 8);
+
+const candidateHeavyGovernanceBuckets = [...governanceBuckets]
+  .filter((bucket) => bucket.candidateHeavyCount > 0)
+  .sort(
+    (left, right) =>
+      right.candidateHeavyCount - left.candidateHeavyCount ||
+      right.averageCandidateCount - left.averageCandidateCount ||
+      new Date(right.latestUpdatedAt).getTime() - new Date(left.latestUpdatedAt).getTime()
+  )
+  .slice(0, 8);
+
+const evalFailedCases = evalReport?.cases.filter((item) => !item.passed).slice(0, 6) || [];
+const evalLowResultCases =
+  evalReport?.cases
+    .filter(
+      (item) => item.metrics.meaningfulCount > 0 && item.metrics.meaningfulCount <= 3
+    )
+    .slice(0, 6) || [];
+
+function buildEvalGovernanceTaskSuggestion(item: StudyAbroadSearchEvalCaseReport) {
+  if (item.metrics.meaningfulCount === 0) {
+    if (item.resolvedQuery.specialization) {
+      return "当前已经掉到零结果，先放宽细分方向，再补这个专业大类的正式项目。";
+    }
+
+    if (item.resolvedQuery.major) {
+      return "当前已经掉到零结果，优先补这个专业大类的正式项目池。";
+    }
+
+    return "当前已经掉到零结果，优先补国家 / 学位的基础项目池。";
+  }
+
+  if (item.metrics.candidateCount > item.metrics.verifiedCount) {
+    return "这组查询正在被候选结果支撑，优先导入候选，再补门槛。";
+  }
+
+  if (item.metrics.blockedCount > 0) {
+    return "这组查询触发了规避名单，建议复查重复误命中的站点来源。";
+  }
+
+  if (item.metrics.meaningfulCount <= 3) {
+    return "这组查询结果偏少，适合先补厚正式项目，再补门槛。";
+  }
+
+  return "继续观察这组查询，暂时不需要优先处理。";
+}
+
+function buildEvalGovernanceTaskPriority(item: StudyAbroadSearchEvalCaseReport) {
+  let score = item.passed ? 0 : 100;
+
+  if (item.metrics.meaningfulCount === 0) score += 60;
+  else if (item.metrics.meaningfulCount <= 3) score += 40;
+
+  if (item.metrics.candidateCount > item.metrics.verifiedCount) score += 30;
+  if (item.metrics.blockedCount > 0) score += 20;
+  if (item.resolvedQuery.specialization) score += 10;
+
+  return score;
+}
+
+function buildEvalGovernanceLeaderboardKey(query: {
+  country?: string;
+  degree?: string;
+  major?: string;
+}) {
+  return [
+    String(query.country || "").trim().toLowerCase(),
+    String(query.degree || "").trim().toLowerCase(),
+    String(query.major || "").trim().toLowerCase(),
+  ]
+    .filter(Boolean)
+    .join("|");
+}
+
+const evalGovernanceTasks = Array.from(
+  (evalReport?.cases || [])
+    .filter(
+      (item) =>
+        !item.passed ||
+        item.metrics.meaningfulCount === 0 ||
+        item.metrics.meaningfulCount <= 3 ||
+        item.metrics.candidateCount > item.metrics.verifiedCount ||
+        item.metrics.blockedCount > 0
+    )
+    .reduce((map, item) => {
+      const query = normalizeGovernanceQuery(item.resolvedQuery);
+      const key = buildSearchGovernanceKey(item.resolvedQuery);
+      const current =
+        map.get(key) || {
+          key,
+          label: summarizeSearchQuery(item.resolvedQuery) || item.label,
+          severity: "observe",
+          priority: 0,
+          cases: [] as StudyAbroadSearchEvalCaseReport[],
+          query,
+          latestCase: item,
+      };
+
+      current.cases.push(item);
+      current.latestCase = item;
+
+      const priority = buildEvalGovernanceTaskPriority(item);
+      if (priority > current.priority) {
+        current.priority = priority;
+        current.severity =
+          priority >= 140 ? "critical" : priority >= 80 ? "high" : "medium";
+      }
+
+      map.set(key, current);
+      return map;
+    }, new Map<string, {
+      key: string;
+      label: string;
+      severity: "critical" | "high" | "medium" | "observe";
+      priority: number;
+      cases: StudyAbroadSearchEvalCaseReport[];
+      query: ReturnType<typeof normalizeGovernanceQuery>;
+      latestCase: StudyAbroadSearchEvalCaseReport;
+    }>())
+).map(([, task]) => ({
+  ...task,
+  suggestion: buildEvalGovernanceTaskSuggestion(task.latestCase),
+}))
+  .sort((left, right) => right.priority - left.priority || right.cases.length - left.cases.length)
+  .slice(0, 8);
+
+const evalGovernanceLeaderboard = Array.from(
+  evalGovernanceTasks.reduce((map, task) => {
+    const key = buildEvalGovernanceLeaderboardKey(task.query) || task.key;
+    const current =
+      map.get(key) || {
+        key,
+        label:
+          [task.query.country, task.query.degree, task.query.major]
+            .filter(Boolean)
+            .join(" / ") || task.label,
+        query: {
+          country: task.query.country,
+          degree: task.query.degree,
+          major: task.query.major,
+          specialization: "",
+        },
+        taskCount: 0,
+        caseCount: 0,
+        criticalCount: 0,
+        zeroLikeCount: 0,
+        lowLikeCount: 0,
+        candidateHeavyCount: 0,
+        priority: 0,
+        topTask: task,
+      };
+
+    current.taskCount += 1;
+    current.caseCount += task.cases.length;
+    current.criticalCount += task.severity === "critical" ? 1 : 0;
+    current.zeroLikeCount += task.cases.filter((item) => item.metrics.meaningfulCount === 0).length;
+    current.lowLikeCount += task.cases.filter(
+      (item) => item.metrics.meaningfulCount > 0 && item.metrics.meaningfulCount <= 3
+    ).length;
+    current.candidateHeavyCount += task.cases.filter(
+      (item) => item.metrics.candidateCount > item.metrics.verifiedCount
+    ).length;
+
+    if (task.priority > current.priority) {
+      current.priority = task.priority;
+      current.topTask = task;
+    }
+
+    map.set(key, current);
+    return map;
+  }, new Map<string, {
+    key: string;
+    label: string;
+    query: ReturnType<typeof normalizeGovernanceQuery>;
+    taskCount: number;
+    caseCount: number;
+    criticalCount: number;
+    zeroLikeCount: number;
+    lowLikeCount: number;
+    candidateHeavyCount: number;
+    priority: number;
+    topTask: (typeof evalGovernanceTasks)[number];
+  }>())
+).map(([, item]) => ({
+  ...item,
+  suggestion: item.topTask.suggestion,
+}))
+  .sort((left, right) => right.priority - left.priority || right.caseCount - left.caseCount)
+  .slice(0, 6);
+
+const evalHistory =
+  evalHistoryRaw.length > 0
+    ? evalHistoryRaw
+    : evalReport
+      ? [buildEvalHistoryItemFromReport(evalReport)]
+      : [];
+const latestEvalSnapshot = evalHistory[0] || null;
+const previousEvalSnapshot = evalHistory[1] || null;
+const recentEvalHistory = evalHistory.slice(0, 5);
+const evalTrendSummary = latestEvalSnapshot
+  ? {
+      passRate: formatEvalTrendDelta(latestEvalSnapshot.passRate, previousEvalSnapshot?.passRate ?? null, {
+        digits: 1,
+        higherIsBetter: true,
+        unit: "%",
+      }),
+      lowResults: formatEvalTrendDelta(
+        latestEvalSnapshot.lowResultCases,
+        previousEvalSnapshot?.lowResultCases ?? null,
+        { digits: 0, higherIsBetter: false, unit: " 条" }
+      ),
+      universities: formatEvalTrendDelta(
+        latestEvalSnapshot.averageUniversityCount,
+        previousEvalSnapshot?.averageUniversityCount ?? null,
+        { digits: 1, higherIsBetter: true, unit: " 所" }
+      ),
+    }
+  : null;
+const primaryEvalLeaderboardItem = evalGovernanceLeaderboard[0] || null;
+const primaryEvalTrendQuery = primaryEvalLeaderboardItem?.query || null;
+const primaryEvalTrendExecutionPlanId = primaryEvalTrendQuery
+  ? buildStudyAbroadSearchExecutionPlanId(primaryEvalTrendQuery)
+  : "";
+const primaryEvalTrendHasStructuredHint = Boolean(
+  primaryEvalTrendQuery?.country ||
+    primaryEvalTrendQuery?.major ||
+    primaryEvalTrendQuery?.specialization
+);
+const evalTrendAlerts =
+  latestEvalSnapshot && previousEvalSnapshot
+    ? [
+        latestEvalSnapshot.passRate < previousEvalSnapshot.passRate
+          ? {
+              id: "pass-rate-drop",
+              title: "评测通过率回落",
+              severity: "优先处理",
+              summary: `通过率从 ${previousEvalSnapshot.passRate}% 降到 ${latestEvalSnapshot.passRate}%，说明最近这轮搜索里有更多样例开始失手。`,
+              suggestion: "先看自动治理任务，再优先处理本周补库榜单最靠前的方向。",
+            }
+          : null,
+        latestEvalSnapshot.zeroResultCases > previousEvalSnapshot.zeroResultCases
+          ? {
+              id: "zero-results-up",
+              title: "零结果样例增加",
+              severity: "高优先级",
+              summary: `零结果样例从 ${previousEvalSnapshot.zeroResultCases} 条升到 ${latestEvalSnapshot.zeroResultCases} 条，已经有查询完全搜不出来。`,
+              suggestion: "优先补国家 / 学位 / 专业大类的正式项目池，再回头看细分方向是否过窄。",
+            }
+          : null,
+        latestEvalSnapshot.lowResultCases > previousEvalSnapshot.lowResultCases
+          ? {
+              id: "low-results-up",
+              title: "低结果样例增加",
+              severity: "建议尽快处理",
+              summary: `低结果样例从 ${previousEvalSnapshot.lowResultCases} 条升到 ${latestEvalSnapshot.lowResultCases} 条，说明返回量开始变薄。`,
+              suggestion: "优先补厚正式项目，再补门槛，避免这些查询继续滑向零结果。",
+            }
+          : null,
+        latestEvalSnapshot.averageUniversityCount < previousEvalSnapshot.averageUniversityCount
+          ? {
+              id: "university-pool-down",
+              title: "平均学校池缩小",
+              severity: "持续观察",
+              summary: `平均学校池从 ${previousEvalSnapshot.averageUniversityCount} 所降到 ${latestEvalSnapshot.averageUniversityCount} 所，召回宽度在变窄。`,
+              suggestion: "先看本周补库榜单，确认是不是某几个国家 / 专业方向的正式库在拖后腿。",
+            }
+          : null,
+        latestEvalSnapshot.candidateHeavyCases > previousEvalSnapshot.candidateHeavyCases
+          ? {
+              id: "candidate-heavy-up",
+              title: "候选主导样例增加",
+              severity: "优先处理",
+              summary: `候选主导样例从 ${previousEvalSnapshot.candidateHeavyCases} 条升到 ${latestEvalSnapshot.candidateHeavyCases} 条，说明正式库开始撑不住这类搜索。`,
+              suggestion: "优先导入热门候选并补门槛，同时规避重复误命中的来源站点。",
+            }
+          : null,
+      ].filter(
+        (
+          item
+        ): item is {
+          id: string;
+          title: string;
+          severity: string;
+          summary: string;
+          suggestion: string;
+        } => Boolean(item)
+      )
+    : [];
+const evalExecutionPlan = evalGovernanceLeaderboard.slice(0, 5).map((item, index) => ({
+  id: buildStudyAbroadSearchExecutionPlanId(item.query) || `${index + 1}:${item.label}`,
+  rank: index + 1,
+  label: item.label,
+  query: item.query,
+  stageLabel:
+    item.criticalCount > 0 || item.zeroLikeCount > 0
+      ? "第 1 优先级"
+      : item.lowLikeCount > 0
+        ? "第 2 优先级"
+        : item.candidateHeavyCount > 0
+          ? "第 3 优先级"
+          : "持续观察",
+  reason:
+    item.zeroLikeCount > 0
+      ? `这组方向已经出现 ${item.zeroLikeCount} 条零结果样例，优先级最高。`
+      : item.lowLikeCount > 0
+        ? `这组方向有 ${item.lowLikeCount} 条低结果样例，先补厚正式项目更划算。`
+        : item.candidateHeavyCount > 0
+          ? `这组方向已有 ${item.candidateHeavyCount} 条候选主导样例，正式库需要尽快接住。`
+          : "这组方向暂时没有明显坏趋势，但值得持续补厚。",
+  suggestion: item.suggestion,
+})).map((item) => ({
+  ...item,
+  planRecord: executionPlanRecordById.get(item.id) || null,
+}));
+const executionPlanPendingCount = evalExecutionPlan.filter(
+  (item) => (item.planRecord?.status || "pending") === "pending"
+).length;
+const executionPlanInProgressCount = evalExecutionPlan.filter(
+  (item) => item.planRecord?.status === "in_progress"
+).length;
+const executionPlanCompletedCount = evalExecutionPlan.filter(
+  (item) => item.planRecord?.status === "completed"
+).length;
+const currentWeekStart = getStartOfWeek();
+const executionPlanTouchedThisWeek = executionPlanRecords.filter((item) =>
+  isWithinCurrentWeek(item.updatedAt, currentWeekStart)
+);
+const executionPlanCompletedThisWeek = executionPlanRecords
+  .filter((item) => isWithinCurrentWeek(item.completedAt, currentWeekStart))
+  .sort(
+    (left, right) =>
+      new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime()
+  )
+  .slice(0, 5);
+const executionPlanTopActions = Array.from(
+  executionPlanTouchedThisWeek.reduce((map, item) => {
+    const key = summarizeExecutionAction(item.lastActionSummary);
+    if (!key) return map;
+
+    const current =
+      map.get(key) || {
+        label: key,
+        count: 0,
+      };
+    current.count += 1;
+    map.set(key, current);
+    return map;
+  }, new Map<string, { label: string; count: number }>())
+)
+  .map(([, item]) => item)
+  .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
+  .slice(0, 3);
+const executionPlanAttentionItems = evalExecutionPlan
+  .filter((item) => (item.planRecord?.status || "pending") !== "completed")
+  .slice(0, 3);
+const executionWeeklyPrimaryPlan = executionPlanAttentionItems[0] || null;
+const executionWeeklySummary = buildWeeklyExecutionSummary({
+  touchedCount: executionPlanTouchedThisWeek.length,
+  completedCount: executionPlanCompletedThisWeek.length,
+  attentionCount: executionPlanAttentionItems.length,
+  topActionLabel: executionPlanTopActions[0]?.label,
+  completedLabels: executionPlanCompletedThisWeek.map((item) => item.label),
+  attentionLabels: executionPlanAttentionItems.map((item) => item.label),
+});
+const executionWeeklyRecommendations = buildWeeklyExecutionRecommendations({
+  touchedCount: executionPlanTouchedThisWeek.length,
+  completedCount: executionPlanCompletedThisWeek.length,
+  attentionCount: executionPlanAttentionItems.length,
+  topActionLabel: executionPlanTopActions[0]?.label,
+  completedLabels: executionPlanCompletedThisWeek.map((item) => item.label),
+  attentionLabels: executionPlanAttentionItems.map((item) => item.label),
+  primaryPlan: executionWeeklyPrimaryPlan
+    ? {
+        id: executionWeeklyPrimaryPlan.id,
+        label: executionWeeklyPrimaryPlan.label,
+        query: executionWeeklyPrimaryPlan.query,
+        status: executionWeeklyPrimaryPlan.planRecord?.status || "pending",
+        lastActionSummary: executionWeeklyPrimaryPlan.planRecord?.lastActionSummary,
+        lastActionAt: executionWeeklyPrimaryPlan.planRecord?.lastActionAt,
+        completedAt: executionWeeklyPrimaryPlan.planRecord?.completedAt,
+      }
+    : null,
+});
+
+function normalizeGovernanceQuery(input?: {
+  country?: string;
+  major?: string;
+  specialization?: string;
+  degree?: string;
+}) {
+  return {
+    country: String(input?.country || ""),
+    major: String(input?.major || ""),
+    specialization: String(input?.specialization || ""),
+    degree: String(input?.degree || ""),
+  };
+}
+
+function findPendingReviewEntryForBucket(bucket: {
+  query: {
+    country: string;
+    major: string;
+    specialization: string;
+    degree: string;
+  };
+}) {
+  return (
+    findPendingReviewEntryForQuery(
+      normalizeGovernanceQuery(bucket.query)
+    ) || null
+  );
+}
+
+function findPendingReviewEntryForQuery(query: {
+  country: string;
+  major: string;
+  specialization: string;
+  degree: string;
+}) {
+  return (
+    pendingItems.find((item) =>
+      matchesGovernanceQuery(
+        {
+          country: item.country,
+          major: item.major,
+          specialization: item.specialization,
+          degree: item.degree,
+        },
+        query
+      )
+    ) || null
+  );
+}
+
+function findRecentAuditEntryForBucket(bucket: {
+  query: {
+    country: string;
+    major: string;
+    specialization: string;
+    degree: string;
+  };
+}) {
+  return (
+    findRecentAuditEntryForQuery(normalizeGovernanceQuery(bucket.query)) || null
+  );
+}
+
+function findRecentAuditEntryForQuery(query: {
+  country: string;
+  major: string;
+  specialization: string;
+  degree: string;
+}) {
+  return (
+    auditEntries.find((entry) =>
+      matchesGovernanceQuery(
+        {
+          country: entry.query.country,
+          major: entry.query.major,
+          specialization: entry.query.specialization,
+          degree: entry.query.degree,
+        },
+        query
+      )
+    ) || null
+  );
+}
+
+function findSuggestedAvoidDomainForBucket(bucket: {
+  query: {
+    country: string;
+    major: string;
+    specialization: string;
+    degree: string;
+  };
+}) {
+  return findSuggestedAvoidDomainForQuery(normalizeGovernanceQuery(bucket.query));
+}
+
+function findSuggestedAvoidDomainForQuery(query: {
+  country: string;
+  major: string;
+  specialization: string;
+  degree: string;
+}) {
+  const matchingPendingEntry = findPendingReviewEntryForQuery(query);
+  const domainCounts = new Map<
+    string,
+    { domain: string; count: number; link: string; label: string }
+  >();
+
+  const registerDomain = (link?: string, label?: string) => {
+    const domain = extractReviewDomain(link);
+    if (!domain || activeRuleByDomain.has(domain)) {
+      return;
+    }
+
+    const current =
+      domainCounts.get(domain) || {
+        domain,
+        count: 0,
+        link: normalizeReviewLink(link),
+        label: label || domain,
+      };
+    current.count += 1;
+    if (!current.link && link) {
+      current.link = normalizeReviewLink(link);
+    }
+    if (!current.label && label) {
+      current.label = label;
+    }
+    domainCounts.set(domain, current);
+  };
+
+  if (matchingPendingEntry) {
+    matchingPendingEntry.candidates.forEach((candidate) => {
+      registerDomain(candidate.link, candidate.displayLink || candidate.title);
+    });
+  } else {
+    auditEntries
+      .filter((entry) =>
+        matchesGovernanceQuery(
+          {
+            country: entry.query.country,
+            major: entry.query.major,
+            specialization: entry.query.specialization,
+            degree: entry.query.degree,
+          },
+          query
+        )
+      )
+      .forEach((entry) => {
+        entry.results
+          .filter((result) => result.source === "candidate" && result.link)
+          .forEach((result) => {
+            registerDomain(result.link, result.displayLink || result.label);
+          });
+      });
+  }
+
+  const sorted = Array.from(domainCounts.values()).sort(
+    (left, right) => right.count - left.count || left.domain.localeCompare(right.domain)
+  );
+  return sorted.find((item) => item.count >= 2) || null;
+}
+
+const notices = [
+  importCandidateNotice,
+  reviewQueueNotice,
+  admissionsSyncNotice,
+  admissionsCountryTargetNotice,
+  createAvoidRuleNotice,
+  updateAvoidRuleNotice,
+  updateExecutionPlanStatusNotice,
+].filter(
+  (notice): notice is { ok: boolean; message: string } =>
+    Boolean(notice && typeof notice === "object" && "message" in notice)
+);
 ---
 
 <BaseLayout title="管理员后台 - 选校候选" description="查看待核验选校候选结果">
@@ -52,9 +1204,9 @@ const recentHandledItems = [...queue]
     <div class="section-head">
       <div>
         <div class="section-kicker">Admin</div>
-        <h1 class="section-title">选校候选审核</h1>
+        <h1 class="section-title">选校候选与搜索治理</h1>
         <p class="section-desc">
-          这里展示“开始搜索”后由系统抓到的候选官网页。当前只建议把它们当成待核验线索，不要直接当成前台推荐结果。
+          这里同时管理三件事：候选官网页审核、最近搜索留痕、规避名单。前台结果不够时，我们可以放大召回；结果不准时，就在这里把不合格结果拉黑，后续搜索会自动避开。
         </p>
       </div>
 
@@ -66,60 +1218,1365 @@ const recentHandledItems = [...queue]
 
     <div class="cards cards--3 mt-4">
       <div class="card">
-        <div class="muted text-sm">待核验搜索任务</div>
+        <div class="muted text-sm">待核验候选任务</div>
         <div class="h2 mt-2">{pendingItems.length}</div>
       </div>
 
+      <div class="card">
+        <div class="muted text-sm">最近搜索留痕</div>
+        <div class="h2 mt-2">{auditEntries.length}</div>
+      </div>
+
+      <div class="card">
+        <div class="muted text-sm">生效中的规避规则</div>
+        <div class="h2 mt-2">{activeAvoidRules.length}</div>
+      </div>
+    </div>
+
+    <div class="cards cards--3 mt-4">
+      <div class="card">
+        <div class="muted text-sm">全网扩搜状态</div>
+        <div class="h2 mt-2">
+          {studyAbroadSearchRuntime.externalSearchEnabled ? "已启用" : "未启用"}
+        </div>
+        <p class="muted mt-2">
+          Provider：{studyAbroadSearchRuntime.provider} · 模型：
+          {studyAbroadSearchRuntime.model}
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="muted text-sm">候选放量上限</div>
+        <div class="h2 mt-2">{studyAbroadSearchRuntime.maxCandidateResults}</div>
+        <p class="muted mt-2">
+          单次候选审核队列最多保留 {studyAbroadSearchRuntime.maxReviewQueueCandidates} 条。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="muted text-sm">接入提醒</div>
+        <div class="h3 mt-2">
+          {studyAbroadSearchRuntime.apiKeyPresent
+            ? "线上已具备扩搜条件"
+            : "还未配置百度扩搜密钥"}
+        </div>
+        <p class="muted mt-2">
+          {!studyAbroadSearchRuntime.apiKeyPresent
+            ? "请在生产环境补上 BAIDU_APPBUILDER_API_KEY 或 BAIDU_SEARCH_API_KEY，前台候选官网页才会真正放量。"
+            : `当前超时阈值 ${studyAbroadSearchRuntime.timeoutMs}ms，前台会优先返回已核验结果，再异步补候选官网页。`}
+        </p>
+      </div>
+    </div>
+
+    {evalReport ? (
+      <>
+        <div class="cards cards--3 mt-4">
+          <div class="card">
+            <div class="muted text-sm">最近评测通过率</div>
+            <div class="h2 mt-2">{evalReport.passRate}%</div>
+            <p class="muted mt-2">
+              {evalReport.passedCases}/{evalReport.totalCases} 条评测样例通过 · 最近跑分：
+              {new Date(evalReport.generatedAt).toLocaleString("zh-CN")}
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="muted text-sm">评测里的零 / 低结果</div>
+            <div class="h2 mt-2">
+              {evalReport.zeroResultCases} / {evalReport.lowResultCases}
+            </div>
+            <p class="muted mt-2">
+              零结果 {evalReport.zeroResultCases} 条 · 低结果 {evalReport.lowResultCases} 条
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="muted text-sm">平均返回量</div>
+            <div class="h2 mt-2">{evalReport.averageVerifiedCount}</div>
+            <p class="muted mt-2">
+              平均正式项目 {evalReport.averageVerifiedCount} 条 · 学校池 {evalReport.averageUniversityCount} 所 · 候选 {evalReport.averageCandidateCount} 条
+            </p>
+          </div>
+        </div>
+
+        {latestEvalSnapshot && evalTrendSummary ? (
+          <div class="card mt-4">
+            <div class="card-top">
+              <div class="h3">最近评测趋势</div>
+              <span class="badge">{recentEvalHistory.length} 次记录</span>
+            </div>
+            <p class="muted mt-2">
+              这里不是只看这一轮的分数，而是看最近几次评测是不是持续在变好。优先盯住通过率、低结果样例和平均学校池这三项。
+            </p>
+
+            <div class="cards cards--3 mt-4">
+              <div class="card">
+                <div class="muted text-sm">通过率趋势</div>
+                <div class="h2 mt-2">{latestEvalSnapshot.passRate}%</div>
+                <p class="muted mt-2">{evalTrendSummary.passRate}</p>
+              </div>
+
+              <div class="card">
+                <div class="muted text-sm">低结果样例趋势</div>
+                <div class="h2 mt-2">{latestEvalSnapshot.lowResultCases}</div>
+                <p class="muted mt-2">{evalTrendSummary.lowResults}</p>
+              </div>
+
+              <div class="card">
+                <div class="muted text-sm">平均学校池趋势</div>
+                <div class="h2 mt-2">{latestEvalSnapshot.averageUniversityCount}</div>
+                <p class="muted mt-2">{evalTrendSummary.universities}</p>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              {recentEvalHistory.map((item) => (
+                <div class="faq">
+                  <div class="card-top">
+                    <div class="h3">
+                      {new Date(item.generatedAt).toLocaleString("zh-CN")}
+                    </div>
+                    <span class="badge">{item.passRate}%</span>
+                  </div>
+                  <div class="muted mt-2">
+                    通过 {item.passedCases}/{item.totalCases} 条 · 零结果 {item.zeroResultCases} 条 · 低结果 {item.lowResultCases} 条 · 平均学校池 {item.averageUniversityCount} 所 · 平均正式项目 {item.averageVerifiedCount} 条
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div id="eval-governance-tasks" class="card mt-4">
+          <div class="card-top">
+            <div class="h3">评测自动生成的治理任务</div>
+            <span class="badge">{evalGovernanceTasks.length} 条</span>
+          </div>
+          <p class="muted mt-2">
+            这里会把失败样例、零结果样例、低结果样例和候选主导样例自动归纳成一组优先任务。先处理这里，通常比零散看样例更省时间。
+          </p>
+          <div class="mt-4">
+            {evalGovernanceTasks.length ? evalGovernanceTasks.map((task) => {
+              const matchingPendingEntry = findPendingReviewEntryForQuery(task.query);
+              const matchingAuditEntry = findRecentAuditEntryForQuery(task.query);
+              const suggestedAvoidDomain = findSuggestedAvoidDomainForQuery(task.query);
+              const hasStructuredHint = Boolean(
+                task.query.country || task.query.major || task.query.specialization
+              );
+              const severityLabel =
+                task.severity === "critical"
+                  ? "高优先级"
+                  : task.severity === "high"
+                    ? "优先处理"
+                    : task.severity === "medium"
+                      ? "建议处理"
+                      : "观察";
+
+              return (
+                <div class="faq">
+                  <div class="card-top">
+                    <div class="h3">{task.label}</div>
+                    <span class="badge">{severityLabel}</span>
+                  </div>
+                  <div class="muted mt-1">
+                    关联样例 {task.cases.length} 条 · 最新样例正式项目 {task.latestCase.metrics.verifiedCount} 条 · 学校池 {task.latestCase.metrics.universityCount} 所
+                  </div>
+                  <div class="muted mt-2">
+                    {task.suggestion}
+                  </div>
+                  <div class="muted mt-2">
+                    识别结果：{summarizeSearchQuery(task.latestCase.resolvedQuery)}
+                  </div>
+                  <div class="detail-actions mt-3">
+                    {hasStructuredHint ? (
+                      <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                        <input type="hidden" name="country" value={task.query.country} />
+                        <input type="hidden" name="degree" value={task.query.degree} />
+                        <input type="hidden" name="major" value={task.query.major} />
+                        <input type="hidden" name="specialization" value={task.query.specialization} />
+                        <input type="hidden" name="mode" value="missing-first" />
+                        <input type="hidden" name="maxPrograms" value="12" />
+                        <input type="hidden" name="recordHistory" value="true" />
+                        <button class="btn" type="submit">先补这组门槛</button>
+                      </form>
+                    ) : null}
+
+                    {task.query.country ? (
+                      <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                        <input type="hidden" name="country" value={task.query.country} />
+                        <input type="hidden" name="degree" value={task.query.degree} />
+                        <input type="hidden" name="maxCountries" value="1" />
+                        <input type="hidden" name="maxFocusPerCountry" value="2" />
+                        <button class="btn btn-ghost" type="submit">按国家目标推进</button>
+                      </form>
+                    ) : null}
+
+                    {matchingPendingEntry ? (
+                      <a class="btn btn-ghost" href={`#review-entry-${matchingPendingEntry.id}`}>
+                        查看同类候选
+                      </a>
+                    ) : null}
+
+                    {matchingAuditEntry ? (
+                      <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
+                        查看最近同类留痕
+                      </a>
+                    ) : null}
+
+                    {suggestedAvoidDomain ? (
+                      <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                        <input type="hidden" name="targetType" value="domain" />
+                        <input type="hidden" name="source" value="candidate" />
+                        <input
+                          type="hidden"
+                          name="label"
+                          value={suggestedAvoidDomain.label || suggestedAvoidDomain.domain}
+                        />
+                        <input type="hidden" name="link" value={suggestedAvoidDomain.link} />
+                        <input
+                          type="hidden"
+                          name="reason"
+                          value="管理员在评测自动治理任务中判定这个重复候选来源不符合推荐标准"
+                        />
+                        <button class="btn btn-ghost" type="submit">
+                          规避重复来源：{suggestedAvoidDomain.domain}
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            }) : (
+              <div class="muted">
+                这轮评测没有自动生成需要优先处理的治理任务。
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div id="eval-weekly-focus" class="card mt-4">
+          <div class="card-top">
+            <div class="h3">本周最该补的方向榜单</div>
+            <span class="badge">{evalGovernanceLeaderboard.length} 组</span>
+          </div>
+          <p class="muted mt-2">
+            这里把自动治理任务再往上提一层，按国家 / 学位 / 专业方向合并成补库建议榜，适合你直接拿来排本周优先级。
+          </p>
+          <div class="mt-4">
+            {evalGovernanceLeaderboard.length ? evalGovernanceLeaderboard.map((item) => {
+              const matchingPendingEntry = findPendingReviewEntryForQuery(item.query);
+              const matchingAuditEntry = findRecentAuditEntryForQuery(item.query);
+              const suggestedAvoidDomain = findSuggestedAvoidDomainForQuery(item.query);
+              const severityLabel =
+                item.criticalCount > 0
+                  ? "本周优先"
+                  : item.zeroLikeCount > 0
+                    ? "先补基础池"
+                    : item.lowLikeCount > 0
+                      ? "优先加厚"
+                      : "持续观察";
+
+              return (
+                <div class="faq">
+                  <div class="card-top">
+                    <div class="h3">{item.label}</div>
+                    <span class="badge">{severityLabel}</span>
+                  </div>
+                  <div class="muted mt-1">
+                    关联治理任务 {item.taskCount} 条 · 评测样例 {item.caseCount} 条 · 零结果 {item.zeroLikeCount} 条 · 低结果 {item.lowLikeCount} 条
+                  </div>
+                  <div class="muted mt-2">
+                    {item.suggestion}
+                  </div>
+                  <div class="detail-actions mt-3">
+                    <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                      <input type="hidden" name="country" value={item.query.country} />
+                      <input type="hidden" name="degree" value={item.query.degree} />
+                      <input type="hidden" name="major" value={item.query.major} />
+                      <input type="hidden" name="mode" value="missing-first" />
+                      <input type="hidden" name="maxPrograms" value="16" />
+                      <input type="hidden" name="recordHistory" value="true" />
+                      <button class="btn" type="submit">本周先补这一组</button>
+                    </form>
+
+                    {item.query.country ? (
+                      <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                        <input type="hidden" name="country" value={item.query.country} />
+                        <input type="hidden" name="degree" value={item.query.degree} />
+                        <input type="hidden" name="maxCountries" value="1" />
+                        <input type="hidden" name="maxFocusPerCountry" value="2" />
+                        <button class="btn btn-ghost" type="submit">按国家推进</button>
+                      </form>
+                    ) : null}
+
+                    {matchingPendingEntry ? (
+                      <a class="btn btn-ghost" href={`#review-entry-${matchingPendingEntry.id}`}>
+                        查看候选
+                      </a>
+                    ) : null}
+
+                    {matchingAuditEntry ? (
+                      <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
+                        查看留痕
+                      </a>
+                    ) : null}
+
+                    {suggestedAvoidDomain ? (
+                      <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                        <input type="hidden" name="targetType" value="domain" />
+                        <input type="hidden" name="source" value="candidate" />
+                        <input
+                          type="hidden"
+                          name="label"
+                          value={suggestedAvoidDomain.label || suggestedAvoidDomain.domain}
+                        />
+                        <input type="hidden" name="link" value={suggestedAvoidDomain.link} />
+                        <input
+                          type="hidden"
+                          name="reason"
+                          value="管理员在本周补库建议榜中判定这个重复候选来源不符合推荐标准"
+                        />
+                        <button class="btn btn-ghost" type="submit">
+                          规避重复来源：{suggestedAvoidDomain.domain}
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            }) : (
+              <div class="muted">
+                当前没有形成需要优先补库的榜单条目。
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div id="eval-trend-alerts" class="card mt-4">
+          <div class="card-top">
+            <div class="h3">趋势预警与建议</div>
+            <span class="badge">{evalTrendAlerts.length} 条</span>
+          </div>
+          <p class="muted mt-2">
+            这里会盯住最近两次评测之间的变化。一旦通过率回落、低结果上升或学校池缩小，就直接给出下一步治理动作。
+          </p>
+          <div class="mt-4">
+            {evalTrendAlerts.length ? evalTrendAlerts.map((alert) => (
+              <div class="faq">
+                <div class="card-top">
+                  <div class="h3">{alert.title}</div>
+                  <span class="badge">{alert.severity}</span>
+                </div>
+                <div class="muted mt-2">{alert.summary}</div>
+                <div class="muted mt-2">{alert.suggestion}</div>
+                <div class="detail-actions mt-3">
+                  <a class="btn btn-ghost" href="#eval-governance-tasks">
+                    查看自动治理任务
+                  </a>
+                  <a class="btn btn-ghost" href="#eval-weekly-focus">
+                    查看本周补库榜单
+                  </a>
+
+                  {primaryEvalTrendHasStructuredHint ? (
+                    <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                      <input
+                        type="hidden"
+                        name="country"
+                        value={primaryEvalTrendQuery?.country || ""}
+                      />
+                      <input
+                        type="hidden"
+                        name="degree"
+                        value={primaryEvalTrendQuery?.degree || ""}
+                      />
+                      <input
+                        type="hidden"
+                        name="major"
+                        value={primaryEvalTrendQuery?.major || ""}
+                      />
+                      <input
+                        type="hidden"
+                        name="specialization"
+                        value={primaryEvalTrendQuery?.specialization || ""}
+                      />
+                      <input type="hidden" name="mode" value="missing-first" />
+                      <input type="hidden" name="maxPrograms" value="16" />
+                      <input type="hidden" name="recordHistory" value="true" />
+                      <input type="hidden" name="executionPlanId" value={primaryEvalTrendExecutionPlanId} />
+                      <input
+                        type="hidden"
+                        name="executionPlanLabel"
+                        value={primaryEvalLeaderboardItem?.label || ""}
+                      />
+                      <input
+                        type="hidden"
+                        name="actionSummary"
+                        value={`已从趋势预警启动补门槛：${primaryEvalLeaderboardItem?.label || "榜单第一组"}`}
+                      />
+                      <button class="btn" type="submit">按榜单第一组先补门槛</button>
+                    </form>
+                  ) : null}
+
+                  {primaryEvalTrendQuery?.country ? (
+                    <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                      <input
+                        type="hidden"
+                        name="country"
+                        value={primaryEvalTrendQuery.country}
+                      />
+                      <input
+                        type="hidden"
+                        name="degree"
+                        value={primaryEvalTrendQuery.degree}
+                      />
+                      <input type="hidden" name="maxCountries" value="1" />
+                      <input type="hidden" name="maxFocusPerCountry" value="2" />
+                      <input type="hidden" name="executionPlanId" value={primaryEvalTrendExecutionPlanId} />
+                      <input
+                        type="hidden"
+                        name="executionPlanLabel"
+                        value={primaryEvalLeaderboardItem?.label || ""}
+                      />
+                      <input
+                        type="hidden"
+                        name="actionSummary"
+                        value={`已从趋势预警启动国家推进：${primaryEvalLeaderboardItem?.label || "榜单第一组"}`}
+                      />
+                      <button class="btn btn-ghost" type="submit">按榜单国家推进</button>
+                    </form>
+                  ) : null}
+                </div>
+              </div>
+            )) : (
+              <div class="muted">
+                最近还没有出现明显变差的趋势。如果你刚开始跑评测，至少连续保留两轮记录后，这里才会开始给出预警。
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div id="eval-next-week-plan" class="card mt-4">
+          <div class="card-top">
+            <div class="h3">下周自动执行清单</div>
+            <span class="badge">{evalExecutionPlan.length} 组</span>
+          </div>
+          <p class="muted mt-2">
+            这里把趋势预警、本周补库榜单和评测任务再压成一份更直接的执行顺序。你下周照着从上往下处理，通常就能优先修掉最影响搜索质量的缺口。
+          </p>
+          <div class="cards cards--3 mt-4">
+            <div class="card">
+              <div class="muted text-sm">未开始</div>
+              <div class="h2 mt-2">{executionPlanPendingCount}</div>
+            </div>
+            <div class="card">
+              <div class="muted text-sm">处理中</div>
+              <div class="h2 mt-2">{executionPlanInProgressCount}</div>
+            </div>
+            <div class="card">
+              <div class="muted text-sm">已完成</div>
+              <div class="h2 mt-2">{executionPlanCompletedCount}</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            {evalExecutionPlan.length ? evalExecutionPlan.map((plan) => {
+              const matchingPendingEntry = findPendingReviewEntryForQuery(plan.query);
+              const matchingAuditEntry = findRecentAuditEntryForQuery(plan.query);
+              const suggestedAvoidDomain = findSuggestedAvoidDomainForQuery(plan.query);
+              const hasStructuredHint = Boolean(
+                plan.query.country || plan.query.major || plan.query.specialization
+              );
+              const planStatus = plan.planRecord?.status || "pending";
+              const planStatusLabel =
+                planStatus === "completed"
+                  ? "已完成"
+                  : planStatus === "in_progress"
+                    ? "处理中"
+                    : "未开始";
+
+              return (
+                <div class="faq">
+                  <div class="card-top">
+                    <div class="h3">#{plan.rank} {plan.label}</div>
+                    <span class="badge">{plan.stageLabel} · {planStatusLabel}</span>
+                  </div>
+                  <div class="muted mt-1">{plan.reason}</div>
+                  <div class="muted mt-2">{plan.suggestion}</div>
+                  {plan.planRecord?.updatedAt ? (
+                    <div class="muted mt-2">
+                      最近状态更新时间：{new Date(plan.planRecord.updatedAt).toLocaleString("zh-CN")}
+                    </div>
+                  ) : null}
+                  {plan.planRecord?.lastActionSummary ? (
+                    <div class="muted mt-2">
+                      最近执行动作：{plan.planRecord.lastActionSummary}
+                    </div>
+                  ) : null}
+                  {plan.planRecord?.completedAt ? (
+                    <div class="muted mt-2">
+                      完成时间：{new Date(plan.planRecord.completedAt).toLocaleString("zh-CN")}
+                    </div>
+                  ) : null}
+                  <div class="detail-actions mt-3">
+                    <form method="POST" action={actions.updateStudyAbroadSearchExecutionPlanStatus}>
+                      <input type="hidden" name="id" value={plan.id} />
+                      <input type="hidden" name="label" value={plan.label} />
+                      <input type="hidden" name="country" value={plan.query.country} />
+                      <input type="hidden" name="degree" value={plan.query.degree} />
+                      <input type="hidden" name="major" value={plan.query.major} />
+                      <input type="hidden" name="specialization" value={plan.query.specialization} />
+                      <input
+                        type="hidden"
+                        name="status"
+                        value={planStatus === "pending" ? "in_progress" : "pending"}
+                      />
+                      <input
+                        type="hidden"
+                        name="actionSummary"
+                        value={
+                          planStatus === "pending"
+                            ? "管理员已开始处理这组执行计划"
+                            : "管理员将这组执行计划重置为未开始"
+                        }
+                      />
+                      <button class="btn btn-ghost" type="submit">
+                        {planStatus === "pending" ? "标记为处理中" : "重置为未开始"}
+                      </button>
+                    </form>
+
+                    {planStatus !== "completed" ? (
+                      <form method="POST" action={actions.updateStudyAbroadSearchExecutionPlanStatus}>
+                        <input type="hidden" name="id" value={plan.id} />
+                        <input type="hidden" name="label" value={plan.label} />
+                        <input type="hidden" name="country" value={plan.query.country} />
+                        <input type="hidden" name="degree" value={plan.query.degree} />
+                        <input type="hidden" name="major" value={plan.query.major} />
+                        <input type="hidden" name="specialization" value={plan.query.specialization} />
+                        <input type="hidden" name="status" value="completed" />
+                        <input
+                          type="hidden"
+                          name="actionSummary"
+                          value="管理员确认这组执行计划已完成"
+                        />
+                        <button class="btn btn-ghost" type="submit">标记为已完成</button>
+                      </form>
+                    ) : null}
+
+                    {hasStructuredHint ? (
+                      <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                        <input type="hidden" name="executionPlanId" value={plan.id} />
+                        <input type="hidden" name="executionPlanLabel" value={plan.label} />
+                        <input
+                          type="hidden"
+                          name="actionSummary"
+                          value={`已开始执行补门槛：${plan.label}`}
+                        />
+                        <input type="hidden" name="country" value={plan.query.country} />
+                        <input type="hidden" name="degree" value={plan.query.degree} />
+                        <input type="hidden" name="major" value={plan.query.major} />
+                        <input type="hidden" name="specialization" value={plan.query.specialization} />
+                        <input type="hidden" name="mode" value="missing-first" />
+                        <input type="hidden" name="maxPrograms" value="16" />
+                        <input type="hidden" name="recordHistory" value="true" />
+                        <button class="btn" type="submit">开始执行这组补门槛</button>
+                      </form>
+                    ) : null}
+
+                    {plan.query.country ? (
+                      <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                        <input type="hidden" name="executionPlanId" value={plan.id} />
+                        <input type="hidden" name="executionPlanLabel" value={plan.label} />
+                        <input
+                          type="hidden"
+                          name="actionSummary"
+                          value={`已开始执行国家推进：${plan.label}`}
+                        />
+                        <input type="hidden" name="country" value={plan.query.country} />
+                        <input type="hidden" name="degree" value={plan.query.degree} />
+                        <input type="hidden" name="maxCountries" value="1" />
+                        <input type="hidden" name="maxFocusPerCountry" value="2" />
+                        <button class="btn btn-ghost" type="submit">按国家推进这组</button>
+                      </form>
+                    ) : null}
+
+                    {matchingPendingEntry ? (
+                      <a class="btn btn-ghost" href={`#review-entry-${matchingPendingEntry.id}`}>
+                        查看同类候选
+                      </a>
+                    ) : null}
+
+                    {matchingAuditEntry ? (
+                      <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
+                        查看最近同类留痕
+                      </a>
+                    ) : null}
+
+                    {suggestedAvoidDomain ? (
+                      <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                        <input type="hidden" name="targetType" value="domain" />
+                        <input type="hidden" name="source" value="candidate" />
+                        <input
+                          type="hidden"
+                          name="label"
+                          value={suggestedAvoidDomain.label || suggestedAvoidDomain.domain}
+                        />
+                        <input type="hidden" name="link" value={suggestedAvoidDomain.link} />
+                        <input
+                          type="hidden"
+                          name="reason"
+                          value="管理员在下周自动执行清单中判定这个重复候选来源不符合推荐标准"
+                        />
+                        <button class="btn btn-ghost" type="submit">
+                          规避重复来源：{suggestedAvoidDomain.domain}
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            }) : (
+              <div class="muted">
+                当前还没有形成需要优先执行的下周补库计划。继续跑评测后，这里会自动收敛出更明确的执行顺序。
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div id="execution-weekly-report" class="card mt-4">
+          <div class="card-top">
+            <div class="h3">本周执行周报</div>
+            <span class="badge">
+              {currentWeekStart.toLocaleDateString("zh-CN")} 起
+            </span>
+          </div>
+          <p class="muted mt-2">
+            这里不看“建议”，而是看这周实际已经推进了什么、哪些计划还卡着、团队最近最常执行的动作是什么。
+          </p>
+          <div class="card mt-4">
+            <div class="card-top">
+              <div class="h3">本周一句话结论</div>
+              <span class="badge">{executionPlanTouchedThisWeek.length ? "已生成" : "待推进"}</span>
+            </div>
+            <div class="h2 mt-3">{executionWeeklySummary.headline}</div>
+            <p class="muted mt-2">{executionWeeklySummary.detail}</p>
+          </div>
+          <div class="card mt-4">
+            <div class="card-top">
+              <div class="h3">本周自动复盘建议</div>
+              <span class="badge">{executionWeeklyRecommendations.length} 条</span>
+            </div>
+            <div class="mt-4">
+              {executionWeeklyRecommendations.length ? executionWeeklyRecommendations.map((item, index) => (
+                <div class="faq">
+                  <div class="card-top">
+                    <div class="h3">{item.title || `建议 ${index + 1}`}</div>
+                    <span class="badge">{item.statusLabel || "复盘"}</span>
+                  </div>
+                  <div class="muted mt-2">{item.detail}</div>
+                  {item.statusDetail ? (
+                    <div class="muted mt-2">{item.statusDetail}</div>
+                  ) : null}
+                  <div class="detail-actions mt-3">
+                    {item.actionType === "anchor" ? (
+                      <a class="btn btn-ghost" href={item.actionHref || "#eval-next-week-plan"}>
+                        {item.actionLabel}
+                      </a>
+                    ) : null}
+
+                    {item.actionType === "sync" && item.plan ? (
+                      <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                        <input type="hidden" name="executionPlanId" value={item.plan.id} />
+                        <input type="hidden" name="executionPlanLabel" value={item.plan.label} />
+                        <input
+                          type="hidden"
+                          name="actionSummary"
+                          value={`已开始执行补门槛：${item.plan.label}`}
+                        />
+                        <input type="hidden" name="country" value={item.plan.query.country} />
+                        <input type="hidden" name="degree" value={item.plan.query.degree} />
+                        <input type="hidden" name="major" value={item.plan.query.major} />
+                        <input type="hidden" name="specialization" value={item.plan.query.specialization} />
+                        <input type="hidden" name="mode" value="missing-first" />
+                        <input type="hidden" name="maxPrograms" value="16" />
+                        <input type="hidden" name="recordHistory" value="true" />
+                        <button class="btn" type="submit">{item.actionLabel}</button>
+                      </form>
+                    ) : null}
+
+                    {item.actionType === "country" && item.plan ? (
+                      <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                        <input type="hidden" name="executionPlanId" value={item.plan.id} />
+                        <input type="hidden" name="executionPlanLabel" value={item.plan.label} />
+                        <input
+                          type="hidden"
+                          name="actionSummary"
+                          value={`已开始执行国家推进：${item.plan.label}`}
+                        />
+                        <input type="hidden" name="country" value={item.plan.query.country} />
+                        <input type="hidden" name="degree" value={item.plan.query.degree} />
+                        <input type="hidden" name="maxCountries" value="1" />
+                        <input type="hidden" name="maxFocusPerCountry" value="2" />
+                        <button class="btn" type="submit">{item.actionLabel}</button>
+                      </form>
+                    ) : null}
+                  </div>
+                </div>
+              )) : (
+                <div class="muted">
+                  这周暂时没有生成新的复盘建议，继续推进执行清单后这里会自动刷新。
+                </div>
+              )}
+            </div>
+          </div>
+          <div class="cards cards--3 mt-4">
+            <div class="card">
+              <div class="muted text-sm">本周有动作记录</div>
+              <div class="h2 mt-2">{executionPlanTouchedThisWeek.length}</div>
+            </div>
+            <div class="card">
+              <div class="muted text-sm">本周已完成计划</div>
+              <div class="h2 mt-2">{executionPlanCompletedThisWeek.length}</div>
+            </div>
+            <div class="card">
+              <div class="muted text-sm">当前仍待推进</div>
+              <div class="h2 mt-2">{executionPlanAttentionItems.length}</div>
+            </div>
+          </div>
+
+          <div class="cards cards--2 mt-4">
+            <div class="card">
+              <div class="card-top">
+                <div class="h3">最近最常执行的动作</div>
+                <span class="badge">{executionPlanTopActions.length} 类</span>
+              </div>
+              <div class="mt-4">
+                {executionPlanTopActions.length ? executionPlanTopActions.map((item) => (
+                  <div class="faq">
+                    <div class="card-top">
+                      <div class="h3">{item.label}</div>
+                      <span class="badge">{item.count} 次</span>
+                    </div>
+                  </div>
+                )) : (
+                  <div class="muted">
+                    本周还没有形成明显的执行动作分布。等开始推进补门槛或国家目标后，这里就会自动统计。
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-top">
+                <div class="h3">最近完成的计划</div>
+                <span class="badge">{executionPlanCompletedThisWeek.length} 组</span>
+              </div>
+              <div class="mt-4">
+                {executionPlanCompletedThisWeek.length ? executionPlanCompletedThisWeek.map((item) => (
+                  <div class="faq">
+                    <div class="card-top">
+                      <div class="h3">{item.label}</div>
+                      <span class="badge">已完成</span>
+                    </div>
+                    <div class="muted mt-2">
+                      完成时间：{new Date(item.completedAt).toLocaleString("zh-CN")}
+                    </div>
+                    {item.lastActionSummary ? (
+                      <div class="muted mt-2">最后动作：{item.lastActionSummary}</div>
+                    ) : null}
+                  </div>
+                )) : (
+                  <div class="muted">
+                    本周还没有已完成计划。等你从执行清单里把任务推进并标记完成后，这里会自动形成周报记录。
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-4">
+            <div class="card-top">
+              <div class="h3">当前卡住的计划</div>
+              <span class="badge">{executionPlanAttentionItems.length} 组</span>
+            </div>
+            <div class="mt-4">
+              {executionPlanAttentionItems.length ? executionPlanAttentionItems.map((item) => (
+                <div class="faq">
+                  <div class="card-top">
+                    <div class="h3">{item.label}</div>
+                    <span class="badge">{item.planRecord?.status === "in_progress" ? "处理中" : "未开始"}</span>
+                  </div>
+                  <div class="muted mt-2">{item.suggestion}</div>
+                  {item.planRecord?.lastActionSummary ? (
+                    <div class="muted mt-2">最近动作：{item.planRecord.lastActionSummary}</div>
+                  ) : null}
+                  <div class="detail-actions mt-3">
+                    <a class="btn btn-ghost" href="#eval-next-week-plan">
+                      回到执行清单处理
+                    </a>
+                  </div>
+                </div>
+              )) : (
+                <div class="muted">
+                  当前执行清单都已经完成，或者还没有形成需要跟进的计划。
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-top">
+            <div class="h3">最近评测里未通过的样例</div>
+            <a class="btn btn-ghost" href="/admin/study-abroad-catalog#catalog-targets">
+              先去补库 / 补门槛
+            </a>
+          </div>
+          <p class="muted mt-2">
+            这组样例会告诉我们当前搜索最容易失手的方向。建议先处理这里，再继续调规则或补项目池。
+          </p>
+          <div class="mt-4">
+            {evalFailedCases.length ? evalFailedCases.map((item) => (
+              <div class="faq">
+                <div class="card-top">
+                  <div class="h3">{item.label}</div>
+                  <span class="badge">FAIL</span>
+                </div>
+                <div class="muted mt-1">
+                  正式项目 {item.metrics.verifiedCount} 条 · 学校池 {item.metrics.universityCount} 所 · 候选 {item.metrics.candidateCount} 条
+                </div>
+                <div class="muted mt-2">
+                  识别结果：{summarizeSearchQuery(item.resolvedQuery)}
+                </div>
+                <div class="muted mt-2">
+                  {item.reasons.join("；")}
+                </div>
+              </div>
+            )) : (
+              <div class="muted">
+                最近一轮评测样例全部通过，当前没有需要优先处理的失败项。
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-top">
+            <div class="h3">最近评测里的低结果样例</div>
+            <span class="badge">{evalLowResultCases.length} 条</span>
+          </div>
+          <p class="muted mt-2">
+            这组样例当前还能出结果，但量偏少。更适合优先做“补厚正式库”和“补门槛”，比等它掉到零结果再处理更主动。
+          </p>
+          <div class="mt-4">
+            {evalLowResultCases.length ? evalLowResultCases.map((item) => {
+              const governanceQuery = normalizeGovernanceQuery(item.resolvedQuery);
+              const matchingPendingEntry = findPendingReviewEntryForQuery(governanceQuery);
+              const matchingAuditEntry = findRecentAuditEntryForQuery(governanceQuery);
+              const suggestedAvoidDomain = findSuggestedAvoidDomainForQuery(governanceQuery);
+              const hasStructuredHint = Boolean(
+                governanceQuery.country || governanceQuery.major || governanceQuery.specialization
+              );
+
+              return (
+                <div class="faq">
+                  <div class="card-top">
+                    <div class="h3">{item.label}</div>
+                    <span class="badge">低结果</span>
+                  </div>
+                  <div class="muted mt-1">
+                    正式项目 {item.metrics.verifiedCount} 条 · 学校池 {item.metrics.universityCount} 所 · 候选 {item.metrics.candidateCount} 条
+                  </div>
+                  <div class="muted mt-2">
+                    识别结果：{summarizeSearchQuery(item.resolvedQuery)}
+                  </div>
+                  <div class="detail-actions mt-3">
+                    {hasStructuredHint ? (
+                      <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                        <input type="hidden" name="country" value={governanceQuery.country} />
+                        <input type="hidden" name="degree" value={governanceQuery.degree} />
+                        <input type="hidden" name="major" value={governanceQuery.major} />
+                        <input
+                          type="hidden"
+                          name="specialization"
+                          value={governanceQuery.specialization}
+                        />
+                        <input type="hidden" name="mode" value="missing-first" />
+                        <input type="hidden" name="maxPrograms" value="10" />
+                        <input type="hidden" name="recordHistory" value="true" />
+                        <button class="btn" type="submit">补厚这组正式项目</button>
+                      </form>
+                    ) : null}
+
+                    {governanceQuery.country ? (
+                      <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                        <input type="hidden" name="country" value={governanceQuery.country} />
+                        <input type="hidden" name="degree" value={governanceQuery.degree} />
+                        <input type="hidden" name="maxCountries" value="1" />
+                        <input type="hidden" name="maxFocusPerCountry" value="2" />
+                        <button class="btn btn-ghost" type="submit">按国家目标推进</button>
+                      </form>
+                    ) : null}
+
+                    {matchingPendingEntry ? (
+                      <a class="btn btn-ghost" href={`#review-entry-${matchingPendingEntry.id}`}>
+                        查看同类候选
+                      </a>
+                    ) : null}
+
+                    {matchingAuditEntry ? (
+                      <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
+                        查看最近同类留痕
+                      </a>
+                    ) : null}
+
+                    {suggestedAvoidDomain ? (
+                      <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                        <input type="hidden" name="targetType" value="domain" />
+                        <input type="hidden" name="source" value="candidate" />
+                        <input
+                          type="hidden"
+                          name="label"
+                          value={suggestedAvoidDomain.label || suggestedAvoidDomain.domain}
+                        />
+                        <input type="hidden" name="link" value={suggestedAvoidDomain.link} />
+                        <input
+                          type="hidden"
+                          name="reason"
+                          value="管理员在评测低结果样例中判定这个重复候选来源不符合推荐标准"
+                        />
+                        <button class="btn btn-ghost" type="submit">
+                          规避重复来源：{suggestedAvoidDomain.domain}
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            }) : (
+              <div class="muted">
+                最近评测里没有低结果样例，当前没有需要优先加厚的方向。
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    ) : (
+      <div class="card mt-4">
+        <div class="card-top">
+          <div class="h3">搜索评测集</div>
+          <span class="badge">待初始化</span>
+        </div>
+        <p class="muted mt-2">
+          还没有最近一次跑分结果。先执行 <code>npm run study-abroad:eval</code>，后台就会显示这轮搜索质量数据。
+        </p>
+      </div>
+    )}
+
+    <div class="cards cards--3 mt-4">
       <div class="card">
         <div class="muted text-sm">已标记已入库</div>
         <div class="h2 mt-2">{reviewedItems.length}</div>
       </div>
 
       <div class="card">
-        <div class="muted text-sm">已丢弃 / 全部任务</div>
-        <div class="h2 mt-2">{discardedItems.length} / {queue.length}</div>
+        <div class="muted text-sm">已丢弃候选任务</div>
+        <div class="h2 mt-2">{discardedItems.length}</div>
+      </div>
+
+      <div class="card">
+        <div class="muted text-sm">已在正式库的候选链接</div>
+        <div class="h2 mt-2">{importedProgramByLink.size}</div>
       </div>
     </div>
 
-    {importCandidateNotice && (
-      <div class:list={[
-        "contact-notice mt-4",
-        importCandidateNotice.ok ? "contact-notice--success" : "contact-notice--error",
-      ]}>
-        {importCandidateNotice.message}
+    {notices.map((notice) => (
+      <div
+        class:list={[
+          "contact-notice mt-4",
+          notice.ok ? "contact-notice--success" : "contact-notice--error",
+        ]}
+      >
+        {notice.message}
       </div>
-    )}
-
-    {reviewQueueNotice && (
-      <div class:list={[
-        "contact-notice mt-4",
-        reviewQueueNotice.ok ? "contact-notice--success" : "contact-notice--error",
-      ]}>
-        {reviewQueueNotice.message}
-      </div>
-    )}
+    ))}
 
     <div class="card mt-6">
-      <div class="h3">处理说明</div>
+      <div class="h3">处理原则</div>
       <p class="muted mt-2">
-        这里的按钮是按“整组候选任务”处理，不是单条链接处理。如果这组候选已经入正式底库，就标记为已入库；如果确认无效或不打算采用，就标记为已丢弃。
+        候选官网页先看真伪，再决定导入正式项目。最近搜索留痕用来回看这轮用户到底搜到了什么，管理员可以把不符合推荐标准的结果加入规避名单。规避名单一旦生效，后续前台搜索会自动跳过这些结果。
       </p>
       <p class="muted mt-2">
-        标记后，这组任务会从待核验列表移走，但仍会保留历史状态，方便回头核对。
+        推荐做法是：先导入真正有价值的项目，再对明显不准、不靠谱、重复误命中的结果点“后续规避这条”。
       </p>
     </div>
+
+    <div class="cards cards--3 mt-6">
+      <div class="card">
+        <div class="h3">低命中搜索</div>
+        <p class="muted mt-2">
+          最近只有 1 到 3 条结果的搜索：{lowYieldAuditEntries.length} 条。适合优先补库或放宽学科映射。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="h3">零命中搜索</div>
+        <p class="muted mt-2">
+          最近完全没有结果的搜索：{zeroYieldAuditEntries.length} 条。适合优先排查国家、学位和专业桶是否缺数据。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="h3">高规避命中</div>
+        <p class="muted mt-2">
+          最近触发过规避名单的搜索：{highBlockedAuditEntries.length} 条。可以帮助我们反查哪些坏结果反复出现。
+        </p>
+      </div>
+    </div>
+
+    {(zeroGovernanceBuckets.length ||
+      lowGovernanceBuckets.length ||
+      candidateHeavyGovernanceBuckets.length) ? (
+      <div class="cards mt-6">
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">零结果治理清单</div>
+            <span class="badge">{zeroGovernanceBuckets.length} 类</span>
+          </div>
+          <p class="muted mt-2">
+            这里不是单条搜索，而是把相似搜索意图聚合后给你看。适合优先排查项目池缺口和专业映射问题。
+          </p>
+          <div class="mt-4">
+            {zeroGovernanceBuckets.length ? zeroGovernanceBuckets.map((bucket) => (
+              (() => {
+                const matchingPendingEntry = findPendingReviewEntryForBucket(bucket);
+                const matchingAuditEntry = findRecentAuditEntryForBucket(bucket);
+                const suggestedAvoidDomain = findSuggestedAvoidDomainForBucket(bucket);
+                const hasStructuredHint = Boolean(
+                  bucket.query.country || bucket.query.major || bucket.query.specialization
+                );
+
+                return (
+                  <div class="faq">
+                    <div class="card-top">
+                      <div class="h3">{bucket.label}</div>
+                      <span class="badge">零结果 {bucket.zeroCount} 次</span>
+                    </div>
+                    <div class="muted mt-1">
+                      最近一次：{new Date(bucket.latestUpdatedAt).toLocaleString("zh-CN")} · 搜索 {bucket.searchCount} 次
+                    </div>
+                    <div class="muted mt-1">
+                      平均学校池 {bucket.averageUniversityCount} 所 · 平均正式项目 {bucket.averageVerifiedCount} 条
+                    </div>
+                    <div class="muted mt-2">{bucket.suggestion}</div>
+                    <div class="detail-actions mt-3">
+                      {hasStructuredHint ? (
+                        <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                          <input type="hidden" name="country" value={bucket.query.country} />
+                          <input type="hidden" name="degree" value={bucket.query.degree} />
+                          <input type="hidden" name="major" value={bucket.query.major} />
+                          <input
+                            type="hidden"
+                            name="specialization"
+                            value={bucket.query.specialization}
+                          />
+                          <input type="hidden" name="mode" value="missing-first" />
+                          <input type="hidden" name="maxPrograms" value="12" />
+                          <input type="hidden" name="recordHistory" value="true" />
+                          <button class="btn" type="submit">优先补这组门槛</button>
+                        </form>
+                      ) : null}
+
+                      {bucket.query.country ? (
+                        <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                          <input type="hidden" name="country" value={bucket.query.country} />
+                          <input type="hidden" name="degree" value={bucket.query.degree} />
+                          <input type="hidden" name="maxCountries" value="1" />
+                          <input type="hidden" name="maxFocusPerCountry" value="2" />
+                          <button class="btn btn-ghost" type="submit">按国家目标推进</button>
+                        </form>
+                      ) : null}
+
+                      {matchingPendingEntry ? (
+                        <a
+                          class="btn btn-ghost"
+                          href={`#review-entry-${matchingPendingEntry.id}`}
+                        >
+                          查看同类候选
+                        </a>
+                      ) : (
+                        <a
+                          class="btn btn-ghost"
+                          href="/admin/study-abroad-catalog#catalog-targets"
+                        >
+                          打开底库页
+                        </a>
+                      )}
+
+                      {matchingAuditEntry ? (
+                        <a
+                          class="btn btn-ghost"
+                          href={`#search-audit-${matchingAuditEntry.id}`}
+                        >
+                          查看最近同类留痕
+                        </a>
+                      ) : null}
+
+                      {suggestedAvoidDomain ? (
+                        <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                          <input type="hidden" name="targetType" value="domain" />
+                          <input type="hidden" name="source" value="candidate" />
+                          <input
+                            type="hidden"
+                            name="label"
+                            value={suggestedAvoidDomain.label || suggestedAvoidDomain.domain}
+                          />
+                          <input type="hidden" name="link" value={suggestedAvoidDomain.link} />
+                          <input
+                            type="hidden"
+                            name="reason"
+                            value="管理员在零结果治理中判定这个重复候选来源不符合推荐标准"
+                          />
+                          <button class="btn btn-ghost" type="submit">
+                            规避重复来源：{suggestedAvoidDomain.domain}
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })()
+            )) : (
+              <div class="muted">最近没有形成反复出现的零结果搜索类型。</div>
+            )}
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">低结果治理清单</div>
+            <span class="badge">{lowGovernanceBuckets.length} 类</span>
+          </div>
+          <p class="muted mt-2">
+            这些查询通常能出结果，但长期只有少量项目。适合优先补热门学校、补同类专业映射、增加更宽方向建议。
+          </p>
+          <div class="mt-4">
+            {lowGovernanceBuckets.length ? lowGovernanceBuckets.map((bucket) => (
+              (() => {
+                const matchingPendingEntry = findPendingReviewEntryForBucket(bucket);
+                const matchingAuditEntry = findRecentAuditEntryForBucket(bucket);
+                const suggestedAvoidDomain = findSuggestedAvoidDomainForBucket(bucket);
+                const hasStructuredHint = Boolean(
+                  bucket.query.country || bucket.query.major || bucket.query.specialization
+                );
+
+                return (
+                  <div class="faq">
+                    <div class="card-top">
+                      <div class="h3">{bucket.label}</div>
+                      <span class="badge">低结果 {bucket.lowCount} 次</span>
+                    </div>
+                    <div class="muted mt-1">
+                      最近一次：{new Date(bucket.latestUpdatedAt).toLocaleString("zh-CN")} · 搜索 {bucket.searchCount} 次
+                    </div>
+                    <div class="muted mt-1">
+                      平均正式项目 {bucket.averageVerifiedCount} 条 · 平均学校池 {bucket.averageUniversityCount} 所
+                    </div>
+                    <div class="muted mt-2">{bucket.suggestion}</div>
+                    <div class="detail-actions mt-3">
+                      {hasStructuredHint ? (
+                        <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                          <input type="hidden" name="country" value={bucket.query.country} />
+                          <input type="hidden" name="degree" value={bucket.query.degree} />
+                          <input type="hidden" name="major" value={bucket.query.major} />
+                          <input
+                            type="hidden"
+                            name="specialization"
+                            value={bucket.query.specialization}
+                          />
+                          <input type="hidden" name="mode" value="missing-first" />
+                          <input type="hidden" name="maxPrograms" value="10" />
+                          <input type="hidden" name="recordHistory" value="true" />
+                          <button class="btn" type="submit">补厚这组正式项目</button>
+                        </form>
+                      ) : null}
+
+                      {bucket.query.country ? (
+                        <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                          <input type="hidden" name="country" value={bucket.query.country} />
+                          <input type="hidden" name="degree" value={bucket.query.degree} />
+                          <input type="hidden" name="maxCountries" value="1" />
+                          <input type="hidden" name="maxFocusPerCountry" value="2" />
+                          <button class="btn btn-ghost" type="submit">按国家目标推进</button>
+                        </form>
+                      ) : null}
+
+                      {matchingPendingEntry ? (
+                        <a
+                          class="btn btn-ghost"
+                          href={`#review-entry-${matchingPendingEntry.id}`}
+                        >
+                          查看同类候选
+                        </a>
+                      ) : (
+                        <a
+                          class="btn btn-ghost"
+                          href="/admin/study-abroad-catalog#catalog-targets"
+                        >
+                          打开底库页
+                        </a>
+                      )}
+
+                      {matchingAuditEntry ? (
+                        <a
+                          class="btn btn-ghost"
+                          href={`#search-audit-${matchingAuditEntry.id}`}
+                        >
+                          查看最近同类留痕
+                        </a>
+                      ) : null}
+
+                      {suggestedAvoidDomain ? (
+                        <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                          <input type="hidden" name="targetType" value="domain" />
+                          <input type="hidden" name="source" value="candidate" />
+                          <input
+                            type="hidden"
+                            name="label"
+                            value={suggestedAvoidDomain.label || suggestedAvoidDomain.domain}
+                          />
+                          <input type="hidden" name="link" value={suggestedAvoidDomain.link} />
+                          <input
+                            type="hidden"
+                            name="reason"
+                            value="管理员在低结果治理中判定这个重复候选来源不符合推荐标准"
+                          />
+                          <button class="btn btn-ghost" type="submit">
+                            规避重复来源：{suggestedAvoidDomain.domain}
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })()
+            )) : (
+              <div class="muted">最近没有形成反复出现的低结果搜索类型。</div>
+            )}
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">候选撑起搜索清单</div>
+            <span class="badge">{candidateHeavyGovernanceBuckets.length} 类</span>
+          </div>
+          <p class="muted mt-2">
+            这些查询经常靠候选官网页撑结果，说明正式库还不够厚。适合优先导入候选、补门槛、再提升正式结果排序。
+          </p>
+          <div class="mt-4">
+            {candidateHeavyGovernanceBuckets.length ? candidateHeavyGovernanceBuckets.map((bucket) => (
+              (() => {
+                const matchingPendingEntry = findPendingReviewEntryForBucket(bucket);
+                const matchingAuditEntry = findRecentAuditEntryForBucket(bucket);
+                const suggestedAvoidDomain = findSuggestedAvoidDomainForBucket(bucket);
+                const hasStructuredHint = Boolean(
+                  bucket.query.country || bucket.query.major || bucket.query.specialization
+                );
+
+                return (
+                  <div class="faq">
+                    <div class="card-top">
+                      <div class="h3">{bucket.label}</div>
+                      <span class="badge">候选主导 {bucket.candidateHeavyCount} 次</span>
+                    </div>
+                    <div class="muted mt-1">
+                      最近一次：{new Date(bucket.latestUpdatedAt).toLocaleString("zh-CN")} · 搜索 {bucket.searchCount} 次
+                    </div>
+                    <div class="muted mt-1">
+                      平均候选 {bucket.averageCandidateCount} 条 · 平均正式项目 {bucket.averageVerifiedCount} 条
+                    </div>
+                    <div class="muted mt-2">{bucket.suggestion}</div>
+                    <div class="detail-actions mt-3">
+                      {hasStructuredHint ? (
+                        <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                          <input type="hidden" name="country" value={bucket.query.country} />
+                          <input type="hidden" name="degree" value={bucket.query.degree} />
+                          <input type="hidden" name="major" value={bucket.query.major} />
+                          <input
+                            type="hidden"
+                            name="specialization"
+                            value={bucket.query.specialization}
+                          />
+                          <input type="hidden" name="mode" value="missing-first" />
+                          <input type="hidden" name="maxPrograms" value="8" />
+                          <input type="hidden" name="recordHistory" value="true" />
+                          <button class="btn" type="submit">先补正式库门槛</button>
+                        </form>
+                      ) : null}
+
+                      {matchingPendingEntry ? (
+                        <a
+                          class="btn btn-ghost"
+                          href={`#review-entry-${matchingPendingEntry.id}`}
+                        >
+                          打开同类候选
+                        </a>
+                      ) : null}
+
+                      <a
+                        class="btn btn-ghost"
+                        href="/admin/study-abroad-catalog#catalog-targets"
+                      >
+                        打开底库页
+                      </a>
+
+                      {matchingAuditEntry ? (
+                        <a
+                          class="btn btn-ghost"
+                          href={`#search-audit-${matchingAuditEntry.id}`}
+                        >
+                          查看最近同类留痕
+                        </a>
+                      ) : null}
+
+                      {suggestedAvoidDomain ? (
+                        <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                          <input type="hidden" name="targetType" value="domain" />
+                          <input type="hidden" name="source" value="candidate" />
+                          <input
+                            type="hidden"
+                            name="label"
+                            value={suggestedAvoidDomain.label || suggestedAvoidDomain.domain}
+                          />
+                          <input type="hidden" name="link" value={suggestedAvoidDomain.link} />
+                          <input
+                            type="hidden"
+                            name="reason"
+                            value="管理员在候选主导治理中判定这个重复候选来源不符合推荐标准"
+                          />
+                          <button class="btn btn-ghost" type="submit">
+                            规避重复来源：{suggestedAvoidDomain.domain}
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })()
+            )) : (
+              <div class="muted">最近没有形成反复出现的候选主导搜索类型。</div>
+            )}
+          </div>
+        </article>
+      </div>
+    ) : null}
 
     {pendingItems.length ? (
       <div class="cards mt-6">
         {pendingItems.map((item) => (
-          <article class="card">
+          <article class="card" id={`review-entry-${item.id}`}>
             <div class="card-top">
               <div>
-                <div class="h3">
-                  {item.country || "不限国家"}
-                  {item.major ? ` / ${item.major}` : ""}
-                  {item.degree ? ` / ${item.degree}` : ""}
-                </div>
+                <div class="h3">{summarizeSearchQuery(item)}</div>
                 <div class="muted mt-1">
                   创建时间：{new Date(item.createdAt).toLocaleString("zh-CN")}
                 </div>
@@ -157,6 +2614,7 @@ const recentHandledItems = [...queue]
                 const importedProgram = importedProgramByLink.get(
                   normalizeReviewLink(candidate.link)
                 );
+                const activeAvoidRule = findActiveAvoidRuleForLink(candidate.link);
 
                 return (
                   <div class="faq">
@@ -175,14 +2633,48 @@ const recentHandledItems = [...queue]
                           <button class="btn" type="submit">导入正式项目</button>
                         </form>
                       )}
+
+                      {activeAvoidRule ? (
+                        <>
+                          <span class="badge">已在规避名单</span>
+                          <form method="POST" action={actions.updateStudyAbroadSearchAvoidRuleStatus}>
+                            <input type="hidden" name="id" value={activeAvoidRule.id} />
+                            <input type="hidden" name="status" value="inactive" />
+                            <button class="btn btn-ghost" type="submit">恢复显示</button>
+                          </form>
+                        </>
+                      ) : (
+                        <>
+                          <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                            <input type="hidden" name="targetType" value="link" />
+                            <input type="hidden" name="source" value="candidate" />
+                            <input type="hidden" name="label" value={candidate.title} />
+                            <input type="hidden" name="link" value={candidate.link} />
+                            <input
+                              type="hidden"
+                              name="reason"
+                              value="管理员在候选审核中判定这条链接不符合推荐标准"
+                            />
+                            <button class="btn btn-ghost" type="submit">后续规避这条</button>
+                          </form>
+                          <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                            <input type="hidden" name="targetType" value="domain" />
+                            <input type="hidden" name="source" value="candidate" />
+                            <input type="hidden" name="label" value={candidate.displayLink || candidate.title} />
+                            <input type="hidden" name="link" value={candidate.link} />
+                            <input
+                              type="hidden"
+                              name="reason"
+                              value="管理员在候选审核中判定这个站点整体不符合推荐标准"
+                            />
+                            <button class="btn btn-ghost" type="submit">规避整个站点</button>
+                          </form>
+                        </>
+                      )}
+
                       <a class="btn btn-ghost" href={candidate.link} target="_blank" rel="noreferrer">
                         打开候选官网页
                       </a>
-                      {importedProgram ? (
-                        <a class="btn btn-ghost" href="/admin/study-abroad-catalog">
-                          查看留学底库
-                        </a>
-                      ) : null}
                     </div>
                   </div>
                 );
@@ -200,21 +2692,219 @@ const recentHandledItems = [...queue]
       </div>
     )}
 
+    {recentAuditEntries.length ? (
+      <div class="cards mt-6" id="search-audits">
+        {recentAuditEntries.map((entry) => (
+          <article class="card" id={`search-audit-${entry.id}`}>
+            <div class="card-top">
+              <div>
+                <div class="h3">{summarizeSearchQuery(entry.query)}</div>
+                <div class="muted mt-1">
+                  最近搜索：{new Date(entry.updatedAt).toLocaleString("zh-CN")}
+                </div>
+                <div class="muted mt-1">
+                  已核验项目 {entry.displayedVerifiedCount}/{entry.totalVerifiedCount} · 学校池 {entry.totalUniversityCount} 所 · 候选官网页 {entry.candidateCount} 条 · 已规避 {entry.blockedResultCount} 条
+                </div>
+              </div>
+              <span class="badge">{entry.results.length} 条留痕</span>
+            </div>
+
+            <p class="muted mt-3">{entry.message}</p>
+
+            <div class="mt-4">
+              {entry.results.slice(0, 24).map((result) => {
+                const activeAvoidRule = findActiveAvoidRuleForResult(result);
+                const governanceTarget =
+                  result.source === "verified" && result.programId ? "program" : "link";
+
+                return (
+                  <div class="faq">
+                    <div class="card-top">
+                      <div>
+                        <div class="h3">{result.label || result.programName || result.schoolName}</div>
+                        <div class="muted mt-1">
+                          {result.source === "verified" ? "正式项目" : "候选官网页"}
+                          {result.schoolName ? ` · ${result.schoolName}` : ""}
+                          {result.discipline ? ` · ${result.discipline}` : ""}
+                        </div>
+                        {result.displayLink ? <div class="muted mt-1">{result.displayLink}</div> : null}
+                      </div>
+                      <span class="badge">{result.source === "verified" ? "已核验" : "候选"}</span>
+                    </div>
+
+                    <div class="detail-actions mt-3">
+                      {activeAvoidRule ? (
+                        <>
+                          <span class="badge">已在规避名单</span>
+                          <form method="POST" action={actions.updateStudyAbroadSearchAvoidRuleStatus}>
+                            <input type="hidden" name="id" value={activeAvoidRule.id} />
+                            <input type="hidden" name="status" value="inactive" />
+                            <button class="btn btn-ghost" type="submit">恢复显示</button>
+                          </form>
+                        </>
+                      ) : (
+                        <>
+                          <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                            <input type="hidden" name="targetType" value={governanceTarget} />
+                            <input type="hidden" name="source" value={result.source} />
+                            <input type="hidden" name="label" value={result.label} />
+                            <input type="hidden" name="programId" value={result.programId} />
+                            <input type="hidden" name="link" value={result.link} />
+                            <input type="hidden" name="sourceSessionId" value={entry.sessionId} />
+                            <input
+                              type="hidden"
+                              name="reason"
+                              value="管理员在搜索留痕中判定这条结果不符合推荐标准"
+                            />
+                            <button class="btn btn-ghost" type="submit">后续规避这条</button>
+                          </form>
+                          {result.link ? (
+                            <form method="POST" action={actions.createStudyAbroadSearchAvoidRule}>
+                              <input type="hidden" name="targetType" value="domain" />
+                              <input type="hidden" name="source" value={result.source} />
+                              <input type="hidden" name="label" value={result.displayLink || result.label} />
+                              <input type="hidden" name="link" value={result.link} />
+                              <input type="hidden" name="sourceSessionId" value={entry.sessionId} />
+                              <input
+                                type="hidden"
+                                name="reason"
+                                value="管理员在搜索留痕中判定这个站点整体不符合推荐标准"
+                              />
+                              <button class="btn btn-ghost" type="submit">规避整个站点</button>
+                            </form>
+                          ) : null}
+                        </>
+                      )}
+
+                      {result.link ? (
+                        <a class="btn btn-ghost" href={result.link} target="_blank" rel="noreferrer">
+                          打开来源链接
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <div class="card mt-6">
+        <div class="h3">还没有搜索留痕</div>
+        <p class="muted mt-2">
+          当前只有用户真正执行搜索后，这里才会出现留痕。它会记录这轮搜索返回了哪些正式项目和候选官网页，方便管理员后续做规避。
+        </p>
+      </div>
+    )}
+
+    {(lowYieldAuditEntries.length || zeroYieldAuditEntries.length || highBlockedAuditEntries.length) ? (
+      <div class="cards mt-6">
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">优先补库的低命中搜索</div>
+            <span class="badge">{lowYieldAuditEntries.length} 条</span>
+          </div>
+          <div class="mt-4">
+            {lowYieldAuditEntries.length ? lowYieldAuditEntries.map((entry) => (
+              <div class="faq">
+                <div class="h3">{summarizeSearchQuery(entry.query)}</div>
+                <div class="muted mt-1">
+                  命中 {countMeaningfulSearchResults(entry)} 条 · {new Date(entry.updatedAt).toLocaleString("zh-CN")}
+                </div>
+              </div>
+            )) : (
+              <div class="muted">最近没有低命中搜索。</div>
+            )}
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">优先排查的零命中搜索</div>
+            <span class="badge">{zeroYieldAuditEntries.length} 条</span>
+          </div>
+          <div class="mt-4">
+            {zeroYieldAuditEntries.length ? zeroYieldAuditEntries.map((entry) => (
+              <div class="faq">
+                <div class="h3">{summarizeSearchQuery(entry.query)}</div>
+                <div class="muted mt-1">{new Date(entry.updatedAt).toLocaleString("zh-CN")}</div>
+                <div class="muted mt-1">{entry.message}</div>
+              </div>
+            )) : (
+              <div class="muted">最近没有零命中搜索。</div>
+            )}
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-top">
+            <div class="h3">反复触发规避的搜索</div>
+            <span class="badge">{highBlockedAuditEntries.length} 条</span>
+          </div>
+          <div class="mt-4">
+            {highBlockedAuditEntries.length ? highBlockedAuditEntries.map((entry) => (
+              <div class="faq">
+                <div class="h3">{summarizeSearchQuery(entry.query)}</div>
+                <div class="muted mt-1">
+                  已规避 {entry.blockedResultCount} 条 · {new Date(entry.updatedAt).toLocaleString("zh-CN")}
+                </div>
+              </div>
+            )) : (
+              <div class="muted">最近没有触发规避名单的搜索。</div>
+            )}
+          </div>
+        </article>
+      </div>
+    ) : null}
+
+    {activeAvoidRules.length ? (
+      <div class="card mt-6">
+        <div class="card-top">
+          <div class="h3">当前规避名单</div>
+          <span class="badge">{activeAvoidRules.length} 条</span>
+        </div>
+        <div class="mt-4">
+          {activeAvoidRules.slice(0, 24).map((rule) => (
+            <div class="faq">
+              <div class="card-top">
+                <div>
+                  <div class="h3">{rule.label || rule.link || rule.domain || rule.programId}</div>
+                  <div class="muted mt-1">
+                    {rule.targetType === "program"
+                      ? "正式项目规避"
+                      : rule.targetType === "domain"
+                        ? "整站规避"
+                        : "单链接规避"}
+                    {rule.reason ? ` · ${rule.reason}` : ""}
+                  </div>
+                  <div class="muted mt-1">
+                    生效时间：{new Date(rule.updatedAt).toLocaleString("zh-CN")}
+                  </div>
+                </div>
+                <form method="POST" action={actions.updateStudyAbroadSearchAvoidRuleStatus}>
+                  <input type="hidden" name="id" value={rule.id} />
+                  <input type="hidden" name="status" value="inactive" />
+                  <button class="btn btn-ghost" type="submit">恢复显示</button>
+                </form>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null}
+
     {recentHandledItems.length ? (
       <div class="card mt-6">
         <div class="card-top">
-          <div class="h3">最近已处理任务</div>
+          <div class="h3">最近已处理候选任务</div>
           <span class="badge">{recentHandledItems.length} 条</span>
         </div>
         <div class="mt-4">
           {recentHandledItems.map((item) => (
             <div class="faq">
               <div class="card-top">
-                <div class="h3">
-                  {item.country || "不限国家"}
-                  {item.major ? ` / ${item.major}` : ""}
-                  {item.degree ? ` / ${item.degree}` : ""}
-                </div>
+                <div class="h3">{summarizeSearchQuery(item)}</div>
                 <span class="badge">
                   {item.status === "reviewed" ? "已入库" : "已丢弃"}
                 </span>

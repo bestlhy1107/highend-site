@@ -15,6 +15,8 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const payload = await request.json();
     const result = await expandStudyAbroadSearchCandidates({
+      searchSessionId: payload?.searchSessionId,
+      freeText: payload?.freeText,
       country: payload?.country,
       major: payload?.major,
       specialization: payload?.specialization,

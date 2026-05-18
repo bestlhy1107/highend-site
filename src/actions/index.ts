@@ -32,9 +32,16 @@ import {
 } from "../lib/study-abroad-admissions-sync";
 import { updateStudyAbroadReviewEntryStatus } from "../lib/study-abroad-review-queue";
 import { importStudyAbroadReviewCandidate } from "../lib/study-abroad-review-import";
+import {
+  createStudyAbroadSearchAvoidRule,
+  updateStudyAbroadSearchAvoidRuleStatus,
+} from "../lib/study-abroad-search-governance";
+import { updateStudyAbroadSearchExecutionPlanStatus } from "../lib/study-abroad-search-execution-plan";
 
-const ADMIN_USERNAME = import.meta.env?.ADMIN_USERNAME;
-const ADMIN_PASSWORD = import.meta.env?.ADMIN_PASSWORD;
+const ADMIN_USERNAME =
+  import.meta.env?.ADMIN_USERNAME || process.env.ADMIN_USERNAME || "";
+const ADMIN_PASSWORD =
+  import.meta.env?.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || "";
 
 async function requireAdmin(context: {
   session?: {
@@ -461,10 +468,13 @@ contactLead: defineAction({
       major: z.string().optional(),
       specialization: z.string().optional(),
       recordHistory: z.coerce.boolean().optional(),
+      executionPlanId: z.string().optional(),
+      executionPlanLabel: z.string().optional(),
+      actionSummary: z.string().optional(),
     }),
     handler: async (input, context) => {
       await requireAdmin(context);
-      return syncStudyAbroadAdmissionsSnapshots({
+      const result = await syncStudyAbroadAdmissionsSnapshots({
         maxPrograms: input.maxPrograms,
         mode: input.mode,
         country: input.country,
@@ -473,6 +483,27 @@ contactLead: defineAction({
         specialization: input.specialization,
         recordHistory: input.recordHistory,
       });
+
+      const actionFailed =
+        result && typeof result === "object" && "ok" in result && result.ok === false;
+      if (!actionFailed && (input.executionPlanId || input.executionPlanLabel)) {
+        await updateStudyAbroadSearchExecutionPlanStatus({
+          id: input.executionPlanId,
+          label: input.executionPlanLabel,
+          status: "in_progress",
+          country: input.country,
+          degree: input.degree,
+          major: input.major,
+          specialization: input.specialization,
+          actionSummary:
+            input.actionSummary ||
+            (typeof result === "object" && result && "message" in result
+              ? String(result.message || "").trim()
+              : "已执行一轮补门槛同步"),
+        });
+      }
+
+      return result;
     },
   }),
 
@@ -511,17 +542,43 @@ contactLead: defineAction({
     input: z.object({
       country: z.string().optional(),
       degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      major: z.string().optional(),
+      specialization: z.string().optional(),
       maxCountries: z.coerce.number().min(1).max(6).optional(),
       maxFocusPerCountry: z.coerce.number().min(1).max(4).optional(),
+      executionPlanId: z.string().optional(),
+      executionPlanLabel: z.string().optional(),
+      actionSummary: z.string().optional(),
     }),
     handler: async (input, context) => {
       await requireAdmin(context);
-      return executeStudyAbroadAdmissionsCountryTargetPlan({
+      const result = await executeStudyAbroadAdmissionsCountryTargetPlan({
         country: input.country,
         degree: input.degree,
         maxCountries: input.maxCountries,
         maxFocusPerCountry: input.maxFocusPerCountry,
       });
+
+      const actionFailed =
+        result && typeof result === "object" && "ok" in result && result.ok === false;
+      if (!actionFailed && (input.executionPlanId || input.executionPlanLabel)) {
+        await updateStudyAbroadSearchExecutionPlanStatus({
+          id: input.executionPlanId,
+          label: input.executionPlanLabel,
+          status: "in_progress",
+          country: input.country,
+          degree: input.degree,
+          major: input.major,
+          specialization: input.specialization,
+          actionSummary:
+            input.actionSummary ||
+            (typeof result === "object" && result && "message" in result
+              ? String(result.message || "").trim()
+              : "已执行国家目标推进"),
+        });
+      }
+
+      return result;
     },
   }),
 
@@ -621,6 +678,97 @@ contactLead: defineAction({
       return importStudyAbroadReviewCandidate({
         entryId: input.entryId,
         candidateLink: input.candidateLink,
+      });
+    },
+  }),
+
+  createStudyAbroadSearchAvoidRule: defineAction({
+    accept: "form",
+    input: z.object({
+      targetType: z.enum(["program", "link", "domain"]),
+      source: z.enum(["verified", "candidate", "manual"]).optional(),
+      label: z.string().optional(),
+      reason: z.string().optional(),
+      programId: z.string().optional(),
+      link: z.string().optional(),
+      domain: z.string().optional(),
+      sourceSessionId: z.string().optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+
+      if (input.targetType === "program" && !input.programId) {
+        return {
+          ok: false,
+          message: "缺少正式项目 ID，暂时无法加入规避名单。",
+        };
+      }
+
+      if (input.targetType === "link" && !input.link) {
+        return {
+          ok: false,
+          message: "缺少链接，暂时无法加入规避名单。",
+        };
+      }
+
+      if (input.targetType === "domain" && !input.domain && !input.link) {
+        return {
+          ok: false,
+          message: "缺少域名或链接，暂时无法加入规避名单。",
+        };
+      }
+
+      return createStudyAbroadSearchAvoidRule({
+        targetType: input.targetType,
+        source: input.source,
+        label: input.label,
+        reason: input.reason,
+        programId: input.programId,
+        link: input.link,
+        domain: input.domain,
+        sourceSessionId: input.sourceSessionId,
+      });
+    },
+  }),
+
+  updateStudyAbroadSearchAvoidRuleStatus: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().min(1, "缺少规避规则 ID"),
+      status: z.enum(["active", "inactive"]),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return updateStudyAbroadSearchAvoidRuleStatus({
+        id: input.id,
+        status: input.status,
+      });
+    },
+  }),
+
+  updateStudyAbroadSearchExecutionPlanStatus: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().optional(),
+      label: z.string().optional(),
+      status: z.enum(["pending", "in_progress", "completed"]),
+      country: z.string().optional(),
+      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      major: z.string().optional(),
+      specialization: z.string().optional(),
+      actionSummary: z.string().optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return updateStudyAbroadSearchExecutionPlanStatus({
+        id: input.id,
+        label: input.label,
+        status: input.status,
+        country: input.country,
+        degree: input.degree,
+        major: input.major,
+        specialization: input.specialization,
+        actionSummary: input.actionSummary,
       });
     },
   }),

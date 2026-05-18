@@ -26,7 +26,7 @@ export type StudyAbroadReviewEntry = {
 
 const FILE_NAME = "study-abroad-review-queue.json";
 const MAX_QUEUE_ITEMS = 200;
-const MAX_CANDIDATES_PER_ENTRY = 8;
+const MAX_CANDIDATES_PER_ENTRY = 20;
 
 function normalizeCandidate(input: Partial<StudyAbroadReviewCandidate>): StudyAbroadReviewCandidate {
   return {

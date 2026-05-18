@@ -13,6 +13,7 @@ import { readLeads } from "../../lib/leads-store";
 import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
 import { readStudyAbroadCatalogSummary } from "../../lib/study-abroad-catalog-store";
 import { readStudyAbroadCatalogSyncState } from "../../lib/study-abroad-catalog-sync";
+import { getStudyAbroadSearchRuntimeStatus } from "../../lib/study-abroad-search";
 import {
   readStudyAbroadAdmissionsCampaignCadence,
   readStudyAbroadAdmissionsCampaignCountryFocusTrend,
@@ -39,6 +40,7 @@ const leads = await readLeads();
 const schoolSearchQueue = await readStudyAbroadReviewQueue();
 const studyAbroadCatalog = await readStudyAbroadCatalogSummary();
 const studyAbroadCatalogSyncState = await readStudyAbroadCatalogSyncState();
+const studyAbroadSearchRuntime = getStudyAbroadSearchRuntimeStatus();
 const studyAbroadCampaignOutlook = await readStudyAbroadAdmissionsCampaignOutlook({
   degree: "硕士",
 });
@@ -342,6 +344,21 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
         </div>
         <p class="muted mt-2">查看搜索器补抓到的候选官网页，作为后续人工核验线索。</p>
         <div class="card-cta">查看候选 →</div>
+      </a>
+
+      <a class="card card--hover" href="/admin/school-search">
+        <div class="card-top">
+          <div class="h3">全网扩搜状态</div>
+          <span class="badge">
+            {studyAbroadSearchRuntime.externalSearchEnabled ? "已启用" : "未启用"}
+          </span>
+        </div>
+        <p class="muted mt-2">
+          {studyAbroadSearchRuntime.externalSearchEnabled
+            ? `当前使用 ${studyAbroadSearchRuntime.provider}，候选上限 ${studyAbroadSearchRuntime.maxCandidateResults} 条。`
+            : "当前还没配扩搜 API，前台只能靠已核验项目库返回结果。"}
+        </p>
+        <div class="card-cta">查看治理 →</div>
       </a>
 
       <a class="card card--hover" href="/admin/study-abroad-catalog">

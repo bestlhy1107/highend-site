@@ -1,6 +1,7 @@
 ---
 import {
   STUDY_ABROAD_MAJOR_GROUPS,
+  STUDY_ABROAD_MAJOR_EXPANSIONS,
   STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
   STUDY_ABROAD_DATA_UPDATED_AT,
   STUDY_ABROAD_PROGRAMS,
@@ -280,11 +281,21 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         <div>
           <div class="school-match-panel-kicker">Step 1</div>
           <h4>基础筛选</h4>
-          <p>先定国家、学位和方向，系统再去拼学校池和项目池。</p>
+          <p>你可以直接写一句需求，或继续按国家、学位和方向细筛。</p>
         </div>
       </div>
 
       <div class="school-match-controls">
+        <label class="school-match-field school-match-field--full">
+          <span>一句话需求</span>
+          <input
+            data-role="free-text"
+            type="text"
+            inputmode="search"
+            placeholder="例如：英国一年制商科硕士，GPA 3.5，偏商业分析"
+          />
+        </label>
+
         <label class="school-match-field">
           <span>意向国家</span>
           <select data-role="country">
@@ -420,6 +431,43 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
     <div class="school-match-status" data-role="status">
       当前底库共有 {totalPrograms} 个项目，当前展示 {initialResults.length} 个优先样例。先选学位类型、专业方向、细分方向和学生背景，再点击“开始搜索”获取已核验结果。
+    </div>
+
+    <div class="school-match-status-grid" data-role="status-grid">
+      <article class="school-match-status-card">
+        <span>已核验项目</span>
+        <strong data-role="status-verified">{initialResults.length}</strong>
+        <p>优先展示可直接查看官网与要求摘要的正式结果。</p>
+      </article>
+      <article class="school-match-status-card">
+        <span>全网候选官网页</span>
+        <strong data-role="status-candidate">0</strong>
+        <p data-role="status-candidate-note">未触发全网扩搜前，这里会保持为 0。</p>
+      </article>
+      <article class="school-match-status-card">
+        <span>后台已规避</span>
+        <strong data-role="status-blocked">0</strong>
+        <p data-role="status-blocked-note">管理员判定不合格的结果会自动跳过。</p>
+      </article>
+    </div>
+
+    <div class="school-match-expansion" data-role="expansion-panel" hidden>
+      <div class="school-match-expansion-head">
+        <strong data-role="expansion-title">当前结果偏少，建议这样放宽</strong>
+        <p data-role="expansion-summary">
+          系统会根据你当前的国家、学位和专业方向，给出几种最常见的放宽方式。
+        </p>
+      </div>
+      <div class="school-match-expansion-actions" data-role="expansion-actions"></div>
+    </div>
+
+    <div class="school-match-intent" data-role="intent-panel" hidden>
+      <div class="school-match-intent-head">
+        <strong>系统识别到的搜索条件</strong>
+        <p data-role="intent-summary">一句话需求会自动拆成国家、学位和方向，方便你继续微调。</p>
+      </div>
+      <div class="school-match-intent-chips" data-role="intent-chips"></div>
+      <div class="school-match-intent-actions" data-role="intent-actions"></div>
     </div>
 
     <ul class="school-match-guidance school-match-guidance--inline">
@@ -673,6 +721,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       initialUniversityMatches,
       initialVisibleSchoolCount: INITIAL_VISIBLE_SCHOOL_COUNT,
       specializationOptionsByMajor: STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
+      majorExpansionHints: STUDY_ABROAD_MAJOR_EXPANSIONS,
     }}
   >
     const root = document.querySelector(`[data-school-match="${finderId}"]`);
@@ -684,6 +733,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         ? initialUniversityMatches
         : [];
       const countrySelect = root.querySelector('[data-role="country"]');
+      const freeTextInput = root.querySelector('[data-role="free-text"]');
       const degreeSelect = root.querySelector('[data-role="degree"]');
       const majorSelect = root.querySelector('[data-role="major"]');
       const specializationSelect = root.querySelector('[data-role="specialization"]');
@@ -716,6 +766,19 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       const candidateSection = root.querySelector('[data-role="candidate-section"]');
       const candidateResultsNode = root.querySelector('[data-role="candidate-results"]');
       const candidateCountNode = root.querySelector('[data-role="candidate-count"]');
+      const statusVerifiedNode = root.querySelector('[data-role="status-verified"]');
+      const statusCandidateNode = root.querySelector('[data-role="status-candidate"]');
+      const statusCandidateNoteNode = root.querySelector('[data-role="status-candidate-note"]');
+      const statusBlockedNode = root.querySelector('[data-role="status-blocked"]');
+      const statusBlockedNoteNode = root.querySelector('[data-role="status-blocked-note"]');
+      const expansionPanel = root.querySelector('[data-role="expansion-panel"]');
+      const expansionTitleNode = root.querySelector('[data-role="expansion-title"]');
+      const expansionSummaryNode = root.querySelector('[data-role="expansion-summary"]');
+      const expansionActionsNode = root.querySelector('[data-role="expansion-actions"]');
+      const intentPanel = root.querySelector('[data-role="intent-panel"]');
+      const intentSummaryNode = root.querySelector('[data-role="intent-summary"]');
+      const intentChipsNode = root.querySelector('[data-role="intent-chips"]');
+      const intentActionsNode = root.querySelector('[data-role="intent-actions"]');
       const detailPanel = root.querySelector('[data-role="detail-panel"]');
       const detailTitleNode = root.querySelector('[data-role="detail-title"]');
       const detailSubtitleNode = root.querySelector('[data-role="detail-subtitle"]');
@@ -733,6 +796,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       let baseStatusText =
         `当前底库共有 ${totalProgramCount} 个项目，当前展示 ${initialResults.length} 个优先样例。先选学位类型、专业方向、细分方向和学生背景，再点击“开始搜索”获取已核验结果。`;
       let lastBasePayload = {
+        freeText: "",
         country: "",
         major: "",
         specialization: "",
@@ -744,6 +808,10 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         fitMode: "prefer",
         snapshotQuality: "",
       };
+      let activeSearchPayload = {
+        ...lastBasePayload,
+      };
+      let activeSearchSessionId = "";
       let selectedUniversityId = "";
       let lastEmptyText =
         "可以先放宽国家条件，或者改选更宽的专业方向，比如从“商业分析 / 数据”切到“商科 / 管理”。";
@@ -754,10 +822,16 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       let candidateExpansionToken = 0;
       let candidateExpansionController = null;
       const detailCache = new Map();
+      const intentSuppressValue = "__none__";
+      const inferredIntentKeys = new Set(["country", "degree", "major", "specialization"]);
       const specializationMap =
         specializationOptionsByMajor &&
         typeof specializationOptionsByMajor === "object"
           ? specializationOptionsByMajor
+          : {};
+      const majorExpansionMap =
+        majorExpansionHints && typeof majorExpansionHints === "object"
+          ? majorExpansionHints
           : {};
 
       const escapeHtml = (value) =>
@@ -767,6 +841,302 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           .replaceAll(">", "&gt;")
           .replaceAll('"', "&quot;")
           .replaceAll("'", "&#39;");
+
+      const setStatusSummary = ({
+        verifiedCount = 0,
+        candidateCount = 0,
+        blockedCount = 0,
+        expansionEnabled = false,
+        expansionAttempted = false,
+      } = {}) => {
+        if (statusVerifiedNode instanceof HTMLElement) {
+          statusVerifiedNode.textContent = String(verifiedCount || 0);
+        }
+
+        if (statusCandidateNode instanceof HTMLElement) {
+          statusCandidateNode.textContent = String(candidateCount || 0);
+        }
+
+        if (statusBlockedNode instanceof HTMLElement) {
+          statusBlockedNode.textContent = String(blockedCount || 0);
+        }
+
+        if (statusCandidateNoteNode instanceof HTMLElement) {
+          if (!expansionEnabled) {
+            statusCandidateNoteNode.textContent = "当前环境还没接全网扩搜 API，所以候选结果暂时不会放量。";
+          } else if (!expansionAttempted) {
+            statusCandidateNoteNode.textContent = "这轮还没有触发全网扩搜，先看已核验项目与学校池。";
+          } else if (candidateCount > 0) {
+            statusCandidateNoteNode.textContent = "这些结果来自全网筛出的疑似官网页，会同步进入后台审核。";
+          } else {
+            statusCandidateNoteNode.textContent = "这轮已尝试扩搜，但还没有筛出更高质量的候选官网页。";
+          }
+        }
+
+        if (statusBlockedNoteNode instanceof HTMLElement) {
+          statusBlockedNoteNode.textContent =
+            blockedCount > 0
+              ? "这些结果曾被管理员判定不符合推荐标准，所以这轮会被自动避开。"
+              : "管理员判定不合格的结果会自动跳过。";
+        }
+      };
+
+      const intentLabelMap = {
+        country: "国家",
+        degree: "学位",
+        major: "专业方向",
+        specialization: "细分方向",
+        budgetTier: "预算",
+        intake: "入学季",
+        gpaProfile: "GPA",
+        languageProfile: "语言",
+        snapshotQuality: "门槛质量",
+      };
+
+      const hideIntentExplanation = () => {
+        if (intentPanel instanceof HTMLElement) {
+          intentPanel.hidden = true;
+        }
+
+        if (intentChipsNode instanceof HTMLElement) {
+          intentChipsNode.innerHTML = "";
+        }
+
+        if (intentActionsNode instanceof HTMLElement) {
+          intentActionsNode.innerHTML = "";
+        }
+      };
+
+      const hideExpansionSuggestion = () => {
+        if (expansionPanel instanceof HTMLElement) {
+          expansionPanel.hidden = true;
+        }
+
+        if (expansionActionsNode instanceof HTMLElement) {
+          expansionActionsNode.innerHTML = "";
+        }
+      };
+
+      const hasAdvancedIntentFilters = (payload = {}) =>
+        Boolean(
+          payload?.specialization ||
+            payload?.budgetTier ||
+            payload?.intake ||
+            payload?.gpaProfile ||
+            payload?.languageProfile ||
+            payload?.snapshotQuality ||
+            (payload?.fitMode && payload.fitMode !== "prefer")
+        );
+
+      const buildIntentActions = (payload = {}) => {
+        const actions = [];
+        const broaderMajors = Array.isArray(majorExpansionMap[payload?.major])
+          ? majorExpansionMap[payload.major].filter((major) => major && major !== payload.major).slice(0, 2)
+          : [];
+
+        if (payload?.specialization) {
+          actions.push({
+            type: "clear-specialization",
+            label: "去掉细分方向",
+          });
+        }
+
+        broaderMajors.forEach((major) => {
+          actions.push({
+            type: "expand-major",
+            label: `改为更宽的 ${major}`,
+            value: major,
+          });
+        });
+
+        if (payload?.freeText) {
+          actions.push({
+            type: "clear-free-text",
+            label: "清空一句话需求",
+          });
+        }
+
+        if (hasAdvancedIntentFilters(payload)) {
+          actions.push({
+            type: "relax-search",
+            label: "放宽这轮搜索",
+          });
+        }
+
+        if (payload?.country && payload?.degree && (payload?.major || hasAdvancedIntentFilters(payload))) {
+          actions.push({
+            type: "country-degree-only",
+            label: "只保留国家和学位",
+          });
+        }
+
+        return actions;
+      };
+
+      const buildExpansionActions = (payload = {}) =>
+        buildIntentActions(payload).filter((action) => action.type !== "clear-free-text");
+
+      const buildIntentRemovalValue = (key, payload = {}) =>
+        payload?.freeText && inferredIntentKeys.has(key) ? intentSuppressValue : "";
+
+      const shouldSuggestExpansion = (payload = {}, stats = {}) => {
+        if (payload?.universityId) return false;
+
+        const verifiedCount = Number(stats?.verifiedCount) || 0;
+        const universityCount = Number(stats?.universityCount) || 0;
+
+        if (!payload?.major && !payload?.specialization && !payload?.freeText) {
+          return false;
+        }
+
+        return verifiedCount === 0 || verifiedCount <= 8 || universityCount <= 6;
+      };
+
+      const renderExpansionSuggestion = (payload = {}, stats = {}) => {
+        if (
+          !(expansionPanel instanceof HTMLElement) ||
+          !(expansionTitleNode instanceof HTMLElement) ||
+          !(expansionSummaryNode instanceof HTMLElement) ||
+          !(expansionActionsNode instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        if (!shouldSuggestExpansion(payload, stats)) {
+          hideExpansionSuggestion();
+          return;
+        }
+
+        const verifiedCount = Number(stats?.verifiedCount) || 0;
+        const universityCount = Number(stats?.universityCount) || 0;
+        const candidateCount = Number(stats?.candidateCount) || 0;
+        const actions = buildExpansionActions(payload);
+
+        if (!actions.length) {
+          hideExpansionSuggestion();
+          return;
+        }
+
+        expansionPanel.hidden = false;
+        expansionTitleNode.textContent =
+          verifiedCount === 0 ? "当前还没筛到正式结果，建议这样放宽" : "当前结果偏少，建议这样扩大院校池";
+        expansionSummaryNode.textContent =
+          verifiedCount === 0
+            ? candidateCount > 0
+              ? `这轮还没有正式项目，但已经找到 ${candidateCount} 条候选官网页。你也可以先按下面的方式放宽搜索，再看看正式结果。`
+              : "这轮还没有筛到正式项目。通常先放宽细分方向、专业大类或背景限制，会更容易拿到更大的项目池。"
+            : `当前先返回了 ${verifiedCount} 个正式项目、${universityCount} 所学校。你可以先试试下面这些常见放宽方式，通常能更快拿到更大的候选池。`;
+        expansionActionsNode.innerHTML = actions
+          .map(
+            (action) =>
+              `<button type="button" class="school-match-expansion-action" data-intent-action="${escapeHtml(action.type)}"${action.value ? ` data-intent-value="${escapeHtml(action.value)}"` : ""}>${escapeHtml(action.label)}</button>`
+          )
+          .join("");
+      };
+
+      const renderIntentExplanation = (payload = {}) => {
+        if (
+          !(intentPanel instanceof HTMLElement) ||
+          !(intentChipsNode instanceof HTMLElement) ||
+          !(intentActionsNode instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        const entries = [
+          payload.country ? { key: "country", value: payload.country } : null,
+          payload.degree ? { key: "degree", value: payload.degree } : null,
+          payload.major ? { key: "major", value: payload.major } : null,
+          payload.specialization ? { key: "specialization", value: payload.specialization } : null,
+          payload.budgetTier ? { key: "budgetTier", value: payload.budgetTier } : null,
+          payload.intake ? { key: "intake", value: payload.intake } : null,
+          payload.gpaProfile ? { key: "gpaProfile", value: payload.gpaProfile } : null,
+          payload.languageProfile ? { key: "languageProfile", value: payload.languageProfile } : null,
+          payload.snapshotQuality ? { key: "snapshotQuality", value: payload.snapshotQuality } : null,
+        ].filter(Boolean);
+
+        if (!entries.length && !payload?.freeText) {
+          hideIntentExplanation();
+          return;
+        }
+
+        intentPanel.hidden = false;
+        if (intentSummaryNode instanceof HTMLElement) {
+          intentSummaryNode.textContent = payload?.freeText
+            ? "系统已结合你的一句话需求和当前筛选器，识别出下面这些条件；你可以直接点下方条件移除，或用快捷动作把搜索放宽到更大的相关方向。"
+            : "当前这轮搜索使用的是下面这些结构化条件；你可以直接点下方条件移除，或用快捷动作快速放宽到更宽的相关方向。";
+        }
+
+        const chips = [];
+
+        if (payload?.freeText) {
+          chips.push(
+            `<span class="school-match-intent-chip school-match-intent-chip--free">原始需求：${escapeHtml(payload.freeText)}</span>`
+          );
+        }
+
+        entries.forEach((entry) => {
+          chips.push(
+            `<button type="button" class="school-match-intent-chip school-match-intent-chip--interactive" data-intent-remove="${escapeHtml(entry.key)}" aria-label="移除${escapeHtml(intentLabelMap[entry.key] || entry.key)}条件"><strong>${escapeHtml(intentLabelMap[entry.key] || entry.key)}</strong>${escapeHtml(entry.value)}<span class="school-match-intent-chip-remove" aria-hidden="true">×</span></button>`
+          );
+        });
+
+        intentChipsNode.innerHTML = chips.join("");
+
+        const actions = buildIntentActions(payload);
+        intentActionsNode.innerHTML = actions.length
+          ? actions
+              .map(
+                (action) =>
+                  `<button type="button" class="school-match-intent-action" data-intent-action="${escapeHtml(action.type)}"${action.value ? ` data-intent-value="${escapeHtml(action.value)}"` : ""}>${escapeHtml(action.label)}</button>`
+              )
+              .join("")
+          : "";
+      };
+
+      const applyResolvedQueryToControls = (payload = {}) => {
+        if (freeTextInput instanceof HTMLInputElement) {
+          freeTextInput.value = payload?.freeText || "";
+        }
+
+        if (countrySelect instanceof HTMLSelectElement) {
+          countrySelect.value = payload?.country || "";
+        }
+
+        if (degreeSelect instanceof HTMLSelectElement) {
+          degreeSelect.value = payload?.degree || "";
+        }
+
+        if (majorSelect instanceof HTMLSelectElement) {
+          majorSelect.value = payload?.major || "";
+        }
+
+        updateSpecializationOptions(payload?.specialization || "");
+
+        if (budgetSelect instanceof HTMLSelectElement) {
+          budgetSelect.value = payload?.budgetTier || "";
+        }
+
+        if (intakeSelect instanceof HTMLSelectElement) {
+          intakeSelect.value = payload?.intake || "";
+        }
+
+        if (gpaSelect instanceof HTMLSelectElement) {
+          gpaSelect.value = payload?.gpaProfile || "";
+        }
+
+        if (languageSelect instanceof HTMLSelectElement) {
+          languageSelect.value = payload?.languageProfile || "";
+        }
+
+        if (fitModeSelect instanceof HTMLSelectElement) {
+          fitModeSelect.value = payload?.fitMode || "prefer";
+        }
+
+        if (snapshotQualitySelect instanceof HTMLSelectElement) {
+          snapshotQualitySelect.value = payload?.snapshotQuality || "";
+        }
+      };
 
       const locationLabel = (program) =>
         [program.city, program.stateOrProvince].filter(Boolean).join(", ");
@@ -843,6 +1213,171 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         }
 
         return `学费样本：${currency} ${formatCurrencyNumber(min)} - ${formatCurrencyNumber(max)}`;
+      };
+
+      const normalizeClientText = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[()]/g, " ")
+          .replace(/[.,/\\-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const buildProgramReasonChips = (program, payload = {}) => {
+        const reasons = [];
+        const searchText = normalizeClientText(
+          [
+            program?.discipline,
+            program?.programName,
+            program?.summary,
+            ...(Array.isArray(program?.tags) ? program.tags : []),
+            ...(Array.isArray(program?.keywords) ? program.keywords : []),
+          ].join(" ")
+        );
+
+        if (payload?.major && program?.discipline === payload.major) {
+          reasons.push("专业大类直连");
+        }
+
+        if (
+          payload?.specialization &&
+          searchText.includes(normalizeClientText(payload.specialization))
+        ) {
+          reasons.push("细分方向相关");
+        }
+
+        if (payload?.country && program?.country === payload.country) {
+          reasons.push(`${program.country}方向`);
+        }
+
+        if (payload?.budgetTier && program?.tuitionAmount) {
+          reasons.push("已带学费样本");
+        }
+
+        if (payload?.intake && program?.intake) {
+          reasons.push("已带入学季");
+        }
+
+        if (program?.admissionsSnapshot?.extractionStatus === "ok") {
+          reasons.push("门槛已完整入库");
+        } else if (program?.admissionsSnapshot?.extractionStatus === "partial") {
+          reasons.push("门槛已补部分字段");
+        } else if (program?.admissionsUrl) {
+          reasons.push("可继续核对官方要求");
+        }
+
+        if ((payload?.gpaProfile || payload?.languageProfile) && program?.admissionsSnapshot?.extractedAt) {
+          reasons.push("可结合背景预估");
+        }
+
+        if (program?.qsRank && Number(program.qsRank) > 0) {
+          reasons.push("带QS排名");
+        }
+
+        return Array.from(new Set(reasons)).slice(0, 4);
+      };
+
+      const reasonChipsHtml = (program, payload = {}) => {
+        const reasons = buildProgramReasonChips(program, payload);
+        if (!reasons.length) {
+          return "";
+        }
+
+        return `
+          <div class="school-card-reasons">
+            ${reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}
+          </div>
+        `;
+      };
+
+      const buildProgramSignalPills = (program, payload = {}) => {
+        const searchText = normalizeClientText(
+          [
+            program?.discipline,
+            program?.programName,
+            program?.summary,
+            ...(Array.isArray(program?.tags) ? program.tags : []),
+            ...(Array.isArray(program?.keywords) ? program.keywords : []),
+          ].join(" ")
+        );
+        const majorExact = Boolean(payload?.major && program?.discipline === payload.major);
+        const specializationMatched = Boolean(
+          payload?.specialization &&
+            searchText.includes(normalizeClientText(payload.specialization))
+        );
+        const snapshotStatus = String(program?.admissionsSnapshot?.extractionStatus || "");
+        const hasStructuredSnapshot = snapshotStatus === "ok";
+        const hasPartialSnapshot = snapshotStatus === "partial";
+        const hasAdmissionsSnapshot = Boolean(program?.admissionsSnapshot?.extractedAt);
+        const hasAdmissionsUrl = Boolean(program?.admissionsUrl);
+        const hasTuition = Number(program?.tuitionAmount) > 0;
+        const hasRanking = Number(program?.qsRank) > 0;
+        const hasFitInput = Boolean(payload?.gpaProfile || payload?.languageProfile);
+
+        const fitLabel =
+          majorExact && specializationMatched
+            ? "适配 高"
+            : majorExact || specializationMatched
+              ? "适配 较高"
+              : "适配 扩展";
+        const fitTone =
+          majorExact && specializationMatched
+            ? "match"
+            : majorExact || specializationMatched
+              ? "review"
+              : "soft";
+
+        const readinessLabel =
+          hasStructuredSnapshot && hasTuition && hasRanking
+            ? "资料 完整"
+            : hasStructuredSnapshot || hasPartialSnapshot || (hasTuition && hasAdmissionsUrl)
+              ? "资料 较全"
+              : "资料 待补";
+        const readinessTone =
+          hasStructuredSnapshot && hasTuition && hasRanking
+            ? "match"
+            : hasStructuredSnapshot || hasPartialSnapshot || (hasTuition && hasAdmissionsUrl)
+              ? "review"
+              : "soft";
+
+        const actionLabel =
+          hasFitInput && hasAdmissionsSnapshot
+            ? "建议 先咨询"
+            : hasStructuredSnapshot || hasPartialSnapshot
+              ? "建议 看要求"
+              : hasAdmissionsUrl
+                ? "建议 核官网"
+                : "建议 先收藏";
+        const actionTone =
+          hasFitInput && hasAdmissionsSnapshot
+            ? "match"
+            : hasStructuredSnapshot || hasPartialSnapshot || hasAdmissionsUrl
+              ? "review"
+              : "soft";
+
+        return [
+          { label: fitLabel, tone: fitTone },
+          { label: readinessLabel, tone: readinessTone },
+          { label: actionLabel, tone: actionTone },
+        ];
+      };
+
+      const signalPillsHtml = (program, payload = {}) => {
+        const signals = buildProgramSignalPills(program, payload);
+        if (!signals.length) {
+          return "";
+        }
+
+        return `
+          <div class="school-card-signals">
+            ${signals
+              .map(
+                (signal) =>
+                  `<span class="school-card-signal school-card-signal--${escapeHtml(signal.tone)}">${escapeHtml(signal.label)}</span>`
+              )
+              .join("")}
+          </div>
+        `;
       };
 
       const currentSchoolRefiners = () => ({
@@ -1068,6 +1603,10 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
             <p class="school-card-summary">${escapeHtml(program.summary)}</p>
 
+            ${signalPillsHtml(program, activeSearchPayload)}
+
+            ${reasonChipsHtml(program, activeSearchPayload)}
+
             <div class="school-card-tags">
               ${(program.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
             </div>
@@ -1090,7 +1629,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         Boolean(payload?.gpaProfile || payload?.languageProfile);
 
       const hasCandidateExpansionInput = (payload) =>
-        Boolean((payload?.major || payload?.specialization) && !payload?.universityId);
+        Boolean((payload?.country || payload?.freeText) && (payload?.degree || payload?.freeText) && !payload?.universityId);
 
       const fitBadgeLabel = (status) => {
         if (status === "match") return "匹配";
@@ -1828,6 +2367,13 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
       const runCandidateExpansion = async (payload, statusText) => {
         if (!hasCandidateExpansionInput(payload)) {
+          setStatusSummary({
+            verifiedCount: Array.isArray(baseVerifiedResults) ? baseVerifiedResults.length : 0,
+            candidateCount: Array.isArray(baseCandidateResults) ? baseCandidateResults.length : 0,
+            blockedCount: 0,
+            expansionEnabled: false,
+            expansionAttempted: false,
+          });
           return;
         }
 
@@ -1836,6 +2382,10 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         const controller = new AbortController();
         candidateExpansionController = controller;
         setStatus(`${statusText} 正在后台补充候选官网页...`);
+        const expansionPayload = {
+          ...payload,
+          searchSessionId: activeSearchSessionId || "",
+        };
 
         try {
           const response = await fetch("/api/study-abroad/expand-candidates", {
@@ -1844,7 +2394,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
               "Content-Type": "application/json",
             },
             signal: controller.signal,
-            body: JSON.stringify(payload),
+            body: JSON.stringify(expansionPayload),
           });
 
           const data = await response.json();
@@ -1859,6 +2409,11 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           const nextCandidateResults = Array.isArray(data.candidateResults)
             ? data.candidateResults
             : [];
+          const nextBlockedCount = Number(data.blockedResultCount) || 0;
+          const nextSearchSessionId = String(data.searchSessionId || "").trim();
+          if (nextSearchSessionId) {
+            activeSearchSessionId = nextSearchSessionId;
+          }
           baseCandidateResults = nextCandidateResults;
 
           if (!selectedUniversityId) {
@@ -1868,12 +2423,26 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           setStatus(
             data.message ? `${statusText} ${data.message}`.trim() : statusText
           );
+          setStatusSummary({
+            verifiedCount: Array.isArray(baseVerifiedResults) ? baseVerifiedResults.length : 0,
+            candidateCount: nextCandidateResults.length,
+            blockedCount: nextBlockedCount,
+            expansionEnabled: Boolean(data.expansionEnabled),
+            expansionAttempted: Boolean(data.expansionAttempted),
+          });
         } catch (error) {
           if (error?.name === "AbortError" || token !== candidateExpansionToken) {
             return;
           }
 
           setStatus(statusText);
+          setStatusSummary({
+            verifiedCount: Array.isArray(baseVerifiedResults) ? baseVerifiedResults.length : 0,
+            candidateCount: Array.isArray(baseCandidateResults) ? baseCandidateResults.length : 0,
+            blockedCount: 0,
+            expansionEnabled: true,
+            expansionAttempted: true,
+          });
         } finally {
           if (candidateExpansionController === controller) {
             candidateExpansionController = null;
@@ -1928,6 +2497,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       };
 
       const collectPayload = () => ({
+        freeText: freeTextInput instanceof HTMLInputElement ? freeTextInput.value.trim() : "",
         country: countrySelect instanceof HTMLSelectElement ? countrySelect.value : "",
         degree: degreeSelect instanceof HTMLSelectElement ? degreeSelect.value : "",
         major: majorSelect instanceof HTMLSelectElement ? majorSelect.value : "",
@@ -1951,6 +2521,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         admissionsPrefetchToken += 1;
         clearAdmissionsPrefetchSchedule();
         clearCandidateExpansion();
+        if (freeTextInput instanceof HTMLInputElement) freeTextInput.value = "";
         if (countrySelect instanceof HTMLSelectElement) countrySelect.value = "";
         if (degreeSelect instanceof HTMLSelectElement) degreeSelect.value = "";
         if (majorSelect instanceof HTMLSelectElement) majorSelect.value = "";
@@ -1964,6 +2535,10 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         }
         updateSpecializationOptions("");
         resetSchoolRefiners();
+        activeSearchSessionId = "";
+        activeSearchPayload = {
+          ...lastBasePayload,
+        };
         selectedUniversityId = "";
         activeDetailProgramId = "";
         activeVerifiedResults = initialResults;
@@ -1977,6 +2552,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         baseStatusText =
           `当前底库共有 ${totalProgramCount} 个项目，当前展示 ${initialResults.length} 个优先样例。先选学位类型、专业方向、细分方向和学生背景，再点击“开始搜索”获取已核验结果。`;
         lastBasePayload = {
+          freeText: "",
           country: "",
           major: "",
           specialization: "",
@@ -1990,11 +2566,20 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         };
         lastEmptyText =
           "可以先放宽国家条件，或者改选更宽的专业方向，比如从“商业分析 / 数据”切到“商科 / 管理”。";
+        setStatusSummary({
+          verifiedCount: initialResults.length,
+          candidateCount: 0,
+          blockedCount: 0,
+          expansionEnabled: false,
+          expansionAttempted: false,
+        });
 
         setStatus(baseStatusText);
         renderVerifiedResults(initialResults);
         renderUniversityMatches(seedUniversityMatches, seedUniversityMatches.length, "");
         renderCandidateResults([]);
+        hideExpansionSuggestion();
+        hideIntentExplanation();
         fitPreviewToken += 1;
         clearFitPreviews();
         hideDetailPanel();
@@ -2012,6 +2597,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         const fromSchoolFilter = Boolean(options?.fromSchoolFilter);
 
         if (
+          !payload.freeText &&
           !payload.country &&
           !payload.major &&
           !payload.specialization &&
@@ -2058,6 +2644,12 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           const nextStatus =
             data.message ||
             `已找到 ${Array.isArray(data.verifiedResults) ? data.verifiedResults.length : 0} 条结果。`;
+          const resolvedQuery =
+            data?.resolvedQuery && typeof data.resolvedQuery === "object"
+              ? data.resolvedQuery
+              : payload;
+          const nextSearchSessionId = String(data.searchSessionId || "").trim();
+          const nextBlockedCount = Number(data.blockedResultCount) || 0;
 
           activeDetailProgramId = "";
           lastEmptyText =
@@ -2066,6 +2658,11 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
               : "当前没有找到完全匹配的已核验项目。建议先放宽国家或专业方向。";
 
           if (fromSchoolFilter) {
+            activeSearchPayload = {
+              ...resolvedQuery,
+            };
+            applyResolvedQueryToControls(resolvedQuery);
+            renderIntentExplanation(resolvedQuery);
             selectedUniversityId = String(payload.universityId || "");
             activeVerifiedResults = nextVerifiedResults;
             const selectedSchool =
@@ -2079,6 +2676,14 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             hydrateFitPreviews(activeVerifiedResults, payload);
             renderUniversityMatches(baseUniversityMatches, baseUniversityCount, selectedUniversityId);
             renderCandidateResults([]);
+            hideExpansionSuggestion();
+            setStatusSummary({
+              verifiedCount: nextVerifiedResults.length,
+              candidateCount: 0,
+              blockedCount: nextBlockedCount,
+              expansionEnabled: Boolean(data.expansionEnabled),
+              expansionAttempted: false,
+            });
             hideDetailPanel();
             renderSchoolSummary(selectedSchool);
             scheduleAdmissionsPrefetch(activeVerifiedResults, payload, {
@@ -2087,8 +2692,10 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             return;
           }
 
+          activeSearchSessionId = nextSearchSessionId;
           selectedUniversityId = "";
           resetSchoolRefiners();
+          applyResolvedQueryToControls(resolvedQuery);
           activeVerifiedResults = nextVerifiedResults;
           activeUniversityMatches = nextUniversityMatches;
           activeUniversityCount = nextUniversityCount;
@@ -2099,16 +2706,20 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           baseCandidateResults = nextCandidateResults;
           baseStatusText = nextStatus;
           lastBasePayload = {
-            country: payload.country || "",
-            major: payload.major || "",
-            specialization: payload.specialization || "",
-            degree: payload.degree || "",
-            budgetTier: payload.budgetTier || "",
-            intake: payload.intake || "",
-            gpaProfile: payload.gpaProfile || "",
-            languageProfile: payload.languageProfile || "",
-            fitMode: payload.fitMode || "prefer",
-            snapshotQuality: payload.snapshotQuality || "",
+            freeText: resolvedQuery.freeText || "",
+            country: resolvedQuery.country || "",
+            major: resolvedQuery.major || "",
+            specialization: resolvedQuery.specialization || "",
+            degree: resolvedQuery.degree || "",
+            budgetTier: resolvedQuery.budgetTier || "",
+            intake: resolvedQuery.intake || "",
+            gpaProfile: resolvedQuery.gpaProfile || "",
+            languageProfile: resolvedQuery.languageProfile || "",
+            fitMode: resolvedQuery.fitMode || "prefer",
+            snapshotQuality: resolvedQuery.snapshotQuality || "",
+          };
+          activeSearchPayload = {
+            ...lastBasePayload,
           };
 
           setStatus(baseStatusText);
@@ -2116,15 +2727,38 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           hydrateFitPreviews(baseVerifiedResults, lastBasePayload);
           renderUniversityMatches(baseUniversityMatches, baseUniversityCount, "");
           renderCandidateResults(baseCandidateResults);
+          renderExpansionSuggestion(lastBasePayload, {
+            verifiedCount: nextVerifiedResults.length,
+            universityCount: nextUniversityCount,
+            candidateCount: nextCandidateResults.length,
+          });
+          renderIntentExplanation(lastBasePayload);
+          setStatusSummary({
+            verifiedCount: nextVerifiedResults.length,
+            candidateCount: nextCandidateResults.length,
+            blockedCount: nextBlockedCount,
+            expansionEnabled: Boolean(data.expansionEnabled),
+            expansionAttempted: Boolean(data.expansionAttempted),
+          });
           hideDetailPanel();
           hideSchoolSummary();
           scheduleAdmissionsPrefetch(baseVerifiedResults, lastBasePayload);
           void runCandidateExpansion(lastBasePayload, baseStatusText);
         } catch (error) {
+          activeSearchSessionId = "";
           setStatus(error instanceof Error ? error.message : "搜索失败，请稍后重试。");
           renderVerifiedResults([], "接口暂时不可用，请稍后重试。");
           renderUniversityMatches([], 0, "");
           renderCandidateResults([]);
+          hideExpansionSuggestion();
+          hideIntentExplanation();
+          setStatusSummary({
+            verifiedCount: 0,
+            candidateCount: 0,
+            blockedCount: 0,
+            expansionEnabled: false,
+            expansionAttempted: false,
+          });
           fitPreviewToken += 1;
           admissionsPrefetchToken += 1;
           clearFitPreviews();
@@ -2133,6 +2767,89 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         } finally {
           setBusy(false);
         }
+      };
+
+      const rerunWithIntentPayload = (nextPayload = {}) => {
+        selectedUniversityId = "";
+        hideDetailPanel();
+        hideSchoolSummary();
+        return runSearch({
+          ...collectPayload(),
+          ...nextPayload,
+          universityId: "",
+        });
+      };
+
+      const handleGuidanceAction = (target) => {
+        const actionType = target.getAttribute("data-intent-action");
+        if (!actionType) {
+          return false;
+        }
+
+        if (actionType === "clear-specialization") {
+          const currentPayload = collectPayload();
+          void rerunWithIntentPayload({
+            ...currentPayload,
+            specialization: buildIntentRemovalValue("specialization", currentPayload),
+          });
+          return true;
+        }
+
+        if (actionType === "clear-free-text") {
+          void rerunWithIntentPayload({
+            ...collectPayload(),
+            freeText: "",
+          });
+          return true;
+        }
+
+        if (actionType === "expand-major") {
+          const currentPayload = collectPayload();
+          const targetMajor = String(target.getAttribute("data-intent-value") || "").trim();
+          if (!targetMajor) {
+            return true;
+          }
+
+          void rerunWithIntentPayload({
+            ...currentPayload,
+            major: targetMajor,
+            specialization: buildIntentRemovalValue("specialization", currentPayload),
+          });
+          return true;
+        }
+
+        if (actionType === "relax-search") {
+          const currentPayload = collectPayload();
+          void rerunWithIntentPayload({
+            ...currentPayload,
+            specialization: buildIntentRemovalValue("specialization", currentPayload),
+            budgetTier: "",
+            intake: "",
+            gpaProfile: "",
+            languageProfile: "",
+            fitMode: "prefer",
+            snapshotQuality: "",
+          });
+          return true;
+        }
+
+        if (actionType === "country-degree-only") {
+          const currentPayload = collectPayload();
+          void rerunWithIntentPayload({
+            ...currentPayload,
+            major: buildIntentRemovalValue("major", currentPayload),
+            specialization: buildIntentRemovalValue("specialization", currentPayload),
+            budgetTier: "",
+            intake: "",
+            gpaProfile: "",
+            languageProfile: "",
+            fitMode: "prefer",
+            snapshotQuality: "",
+          });
+          return true;
+        }
+
+        return false;
       };
 
       const applySchoolRefiners = () => {
@@ -2147,6 +2864,11 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         renderVerifiedResults(baseVerifiedResults, lastEmptyText);
         hydrateFitPreviews(baseVerifiedResults, lastBasePayload);
         renderCandidateResults(baseCandidateResults);
+        renderExpansionSuggestion(lastBasePayload, {
+          verifiedCount: baseVerifiedResults.length,
+          universityCount: baseUniversityCount,
+          candidateCount: baseCandidateResults.length,
+        });
         hideDetailPanel();
         hideSchoolSummary();
       };
@@ -2163,6 +2885,45 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
       if (resetButton instanceof HTMLButtonElement) {
         resetButton.addEventListener("click", resetToFeatured);
+      }
+
+      if (intentPanel instanceof HTMLElement) {
+        intentPanel.addEventListener("click", (event) => {
+          const target = event.target instanceof Element ? event.target.closest("button") : null;
+
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+
+          const removeKey = target.getAttribute("data-intent-remove");
+          if (removeKey) {
+            const currentPayload = collectPayload();
+            const nextPayload = {
+              ...currentPayload,
+              [removeKey]: buildIntentRemovalValue(removeKey, currentPayload),
+            };
+
+            if (removeKey === "major") {
+              nextPayload.specialization = buildIntentRemovalValue("specialization", currentPayload);
+            }
+
+            void rerunWithIntentPayload(nextPayload);
+            return;
+          }
+
+          handleGuidanceAction(target);
+        });
+      }
+
+      if (expansionPanel instanceof HTMLElement) {
+        expansionPanel.addEventListener("click", (event) => {
+          const target = event.target instanceof Element ? event.target.closest("button") : null;
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+
+          handleGuidanceAction(target);
+        });
       }
 
       if (schoolKeywordInput instanceof HTMLInputElement) {
@@ -2221,6 +2982,11 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             renderVerifiedResults(baseVerifiedResults, lastEmptyText);
             hydrateFitPreviews(baseVerifiedResults, lastBasePayload);
             renderCandidateResults(baseCandidateResults);
+            renderExpansionSuggestion(lastBasePayload, {
+              verifiedCount: baseVerifiedResults.length,
+              universityCount: baseUniversityCount,
+              candidateCount: baseCandidateResults.length,
+            });
             hideDetailPanel();
             hideSchoolSummary();
             return;
