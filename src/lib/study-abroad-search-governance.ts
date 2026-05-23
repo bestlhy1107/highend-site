@@ -61,12 +61,19 @@ export type StudyAbroadSearchAvoidRule = {
   link: string;
   domain: string;
   sourceSessionId: string;
+  hitCount: number;
+  lastHitAt: string;
+  lastHitLabel: string;
+  lastHitSessionId: string;
 };
 
 export type StudyAbroadSearchBlocklist = {
   blockedProgramIds: Set<string>;
   blockedLinks: Set<string>;
   blockedDomains: Set<string>;
+  blockedProgramRuleIds: Map<string, string[]>;
+  blockedLinkRuleIds: Map<string, string[]>;
+  blockedDomainRuleIds: Map<string, string[]>;
 };
 
 const AUDIT_FILE = "study-abroad-search-audit.json";
@@ -209,6 +216,10 @@ function normalizeAvoidRule(
     link,
     domain,
     sourceSessionId: normalizeText(input.sourceSessionId),
+    hitCount: Math.max(0, Number(input.hitCount) || 0),
+    lastHitAt: normalizeText(input.lastHitAt),
+    lastHitLabel: normalizeText(input.lastHitLabel),
+    lastHitSessionId: normalizeText(input.lastHitSessionId),
   };
 }
 
@@ -256,6 +267,34 @@ export async function readStudyAbroadSearchAvoidRules() {
 export async function readStudyAbroadSearchBlocklist(): Promise<StudyAbroadSearchBlocklist> {
   const rules = await readStudyAbroadSearchAvoidRules();
   const activeRules = rules.filter((rule) => rule.status === "active");
+  const blockedProgramRuleIds = new Map<string, string[]>();
+  const blockedLinkRuleIds = new Map<string, string[]>();
+  const blockedDomainRuleIds = new Map<string, string[]>();
+
+  const pushRuleId = (map: Map<string, string[]>, key: string, ruleId: string) => {
+    if (!key || !ruleId) return;
+    const current = map.get(key) || [];
+    if (!current.includes(ruleId)) {
+      current.push(ruleId);
+      map.set(key, current);
+    }
+  };
+
+  activeRules.forEach((rule) => {
+    if (rule.targetType === "program" && rule.programId) {
+      pushRuleId(blockedProgramRuleIds, rule.programId, rule.id);
+      return;
+    }
+
+    if (rule.targetType === "domain" && rule.domain) {
+      pushRuleId(blockedDomainRuleIds, rule.domain, rule.id);
+      return;
+    }
+
+    if (rule.link) {
+      pushRuleId(blockedLinkRuleIds, rule.link, rule.id);
+    }
+  });
 
   return {
     blockedProgramIds: new Set(
@@ -273,6 +312,115 @@ export async function readStudyAbroadSearchBlocklist(): Promise<StudyAbroadSearc
         .filter((rule) => rule.targetType === "domain" && rule.domain)
         .map((rule) => rule.domain)
     ),
+    blockedProgramRuleIds,
+    blockedLinkRuleIds,
+    blockedDomainRuleIds,
+  };
+}
+
+function uniqueRuleIds(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+export function collectBlockedStudyAbroadFinderProgramRuleIds(
+  program: Pick<StudyAbroadFinderProgram, "id" | "overviewUrl" | "admissionsUrl" | "websiteDomain">,
+  blocklist: StudyAbroadSearchBlocklist
+) {
+  const overviewLink = normalizeLink(program.overviewUrl);
+  const admissionsLink = normalizeLink(program.admissionsUrl);
+  const domain = normalizeText(program.websiteDomain).toLowerCase() || extractDomain(overviewLink);
+
+  return uniqueRuleIds([
+    ...(blocklist.blockedProgramRuleIds.get(program.id) || []),
+    ...(overviewLink ? blocklist.blockedLinkRuleIds.get(overviewLink) || [] : []),
+    ...(admissionsLink ? blocklist.blockedLinkRuleIds.get(admissionsLink) || [] : []),
+    ...(domain ? blocklist.blockedDomainRuleIds.get(domain) || [] : []),
+  ]);
+}
+
+export function collectBlockedStudyAbroadCandidateRuleIds(
+  candidate: Pick<{ link?: string; displayLink?: string }, "link" | "displayLink">,
+  blocklist: StudyAbroadSearchBlocklist
+) {
+  const link = normalizeLink(candidate.link);
+  const domain = extractDomain(candidate.link) || extractDomain(candidate.displayLink);
+
+  return uniqueRuleIds([
+    ...(link ? blocklist.blockedLinkRuleIds.get(link) || [] : []),
+    ...(domain ? blocklist.blockedDomainRuleIds.get(domain) || [] : []),
+  ]);
+}
+
+export async function recordStudyAbroadSearchAvoidRuleHits(input: {
+  hits: Array<{
+    ruleId?: string;
+    label?: string;
+    sessionId?: string;
+  }>;
+}) {
+  const normalizedHits = input.hits
+    .map((item) => ({
+      ruleId: normalizeText(item.ruleId),
+      label: normalizeText(item.label),
+      sessionId: normalizeText(item.sessionId),
+    }))
+    .filter((item) => item.ruleId);
+
+  if (!normalizedHits.length) {
+    return {
+      ok: false,
+      updatedCount: 0,
+    };
+  }
+
+  const groupedHits = normalizedHits.reduce((map, item) => {
+    const current = map.get(item.ruleId) || {
+      count: 0,
+      label: "",
+      sessionId: "",
+    };
+    current.count += 1;
+    if (item.label) current.label = item.label;
+    if (item.sessionId) current.sessionId = item.sessionId;
+    map.set(item.ruleId, current);
+    return map;
+  }, new Map<string, { count: number; label: string; sessionId: string }>());
+
+  const rules = await readStudyAbroadSearchAvoidRules();
+  let updatedCount = 0;
+  const now = new Date().toISOString();
+  const nextRules = rules.map((rule) => {
+    const hit = groupedHits.get(rule.id);
+    if (!hit) return rule;
+
+    updatedCount += 1;
+    return normalizeAvoidRule({
+      ...rule,
+      updatedAt: now,
+      hitCount: (rule.hitCount || 0) + hit.count,
+      lastHitAt: now,
+      lastHitLabel: hit.label || rule.lastHitLabel,
+      lastHitSessionId: hit.sessionId || rule.lastHitSessionId,
+    });
+  });
+
+  if (!updatedCount) {
+    return {
+      ok: false,
+      updatedCount: 0,
+    };
+  }
+
+  await writeJsonArrayFile(nextRules, {
+    fileName: AVOID_RULE_FILE,
+    normalize: normalizeAvoidRule,
+    isValid: isValidAvoidRule,
+    compare: compareByUpdatedAt,
+  });
+
+  return {
+    ok: true,
+    updatedCount,
   };
 }
 
@@ -382,6 +530,114 @@ export async function createStudyAbroadSearchAvoidRule(input: {
   };
 }
 
+export async function createStudyAbroadSearchAvoidRulesForDomains(input: {
+  domains: Array<{
+    domain?: string;
+    label?: string;
+    link?: string;
+  }>;
+  source?: "verified" | "candidate" | "manual";
+  reason?: string;
+  sourceSessionId?: string;
+}) {
+  const normalizedCandidates = Array.from(
+    new Map(
+      input.domains
+        .map((item) => {
+          const nextRule = normalizeAvoidRule({
+            targetType: "domain",
+            source: input.source,
+            reason: input.reason,
+            label: item.label,
+            link: item.link,
+            domain: item.domain,
+            sourceSessionId: input.sourceSessionId,
+          });
+          return nextRule.domain ? [nextRule.domain, nextRule] : null;
+        })
+        .filter(Boolean) as Array<[string, StudyAbroadSearchAvoidRule]>
+    ).values()
+  );
+
+  if (!normalizedCandidates.length) {
+    return {
+      ok: false,
+      processedCount: 0,
+      createdCount: 0,
+      reactivatedCount: 0,
+      alreadyActiveCount: 0,
+      message: "没有可批量加入规避名单的来源域名。",
+    };
+  }
+
+  const rules = await readStudyAbroadSearchAvoidRules();
+  let createdCount = 0;
+  let reactivatedCount = 0;
+  let alreadyActiveCount = 0;
+  let changed = false;
+  const nextRules = [...rules];
+
+  normalizedCandidates.forEach((candidateRule) => {
+    const existing = nextRules.find(
+      (rule) => rule.targetType === "domain" && rule.domain === candidateRule.domain
+    );
+
+    if (!existing) {
+      nextRules.unshift(candidateRule);
+      createdCount += 1;
+      changed = true;
+      return;
+    }
+
+    if (existing.status === "active") {
+      alreadyActiveCount += 1;
+      return;
+    }
+
+    const revivedRule = normalizeAvoidRule({
+      ...existing,
+      ...candidateRule,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      status: "active",
+      updatedAt: new Date().toISOString(),
+    });
+    const currentIndex = nextRules.findIndex((rule) => rule.id === existing.id);
+    if (currentIndex >= 0) {
+      nextRules[currentIndex] = revivedRule;
+    }
+    reactivatedCount += 1;
+    changed = true;
+  });
+
+  if (changed) {
+    await writeJsonArrayFile(nextRules, {
+      fileName: AVOID_RULE_FILE,
+      normalize: normalizeAvoidRule,
+      isValid: isValidAvoidRule,
+      compare: compareByUpdatedAt,
+    });
+  }
+
+  const processedCount = createdCount + reactivatedCount + alreadyActiveCount;
+
+  return {
+    ok: processedCount > 0,
+    processedCount,
+    createdCount,
+    reactivatedCount,
+    alreadyActiveCount,
+    message: [
+      `已批量处理 ${processedCount} 个来源域名。`,
+      createdCount ? `新加入规避名单 ${createdCount} 个` : "",
+      reactivatedCount ? `重新启用 ${reactivatedCount} 个` : "",
+      alreadyActiveCount ? `已在规避名单 ${alreadyActiveCount} 个` : "",
+    ]
+      .filter(Boolean)
+      .join("，"),
+  };
+}
+
 export async function updateStudyAbroadSearchAvoidRuleStatus(input: {
   id: string;
   status: "active" | "inactive";
@@ -445,25 +701,9 @@ export function isBlockedStudyAbroadFinderProgram(
   program: Pick<StudyAbroadFinderProgram, "id" | "overviewUrl" | "admissionsUrl" | "websiteDomain">,
   blocklist: StudyAbroadSearchBlocklist
 ) {
-  if (blocklist.blockedProgramIds.has(program.id)) {
+  if (collectBlockedStudyAbroadFinderProgramRuleIds(program, blocklist).length) {
     return true;
   }
-
-  const overviewLink = normalizeLink(program.overviewUrl);
-  const admissionsLink = normalizeLink(program.admissionsUrl);
-  const domain = normalizeText(program.websiteDomain).toLowerCase() || extractDomain(overviewLink);
-
-  if (
-    (overviewLink && blocklist.blockedLinks.has(overviewLink)) ||
-    (admissionsLink && blocklist.blockedLinks.has(admissionsLink))
-  ) {
-    return true;
-  }
-
-  if (domain && blocklist.blockedDomains.has(domain)) {
-    return true;
-  }
-
   return false;
 }
 
@@ -471,14 +711,7 @@ export function isBlockedStudyAbroadCandidate(
   candidate: Pick<{ link?: string; displayLink?: string }, "link" | "displayLink">,
   blocklist: StudyAbroadSearchBlocklist
 ) {
-  const link = normalizeLink(candidate.link);
-  const domain = extractDomain(candidate.link) || extractDomain(candidate.displayLink);
-
-  if (link && blocklist.blockedLinks.has(link)) {
-    return true;
-  }
-
-  if (domain && blocklist.blockedDomains.has(domain)) {
+  if (collectBlockedStudyAbroadCandidateRuleIds(candidate, blocklist).length) {
     return true;
   }
 

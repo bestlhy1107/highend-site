@@ -30,10 +30,21 @@ import {
   syncStudyAbroadAdmissionsSnapshots,
   warmStudyAbroadAdmissionsCoverage,
 } from "../lib/study-abroad-admissions-sync";
-import { updateStudyAbroadReviewEntryStatus } from "../lib/study-abroad-review-queue";
-import { importStudyAbroadReviewCandidate } from "../lib/study-abroad-review-import";
 import {
+  appendStudyAbroadReviewEntryHistory,
+  collectStudyAbroadReviewAvoidDomainSuggestions,
+  readStudyAbroadReviewQueue,
+  updateStudyAbroadReviewEntryNote,
+  updateStudyAbroadReviewEntryStatus,
+} from "../lib/study-abroad-review-queue";
+import {
+  importStudyAbroadReviewCandidate,
+  importStudyAbroadReviewCandidatesByCredibility,
+} from "../lib/study-abroad-review-import";
+import {
+  createStudyAbroadSearchAvoidRulesForDomains,
   createStudyAbroadSearchAvoidRule,
+  readStudyAbroadSearchBlocklist,
   updateStudyAbroadSearchAvoidRuleStatus,
 } from "../lib/study-abroad-search-governance";
 import { updateStudyAbroadSearchExecutionPlanStatus } from "../lib/study-abroad-search-execution-plan";
@@ -657,12 +668,29 @@ contactLead: defineAction({
     input: z.object({
       id: z.string().min(1, "缺少候选任务 ID"),
       status: z.enum(["reviewed", "discarded"]),
+      note: z.string().optional(),
     }),
     handler: async (input, context) => {
       await requireAdmin(context);
       return updateStudyAbroadReviewEntryStatus({
         id: input.id,
         status: input.status,
+        note: input.note,
+      });
+    },
+  }),
+
+  updateStudyAbroadReviewEntryNote: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().min(1, "缺少候选任务 ID"),
+      note: z.string().optional(),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      return updateStudyAbroadReviewEntryNote({
+        id: input.id,
+        note: input.note || "",
       });
     },
   }),
@@ -675,10 +703,111 @@ contactLead: defineAction({
     }),
     handler: async (input, context) => {
       await requireAdmin(context);
-      return importStudyAbroadReviewCandidate({
+      const result = await importStudyAbroadReviewCandidate({
         entryId: input.entryId,
         candidateLink: input.candidateLink,
       });
+
+      if (result.ok) {
+        await appendStudyAbroadReviewEntryHistory({
+          id: input.entryId,
+          action: result.created ? "导入正式项目" : "尝试导入正式项目",
+          note: result.message,
+        });
+      }
+
+      return result;
+    },
+  }),
+
+  importStudyAbroadReviewCandidatesByCredibility: defineAction({
+    accept: "form",
+    input: z.object({
+      entryId: z.string().min(1, "缺少候选任务 ID"),
+      credibilityMode: z.enum(["high", "high-medium", "all"]),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      const result = await importStudyAbroadReviewCandidatesByCredibility({
+        entryId: input.entryId,
+        credibilityMode: input.credibilityMode,
+      });
+
+      if (result.ok) {
+        await appendStudyAbroadReviewEntryHistory({
+          id: input.entryId,
+          action:
+            input.credibilityMode === "high-medium"
+              ? "批量导入高+中可信候选"
+              : input.credibilityMode === "all"
+                ? "批量导入全部候选"
+                : "批量导入高可信候选",
+          note: result.message,
+        });
+      }
+
+      return result;
+    },
+  }),
+
+  createStudyAbroadReviewBatchAvoidRules: defineAction({
+    accept: "form",
+    input: z.object({
+      entryId: z.string().min(1, "缺少候选任务 ID"),
+      credibilityMode: z.enum(["watch", "watch-medium"]),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      const [queue, blocklist] = await Promise.all([
+        readStudyAbroadReviewQueue(),
+        readStudyAbroadSearchBlocklist(),
+      ]);
+      const entry = queue.find((item) => item.id === input.entryId);
+
+      if (!entry) {
+        return {
+          ok: false,
+          message: "这条候选任务不存在，暂时无法批量规避来源。",
+        };
+      }
+
+      const suggestions = collectStudyAbroadReviewAvoidDomainSuggestions(entry, {
+        credibilityMode: input.credibilityMode,
+        blockedDomains: blocklist.blockedDomains,
+        minOccurrences: 2,
+      });
+
+      if (!suggestions.length) {
+        return {
+          ok: false,
+          message:
+            input.credibilityMode === "watch-medium"
+              ? "当前没有符合条件的中低可信重复来源可批量规避。"
+              : "当前没有符合条件的待核对重复来源可批量规避。",
+        };
+      }
+
+      const result = await createStudyAbroadSearchAvoidRulesForDomains({
+        domains: suggestions,
+        source: "candidate",
+        reason:
+          input.credibilityMode === "watch-medium"
+            ? "管理员批量规避中低可信且重复出现的候选来源"
+            : "管理员批量规避待核对且重复出现的候选来源",
+      });
+
+      if (result.ok) {
+        await appendStudyAbroadReviewEntryHistory({
+          id: input.entryId,
+          action:
+            input.credibilityMode === "watch-medium"
+              ? "批量规避中低可信重复来源"
+              : "批量规避待核对重复来源",
+          note: result.message,
+        });
+      }
+
+      return result;
     },
   }),
 
@@ -693,6 +822,7 @@ contactLead: defineAction({
       link: z.string().optional(),
       domain: z.string().optional(),
       sourceSessionId: z.string().optional(),
+      reviewEntryId: z.string().optional(),
     }),
     handler: async (input, context) => {
       await requireAdmin(context);
@@ -718,7 +848,7 @@ contactLead: defineAction({
         };
       }
 
-      return createStudyAbroadSearchAvoidRule({
+      const result = await createStudyAbroadSearchAvoidRule({
         targetType: input.targetType,
         source: input.source,
         label: input.label,
@@ -728,6 +858,21 @@ contactLead: defineAction({
         domain: input.domain,
         sourceSessionId: input.sourceSessionId,
       });
+
+      if (result.ok && input.reviewEntryId) {
+        await appendStudyAbroadReviewEntryHistory({
+          id: input.reviewEntryId,
+          action:
+            input.targetType === "domain"
+              ? "规避整个站点"
+              : input.targetType === "program"
+                ? "规避正式项目"
+                : "规避单条链接",
+          note: result.message,
+        });
+      }
+
+      return result;
     },
   }),
 

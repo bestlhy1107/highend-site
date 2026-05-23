@@ -1,0 +1,55 @@
+[
+  {
+    "id": "uk-finance-live",
+    "label": "英国硕士金融（结构化）",
+    "input": {
+      "country": "英国",
+      "degree": "硕士",
+      "major": "金融"
+    },
+    "minCandidateCount": 8,
+    "minPendingReviewCount": 1,
+    "minHighCredibilityCount": 1,
+    "notes": "验证英国金融方向在扩搜开启后能稳定拉到可审核候选。"
+  },
+  {
+    "id": "hk-media-live",
+    "label": "香港传媒硕士（结构化）",
+    "input": {
+      "country": "中国香港",
+      "degree": "硕士",
+      "major": "市场营销",
+      "specialization": "传媒"
+    },
+    "minCandidateCount": 6,
+    "minPendingReviewCount": 1,
+    "minHighCredibilityCount": 1,
+    "notes": "验证香港传媒这类正式库偏薄的查询是否能靠扩搜稳定补足候选。"
+  },
+  {
+    "id": "sg-ba-live",
+    "label": "新加坡商业分析硕士（结构化）",
+    "input": {
+      "country": "新加坡",
+      "degree": "硕士",
+      "major": "商业分析 / 数据"
+    },
+    "minCandidateCount": 4,
+    "minPendingReviewCount": 1,
+    "minHighCredibilityCount": 1,
+    "notes": "验证新加坡商业分析候选是否具备最基本的放量能力。"
+  },
+  {
+    "id": "uk-business-live",
+    "label": "英国商科管理硕士（结构化）",
+    "input": {
+      "country": "英国",
+      "degree": "硕士",
+      "major": "商科 / 管理"
+    },
+    "minCandidateCount": 6,
+    "minPendingReviewCount": 1,
+    "minHighCredibilityCount": 1,
+    "notes": "验证英国商科大方向的候选质量与规模。"
+  }
+]

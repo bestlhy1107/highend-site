@@ -14,9 +14,12 @@ export type StudyAbroadSearchExecutionPlanRecord = {
   updatedAt: string;
   label: string;
   status: StudyAbroadSearchExecutionPlanStatus;
+  startedAt: string;
   lastActionAt: string;
   lastActionSummary: string;
   completedAt: string;
+  archivedAt: string;
+  archivedReason: string;
   query: {
     country: string;
     degree: string;
@@ -62,9 +65,12 @@ function normalizeExecutionPlanRecord(
       input.status === "in_progress" || input.status === "completed"
         ? input.status
         : "pending",
+    startedAt: normalizeText(input.startedAt),
     lastActionAt: normalizeText(input.lastActionAt),
     lastActionSummary: normalizeText(input.lastActionSummary),
     completedAt: normalizeText(input.completedAt),
+    archivedAt: normalizeText(input.archivedAt),
+    archivedReason: normalizeText(input.archivedReason),
     query: {
       country: normalizeText(input.query?.country),
       degree: normalizeText(input.query?.degree),
@@ -93,6 +99,45 @@ export async function readStudyAbroadSearchExecutionPlanRecords() {
     isValid: isValidExecutionPlanRecord,
     compare: compareExecutionPlanRecord,
   });
+}
+
+export async function autoArchiveCompletedStudyAbroadSearchExecutionPlans(input?: {
+  olderThanDays?: number;
+}) {
+  const olderThanDays = Math.max(1, Number(input?.olderThanDays) || 7);
+  const now = Date.now();
+  const cutoffMs = olderThanDays * 24 * 60 * 60 * 1000;
+  const records = await readStudyAbroadSearchExecutionPlanRecords();
+  let archivedCount = 0;
+
+  const nextRecords = records.map((record) => {
+    if (record.archivedAt || record.status !== "completed" || !record.completedAt) {
+      return record;
+    }
+
+    const completedAtMs = new Date(record.completedAt).getTime();
+    if (!Number.isFinite(completedAtMs) || now - completedAtMs < cutoffMs) {
+      return record;
+    }
+
+    archivedCount += 1;
+    return normalizeExecutionPlanRecord({
+      ...record,
+      archivedAt: new Date().toISOString(),
+      archivedReason: `已完成超过 ${olderThanDays} 天，自动归档`,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  if (archivedCount > 0) {
+    await writeStudyAbroadSearchExecutionPlanRecords(nextRecords);
+  }
+
+  return {
+    ok: true,
+    archivedCount,
+    records: nextRecords,
+  };
 }
 
 async function writeStudyAbroadSearchExecutionPlanRecords(
@@ -129,21 +174,31 @@ export async function updateStudyAbroadSearchExecutionPlanStatus(input: {
 
   if (index >= 0) {
     const current = records[index];
+    const nextStatus = input.status;
+    const nextStartedAt =
+      nextStatus === "in_progress"
+        ? current.startedAt || actionAt
+        : nextStatus === "pending"
+          ? ""
+          : current.startedAt;
     records[index] = normalizeExecutionPlanRecord({
       ...current,
       label: normalizeText(input.label) || current.label,
-      status: input.status,
+      status: nextStatus,
       updatedAt: now,
+      startedAt: nextStartedAt,
       lastActionAt: actionSummary ? actionAt : current.lastActionAt,
       lastActionSummary: actionSummary || current.lastActionSummary,
       completedAt:
-        input.status === "completed"
+        nextStatus === "completed"
           ? actionAt
-          : input.status === "pending"
+          : nextStatus === "pending"
             ? ""
             : current.completedAt && current.status === "completed"
               ? current.completedAt
               : "",
+      archivedAt: nextStatus === "pending" ? "" : current.archivedAt,
+      archivedReason: nextStatus === "pending" ? "" : current.archivedReason,
       query: {
         country: normalizeText(input.country) || current.query.country,
         degree: normalizeText(input.degree) || current.query.degree,
@@ -160,9 +215,12 @@ export async function updateStudyAbroadSearchExecutionPlanStatus(input: {
         updatedAt: now,
         label: normalizeText(input.label) || "未命名执行计划",
         status: input.status,
+        startedAt: input.status === "in_progress" ? actionAt : "",
         lastActionAt: actionSummary ? actionAt : "",
         lastActionSummary: actionSummary,
         completedAt: input.status === "completed" ? actionAt : "",
+        archivedAt: "",
+        archivedReason: "",
         query: {
           country: normalizeText(input.country),
           degree: normalizeText(input.degree),

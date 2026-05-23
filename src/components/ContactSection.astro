@@ -28,6 +28,7 @@ const normalizedExamOptions = Array.from(
       .filter(Boolean)
   )
 );
+const contactDraftStorageKey = "study-abroad-contact-draft-v1";
 ---
 
 <section id="contact" class="container reveal">
@@ -75,8 +76,18 @@ const normalizedExamOptions = Array.from(
         </div>
       )}
 
-      <form method="POST" action={actions.contactLead} class="contact-shell">
-        <input type="hidden" name="source" value="homepage" />
+      <div class="contact-notice contact-notice--info" data-role="contact-prefill-note" hidden>
+        <div>
+          <strong>已从选校页带入咨询摘要</strong>
+          <p data-role="contact-prefill-note-text">你可以直接补充联系方式和期望时间后提交。</p>
+        </div>
+        <button class="contact-notice-action" type="button" data-role="contact-prefill-clear">
+          清除带入
+        </button>
+      </div>
+
+      <form method="POST" action={actions.contactLead} class="contact-shell" data-role="contact-form">
+        <input type="hidden" name="source" value="homepage" data-role="contact-source" />
 
         <div class="form-grid">
           <div class="form-item">
@@ -113,7 +124,7 @@ const normalizedExamOptions = Array.from(
         <div class="form-grid mt-4">
           <div class="form-item">
             <label class="form-label" for="appointment-type">预约类型</label>
-            <select class="input" id="appointment-type" name="appointmentType" required>
+            <select class="input" id="appointment-type" name="appointmentType" data-role="contact-appointment-type" required>
               <option value="trial">预约试听</option>
               <option value="consultation">预约咨询</option>
             </select>
@@ -124,7 +135,7 @@ const normalizedExamOptions = Array.from(
 
           <div class="form-item">
             <label class="form-label" for="exam-type">考试类型</label>
-            <select class="input" id="exam-type" name="examType" required>
+            <select class="input" id="exam-type" name="examType" data-role="contact-exam-type" required>
               <option value="">请选择</option>
               {normalizedExamOptions.map((option) => (
                 <option value={option}>{option}</option>
@@ -142,6 +153,7 @@ const normalizedExamOptions = Array.from(
             class="input"
             id="preferred-time"
             name="preferredTime"
+            data-role="contact-preferred-time"
             type="text"
             placeholder="如：本周六下午 / 工作日晚上 7 点后"
             required
@@ -157,6 +169,7 @@ const normalizedExamOptions = Array.from(
             class="input"
             id="contact-need"
             name="need"
+            data-role="contact-need-input"
             placeholder="如：托福口语提分，目标 26+；想申请美国 CS 硕士，先看项目池"
             required
           ></textarea>
@@ -172,3 +185,122 @@ const normalizedExamOptions = Array.from(
     </div>
   </div>
 </section>
+
+<script is:inline define:vars={{ contactDraftStorageKey }}>
+  const contactRoot = document.querySelector("#contact");
+
+  if (contactRoot) {
+    const form = contactRoot.querySelector('[data-role="contact-form"]');
+    const sourceInput = contactRoot.querySelector('[data-role="contact-source"]');
+    const appointmentTypeInput = contactRoot.querySelector('[data-role="contact-appointment-type"]');
+    const examTypeInput = contactRoot.querySelector('[data-role="contact-exam-type"]');
+    const preferredTimeInput = contactRoot.querySelector('[data-role="contact-preferred-time"]');
+    const needInput = contactRoot.querySelector('[data-role="contact-need-input"]');
+    const prefillNote = contactRoot.querySelector('[data-role="contact-prefill-note"]');
+    const prefillNoteText = contactRoot.querySelector('[data-role="contact-prefill-note-text"]');
+    const clearPrefillButton = contactRoot.querySelector('[data-role="contact-prefill-clear"]');
+
+    const readDraft = () => {
+      try {
+        const raw = window.localStorage.getItem(contactDraftStorageKey);
+        if (!raw) {
+          return null;
+        }
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const clearDraft = () => {
+      try {
+        window.localStorage.removeItem(contactDraftStorageKey);
+      } catch {}
+    };
+
+    const setSelectValueIfPresent = (node, value) => {
+      if (!(node instanceof HTMLSelectElement) || !value) {
+        return;
+      }
+      const hasOption = Array.from(node.options).some((option) => option.value === value);
+      if (hasOption) {
+        node.value = value;
+      }
+    };
+
+    const updatePrefillNotice = (draft) => {
+      if (!(prefillNote instanceof HTMLElement) || !(prefillNoteText instanceof HTMLElement)) {
+        return;
+      }
+      if (!draft) {
+        prefillNote.hidden = true;
+        prefillNoteText.textContent = "你可以直接补充联系方式和期望时间后提交。";
+        return;
+      }
+      const createdAt = draft.createdAt ? new Date(draft.createdAt) : null;
+      const timeText =
+        createdAt instanceof Date && Number.isFinite(createdAt.getTime())
+          ? createdAt.toLocaleString("zh-CN", { hour12: false })
+          : "刚刚";
+      prefillNote.hidden = false;
+      prefillNoteText.textContent = `已带入选校摘要（${timeText}），建议补充联系方式和期望时间后直接提交。`;
+    };
+
+    const applyDraft = (draft) => {
+      if (!draft) {
+        updatePrefillNotice(null);
+        return;
+      }
+
+      if (sourceInput instanceof HTMLInputElement) {
+        sourceInput.value = draft.source === "school-finder" ? "school-finder" : sourceInput.value;
+      }
+      setSelectValueIfPresent(appointmentTypeInput, draft.appointmentType || "consultation");
+      setSelectValueIfPresent(examTypeInput, draft.examType || "留学申请");
+
+      if (preferredTimeInput instanceof HTMLInputElement && !preferredTimeInput.value.trim()) {
+        preferredTimeInput.value = String(draft.preferredTime || "希望先做选校咨询").trim();
+      }
+
+      if (needInput instanceof HTMLTextAreaElement) {
+        const existing = needInput.value.trim();
+        const summary = String(draft.summary || "").trim();
+        if (summary && (!existing || !existing.includes(summary))) {
+          needInput.value = summary;
+        }
+      }
+
+      updatePrefillNotice(draft);
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    const shouldAttemptPrefill = params.get("prefill") === "school-finder";
+    const draft = readDraft();
+
+    if (shouldAttemptPrefill && draft) {
+      applyDraft(draft);
+    } else {
+      updatePrefillNotice(null);
+    }
+
+    if (clearPrefillButton instanceof HTMLButtonElement) {
+      clearPrefillButton.addEventListener("click", () => {
+        clearDraft();
+        if (needInput instanceof HTMLTextAreaElement) {
+          needInput.value = "";
+        }
+        if (sourceInput instanceof HTMLInputElement) {
+          sourceInput.value = "homepage";
+        }
+        updatePrefillNotice(null);
+      });
+    }
+
+    if (form instanceof HTMLFormElement) {
+      form.addEventListener("submit", () => {
+        clearDraft();
+      });
+    }
+  }
+</script>

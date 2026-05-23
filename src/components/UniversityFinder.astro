@@ -470,6 +470,17 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       <div class="school-match-intent-actions" data-role="intent-actions"></div>
     </div>
 
+    <div class="school-match-quality" data-role="quality-panel" hidden>
+      <div class="school-match-quality-head">
+        <strong data-role="quality-title">这轮结果是这样排出来的</strong>
+        <p data-role="quality-summary">系统会优先看专业匹配、门槛完整度和官网可核验度。</p>
+      </div>
+      <div class="school-match-quality-chips" data-role="quality-ranking-signals"></div>
+      <div class="school-match-quality-chips school-match-quality-chips--soft" data-role="quality-intent-signals"></div>
+      <div class="school-match-quality-note" data-role="quality-candidate-summary"></div>
+      <ul class="school-match-quality-list" data-role="quality-next-steps"></ul>
+    </div>
+
     <ul class="school-match-guidance school-match-guidance--inline">
       <li>预算和入学季只会筛掉已经补了对应字段的项目。</li>
       <li>GPA 和语言默认参与排序，严策略只作用于已抓到官网门槛的项目。</li>
@@ -593,15 +604,25 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             <h4 data-role="school-summary-title">院校概要</h4>
             <div class="school-summary-subtitle" data-role="school-summary-subtitle"></div>
           </div>
-          <a
-            class="btn btn-ghost"
-            href="#"
-            target="_blank"
-            rel="noreferrer"
-            data-role="school-summary-link"
-          >
-            打开学校官网
-          </a>
+          <div class="school-summary-actions">
+            <button
+              class="btn btn-ghost school-summary-favorite"
+              type="button"
+              data-role="school-summary-favorite"
+              hidden
+            >
+              收藏这所学校
+            </button>
+            <a
+              class="btn btn-ghost"
+              href="#"
+              target="_blank"
+              rel="noreferrer"
+              data-role="school-summary-link"
+            >
+              打开学校官网
+            </a>
+          </div>
         </div>
 
         <div class="school-summary-facts" data-role="school-summary-facts"></div>
@@ -673,6 +694,12 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
                   申请要求页
                 </a>
               ) : null}
+              <button type="button" class="school-card-trigger" data-program-favorite-button={program.id}>
+                收藏项目
+              </button>
+              <button type="button" class="school-card-trigger" data-program-compare-button={program.id}>
+                加入对比
+              </button>
               <button type="button" class="school-card-trigger" data-program-detail-button={program.id}>
                 查看要求摘要
               </button>
@@ -696,6 +723,124 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         </div>
 
         <div class="school-match-detail-body" data-role="detail-body"></div>
+      </div>
+    </section>
+
+    <section class="school-match-block school-match-block--utility" data-role="utility-section">
+      <div class="school-match-block-head">
+        <div>
+          <strong>用户工具箱</strong>
+          <p>把心仪学校、项目和搜索条件留下来，再导出结果、生成咨询摘要或做项目对比。</p>
+        </div>
+      </div>
+
+      <div class="school-toolbox-actions">
+        <button class="btn btn-ghost" type="button" data-role="save-search-button">
+          保存当前搜索条件
+        </button>
+        <button class="btn btn-ghost" type="button" data-role="export-csv-button">
+          导出当前结果 CSV
+        </button>
+        <button class="btn btn-ghost" type="button" data-role="export-json-button">
+          导出当前结果 JSON
+        </button>
+        <button class="btn btn-ghost" type="button" data-role="generate-summary-button">
+          一键生成咨询摘要
+        </button>
+      </div>
+
+      <div class="school-toolbox-metrics">
+        <article class="school-toolbox-metric">
+          <span>收藏学校</span>
+          <strong data-role="favorites-school-count">0</strong>
+          <p>学校收藏会保存在本机浏览器里。</p>
+        </article>
+        <article class="school-toolbox-metric">
+          <span>收藏项目</span>
+          <strong data-role="favorites-program-count">0</strong>
+          <p>适合先攒一批项目，再和顾问一起筛。</p>
+        </article>
+        <article class="school-toolbox-metric">
+          <span>项目对比</span>
+          <strong data-role="compare-count">0</strong>
+          <p>最多可对比 4 个项目的核心信息。</p>
+        </article>
+        <article class="school-toolbox-metric">
+          <span>已保存搜索</span>
+          <strong data-role="saved-search-count">0</strong>
+          <p>把常见国家和专业组合直接保存下来。</p>
+        </article>
+      </div>
+
+      <div class="school-toolbox-grid">
+        <section class="school-toolbox-card">
+          <div class="school-toolbox-card-head">
+            <strong>已保存搜索</strong>
+            <button class="btn btn-ghost school-toolbox-mini" type="button" data-role="clear-saved-searches-button">
+              清空
+            </button>
+          </div>
+          <div class="school-toolbox-list" data-role="saved-searches-list"></div>
+        </section>
+
+        <section class="school-toolbox-card">
+          <div class="school-toolbox-card-head">
+            <strong>收藏学校</strong>
+            <button class="btn btn-ghost school-toolbox-mini" type="button" data-role="clear-favorite-schools-button">
+              清空
+            </button>
+          </div>
+          <div class="school-toolbox-list" data-role="favorite-schools-list"></div>
+        </section>
+
+        <section class="school-toolbox-card">
+          <div class="school-toolbox-card-head">
+            <strong>收藏项目</strong>
+            <button class="btn btn-ghost school-toolbox-mini" type="button" data-role="clear-favorite-programs-button">
+              清空
+            </button>
+          </div>
+          <div class="school-toolbox-list" data-role="favorite-programs-list"></div>
+        </section>
+      </div>
+
+      <div class="school-toolbox-compare" data-role="compare-panel" hidden>
+        <div class="school-toolbox-card-head">
+          <div>
+            <strong>项目对比视图</strong>
+            <p>把项目放在同一张表里，方便你和顾问一起确认要求、学费和入学季。</p>
+          </div>
+          <button class="btn btn-ghost school-toolbox-mini" type="button" data-role="clear-compare-button">
+            清空对比
+          </button>
+        </div>
+        <div class="school-toolbox-compare-table" data-role="compare-table"></div>
+      </div>
+
+      <div class="school-toolbox-summary" data-role="consult-summary-panel" hidden>
+        <div class="school-toolbox-card-head">
+          <div>
+            <strong>咨询摘要</strong>
+            <p>可以直接复制给顾问，帮助顾问更快理解你的目标、结果和当前偏好。</p>
+          </div>
+          <div class="school-toolbox-inline-actions">
+            <button class="btn btn-ghost school-toolbox-mini" type="button" data-role="copy-summary-button">
+              复制摘要
+            </button>
+            <button class="btn btn-ghost school-toolbox-mini" type="button" data-role="download-summary-button">
+              下载 TXT
+            </button>
+            <button class="btn school-toolbox-mini" type="button" data-role="handoff-contact-button">
+              带入咨询表单
+            </button>
+          </div>
+        </div>
+        <textarea
+          class="school-toolbox-summary-text"
+          data-role="consult-summary-text"
+          readonly
+          placeholder="生成后，这里会出现当前搜索条件、推荐项目和咨询建议。"
+        ></textarea>
       </div>
     </section>
 
@@ -784,6 +929,37 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       const detailSubtitleNode = root.querySelector('[data-role="detail-subtitle"]');
       const detailBodyNode = root.querySelector('[data-role="detail-body"]');
       const detailCloseButton = root.querySelector('[data-role="detail-close"]');
+      const utilitySection = root.querySelector('[data-role="utility-section"]');
+      const saveSearchButton = root.querySelector('[data-role="save-search-button"]');
+      const exportCsvButton = root.querySelector('[data-role="export-csv-button"]');
+      const exportJsonButton = root.querySelector('[data-role="export-json-button"]');
+      const generateSummaryButton = root.querySelector('[data-role="generate-summary-button"]');
+      const favoriteSchoolsCountNode = root.querySelector('[data-role="favorites-school-count"]');
+      const favoriteProgramsCountNode = root.querySelector('[data-role="favorites-program-count"]');
+      const compareCountNode = root.querySelector('[data-role="compare-count"]');
+      const savedSearchCountNode = root.querySelector('[data-role="saved-search-count"]');
+      const favoriteSchoolsListNode = root.querySelector('[data-role="favorite-schools-list"]');
+      const favoriteProgramsListNode = root.querySelector('[data-role="favorite-programs-list"]');
+      const savedSearchesListNode = root.querySelector('[data-role="saved-searches-list"]');
+      const clearFavoriteSchoolsButton = root.querySelector('[data-role="clear-favorite-schools-button"]');
+      const clearFavoriteProgramsButton = root.querySelector('[data-role="clear-favorite-programs-button"]');
+      const clearSavedSearchesButton = root.querySelector('[data-role="clear-saved-searches-button"]');
+      const comparePanel = root.querySelector('[data-role="compare-panel"]');
+      const compareTableNode = root.querySelector('[data-role="compare-table"]');
+      const clearCompareButton = root.querySelector('[data-role="clear-compare-button"]');
+      const consultSummaryPanel = root.querySelector('[data-role="consult-summary-panel"]');
+      const consultSummaryText = root.querySelector('[data-role="consult-summary-text"]');
+      const copySummaryButton = root.querySelector('[data-role="copy-summary-button"]');
+      const downloadSummaryButton = root.querySelector('[data-role="download-summary-button"]');
+      const handoffContactButton = root.querySelector('[data-role="handoff-contact-button"]');
+      const schoolSummaryFavoriteButton = root.querySelector('[data-role="school-summary-favorite"]');
+      const qualityPanel = root.querySelector('[data-role="quality-panel"]');
+      const qualityTitleNode = root.querySelector('[data-role="quality-title"]');
+      const qualitySummaryNode = root.querySelector('[data-role="quality-summary"]');
+      const qualityRankingSignalsNode = root.querySelector('[data-role="quality-ranking-signals"]');
+      const qualityIntentSignalsNode = root.querySelector('[data-role="quality-intent-signals"]');
+      const qualityCandidateSummaryNode = root.querySelector('[data-role="quality-candidate-summary"]');
+      const qualityNextStepsNode = root.querySelector('[data-role="quality-next-steps"]');
       let activeVerifiedResults = initialResults;
       let activeUniversityMatches = seedUniversityMatches;
       let activeUniversityCount = seedUniversityMatches.length;
@@ -793,6 +969,14 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       let baseUniversityMatches = seedUniversityMatches;
       let baseUniversityCount = seedUniversityMatches.length;
       let baseCandidateResults = [];
+      let activeSearchStats = {
+        verifiedCount: initialResults.length,
+        universityCount: seedUniversityMatches.length,
+        candidateCount: 0,
+        blockedCount: 0,
+        expansionEnabled: false,
+        expansionAttempted: false,
+      };
       let baseStatusText =
         `当前底库共有 ${totalProgramCount} 个项目，当前展示 ${initialResults.length} 个优先样例。先选学位类型、专业方向、细分方向和学生背景，再点击“开始搜索”获取已核验结果。`;
       let lastBasePayload = {
@@ -821,6 +1005,16 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       let admissionsPrefetchTimer = 0;
       let candidateExpansionToken = 0;
       let candidateExpansionController = null;
+      let selectedSchoolSummary = null;
+      const FAVORITES_STORAGE_KEY = "study-abroad-finder-favorites-v1";
+      const SAVED_SEARCHES_STORAGE_KEY = "study-abroad-finder-saved-searches-v1";
+      const COMPARE_STORAGE_KEY = "study-abroad-finder-compare-v1";
+      const CONTACT_DRAFT_STORAGE_KEY = "study-abroad-contact-draft-v1";
+      let favoriteSchools = [];
+      let favoritePrograms = [];
+      let savedSearches = [];
+      let comparePrograms = [];
+      let activeSearchGuidance = null;
       const detailCache = new Map();
       const intentSuppressValue = "__none__";
       const inferredIntentKeys = new Set(["country", "degree", "major", "specialization"]);
@@ -842,13 +1036,145 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           .replaceAll('"', "&quot;")
           .replaceAll("'", "&#39;");
 
+      const storageAvailable = () => {
+        try {
+          return typeof window !== "undefined" && Boolean(window.localStorage);
+        } catch {
+          return false;
+        }
+      };
+
+      const readStorageValue = (key, fallback = null) => {
+        if (!storageAvailable()) return fallback;
+
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) return fallback;
+          return JSON.parse(raw);
+        } catch {
+          return fallback;
+        }
+      };
+
+      const writeStorageValue = (key, value) => {
+        if (!storageAvailable()) return;
+
+        try {
+          window.localStorage.setItem(key, JSON.stringify(value));
+        } catch {
+          // ignore storage write failures in private mode or quota limits
+        }
+      };
+
+      const isoNow = () => new Date().toISOString();
+
+      const downloadTextFile = (content, filename, type = "text/plain;charset=utf-8") => {
+        if (typeof document === "undefined") return;
+
+        const blob = new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      };
+
+      const snapshotProgram = (program) => ({
+        id: String(program?.id || ""),
+        universityId: String(program?.universityId || ""),
+        schoolName: String(program?.schoolName || ""),
+        schoolNameZh: String(program?.schoolNameZh || ""),
+        country: String(program?.country || ""),
+        city: String(program?.city || ""),
+        stateOrProvince: String(program?.stateOrProvince || ""),
+        degree: String(program?.degree || ""),
+        discipline: String(program?.discipline || ""),
+        programName: String(program?.programName || ""),
+        summary: String(program?.summary || ""),
+        duration: String(program?.duration || ""),
+        intake: String(program?.intake || ""),
+        tuitionAmount: String(program?.tuitionAmount || ""),
+        tuitionCurrency: String(program?.tuitionCurrency || ""),
+        overviewUrl: String(program?.overviewUrl || ""),
+        admissionsUrl: String(program?.admissionsUrl || ""),
+        officialWebsite: String(program?.officialWebsite || program?.overviewUrl || ""),
+        qsRank: Number(program?.qsRank) || null,
+        qsRankingYear: Number(program?.qsRankingYear) || null,
+        checkedAt: String(program?.checkedAt || ""),
+        tags: Array.isArray(program?.tags) ? program.tags.slice(0, 6) : [],
+        admissionsSnapshot: program?.admissionsSnapshot || null,
+        savedAt: isoNow(),
+      });
+
+      const snapshotSchool = (school) => ({
+        universityId: String(school?.universityId || ""),
+        schoolName: String(school?.schoolName || ""),
+        schoolNameZh: String(school?.schoolNameZh || ""),
+        country: String(school?.country || ""),
+        city: String(school?.city || ""),
+        stateOrProvince: String(school?.stateOrProvince || ""),
+        qsRank: Number(school?.qsRank) || null,
+        qsRankingYear: Number(school?.qsRankingYear) || null,
+        programCount: Number(school?.programCount) || 0,
+        tuitionMin: Number(school?.tuitionMin) || null,
+        tuitionMax: Number(school?.tuitionMax) || null,
+        tuitionCurrency: String(school?.tuitionCurrency || ""),
+        topDisciplines: Array.isArray(school?.topDisciplines) ? school.topDisciplines.slice(0, 4) : [],
+        officialWebsite: String(school?.officialWebsite || ""),
+        savedAt: isoNow(),
+      });
+
+      const savedSearchLabel = (payload = {}) => {
+        const primary = [payload.country, payload.degree, payload.major, payload.specialization]
+          .filter(Boolean)
+          .join(" / ");
+        const free = String(payload.freeText || "").trim();
+        const label = primary || free || "未命名搜索";
+        const suffix = [payload.gpaProfile, payload.languageProfile].filter(Boolean).join(" · ");
+        return suffix ? `${label} · ${suffix}` : label;
+      };
+
+      const compactDateTime = (value) => {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleString("zh-CN", {
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      };
+
+      const isProgramFavorited = (programId) =>
+        favoritePrograms.some((item) => String(item?.id || "") === String(programId || ""));
+
+      const isSchoolFavorited = (universityId) =>
+        favoriteSchools.some((item) => String(item?.universityId || "") === String(universityId || ""));
+
+      const isProgramCompared = (programId) =>
+        comparePrograms.some((item) => String(item?.id || "") === String(programId || ""));
+
       const setStatusSummary = ({
         verifiedCount = 0,
         candidateCount = 0,
         blockedCount = 0,
         expansionEnabled = false,
         expansionAttempted = false,
+        universityCount = 0,
       } = {}) => {
+        activeSearchStats = {
+          verifiedCount: Number(verifiedCount) || 0,
+          candidateCount: Number(candidateCount) || 0,
+          blockedCount: Number(blockedCount) || 0,
+          universityCount: Number(universityCount) || 0,
+          expansionEnabled: Boolean(expansionEnabled),
+          expansionAttempted: Boolean(expansionAttempted),
+        };
+
         if (statusVerifiedNode instanceof HTMLElement) {
           statusVerifiedNode.textContent = String(verifiedCount || 0);
         }
@@ -866,6 +1192,8 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             statusCandidateNoteNode.textContent = "当前环境还没接全网扩搜 API，所以候选结果暂时不会放量。";
           } else if (!expansionAttempted) {
             statusCandidateNoteNode.textContent = "这轮还没有触发全网扩搜，先看已核验项目与学校池。";
+          } else if (activeSearchGuidance?.candidateQualitySummary) {
+            statusCandidateNoteNode.textContent = activeSearchGuidance.candidateQualitySummary;
           } else if (candidateCount > 0) {
             statusCandidateNoteNode.textContent = "这些结果来自全网筛出的疑似官网页，会同步进入后台审核。";
           } else {
@@ -914,6 +1242,38 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
         if (expansionActionsNode instanceof HTMLElement) {
           expansionActionsNode.innerHTML = "";
+        }
+      };
+
+      const hideSearchQuality = () => {
+        activeSearchGuidance = null;
+
+        if (qualityPanel instanceof HTMLElement) {
+          qualityPanel.hidden = true;
+        }
+
+        if (qualityTitleNode instanceof HTMLElement) {
+          qualityTitleNode.textContent = "这轮结果是这样排出来的";
+        }
+
+        if (qualitySummaryNode instanceof HTMLElement) {
+          qualitySummaryNode.textContent = "";
+        }
+
+        if (qualityRankingSignalsNode instanceof HTMLElement) {
+          qualityRankingSignalsNode.innerHTML = "";
+        }
+
+        if (qualityIntentSignalsNode instanceof HTMLElement) {
+          qualityIntentSignalsNode.innerHTML = "";
+        }
+
+        if (qualityCandidateSummaryNode instanceof HTMLElement) {
+          qualityCandidateSummaryNode.textContent = "";
+        }
+
+        if (qualityNextStepsNode instanceof HTMLElement) {
+          qualityNextStepsNode.innerHTML = "";
         }
       };
 
@@ -1094,6 +1454,54 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           : "";
       };
 
+      const renderSearchQuality = (guidance, stats = {}) => {
+        if (
+          !(qualityPanel instanceof HTMLElement) ||
+          !(qualityTitleNode instanceof HTMLElement) ||
+          !(qualitySummaryNode instanceof HTMLElement) ||
+          !(qualityRankingSignalsNode instanceof HTMLElement) ||
+          !(qualityIntentSignalsNode instanceof HTMLElement) ||
+          !(qualityCandidateSummaryNode instanceof HTMLElement) ||
+          !(qualityNextStepsNode instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        if (!guidance || typeof guidance !== "object") {
+          hideSearchQuality();
+          return;
+        }
+
+        activeSearchGuidance = guidance;
+        qualityPanel.hidden = false;
+
+        const verifiedCount = Number(stats?.verifiedCount) || 0;
+        qualityTitleNode.textContent =
+          verifiedCount > 0 ? "这轮结果是这样排出来的" : "这轮为什么结果偏少";
+        qualitySummaryNode.textContent =
+          String(guidance.failureReason || "").trim() ||
+          "系统会优先看专业匹配、门槛完整度和官网可核验度。";
+        qualityRankingSignalsNode.innerHTML = Array.isArray(guidance.rankingSignals)
+          ? guidance.rankingSignals
+              .filter(Boolean)
+              .map((item) => `<span>${escapeHtml(item)}</span>`)
+              .join("")
+          : "";
+        qualityIntentSignalsNode.innerHTML = Array.isArray(guidance.intentSignals)
+          ? guidance.intentSignals
+              .filter(Boolean)
+              .map((item) => `<span>${escapeHtml(item)}</span>`)
+              .join("")
+          : "";
+        qualityCandidateSummaryNode.textContent = String(guidance.candidateQualitySummary || "").trim();
+        qualityNextStepsNode.innerHTML = Array.isArray(guidance.nextSteps)
+          ? guidance.nextSteps
+              .filter(Boolean)
+              .map((item) => `<li>${escapeHtml(item)}</li>`)
+              .join("")
+          : "";
+      };
+
       const applyResolvedQueryToControls = (payload = {}) => {
         if (freeTextInput instanceof HTMLInputElement) {
           freeTextInput.value = payload?.freeText || "";
@@ -1213,6 +1621,548 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         }
 
         return `学费样本：${currency} ${formatCurrencyNumber(min)} - ${formatCurrencyNumber(max)}`;
+      };
+
+      const programCardLookup = (programId) =>
+        activeVerifiedResults.find((item) => String(item?.id || "") === String(programId || "")) ||
+        baseVerifiedResults.find((item) => String(item?.id || "") === String(programId || "")) ||
+        favoritePrograms.find((item) => String(item?.id || "") === String(programId || ""));
+
+      const buildConsultSummaryText = () => {
+        const topPrograms = activeVerifiedResults.slice(0, 5);
+        const favoriteProgramNames = favoritePrograms
+          .slice(0, 5)
+          .map((item) => `${item.schoolNameZh || item.schoolName} · ${item.programName}`);
+        const favoriteSchoolNames = favoriteSchools
+          .slice(0, 5)
+          .map((item) => item.schoolNameZh || item.schoolName);
+        const compareNames = comparePrograms
+          .slice(0, 4)
+          .map((item) => `${item.schoolNameZh || item.schoolName} · ${item.programName}`);
+        const filters = [
+          activeSearchPayload.freeText ? `原始需求：${activeSearchPayload.freeText}` : "",
+          activeSearchPayload.country ? `国家：${activeSearchPayload.country}` : "",
+          activeSearchPayload.degree ? `学位：${activeSearchPayload.degree}` : "",
+          activeSearchPayload.major ? `专业方向：${activeSearchPayload.major}` : "",
+          activeSearchPayload.specialization ? `细分方向：${activeSearchPayload.specialization}` : "",
+          activeSearchPayload.gpaProfile ? `GPA：${activeSearchPayload.gpaProfile}` : "",
+          activeSearchPayload.languageProfile ? `语言：${activeSearchPayload.languageProfile}` : "",
+          activeSearchPayload.intake ? `入学季：${activeSearchPayload.intake}` : "",
+          activeSearchPayload.budgetTier ? `预算：${activeSearchPayload.budgetTier}` : "",
+        ].filter(Boolean);
+
+        const resultLines = topPrograms.length
+          ? topPrograms.map((item, index) => {
+              const reasons = buildProgramReasonChips(item, activeSearchPayload);
+              return `${index + 1}. ${item.schoolNameZh || item.schoolName}｜${item.programName}${reasons.length ? `（${reasons.join(" / ")}）` : ""}`;
+            })
+          : ["当前还没有已核验正式项目，可先看后台候选结果或继续放宽方向。"];
+
+        return [
+          "院校搜索咨询摘要",
+          "",
+          `生成时间：${new Date().toLocaleString("zh-CN")}`,
+          activeSearchSessionId ? `搜索会话：${activeSearchSessionId}` : "",
+          "",
+          "一、当前搜索条件",
+          ...(filters.length ? filters.map((item) => `- ${item}`) : ["- 当前尚未设置结构化筛选条件"]),
+          "",
+          "二、结果概况",
+          `- 已核验项目：${activeSearchStats.verifiedCount || activeVerifiedResults.length}`,
+          `- 学校池：${activeSearchStats.universityCount || activeUniversityCount}`,
+          `- 全网候选官网页：${activeSearchStats.candidateCount || baseCandidateResults.length}`,
+          `- 后台已规避：${activeSearchStats.blockedCount || 0}`,
+          "",
+          "三、当前优先推荐项目",
+          ...resultLines,
+          "",
+          "四、用户已收藏内容",
+          `- 收藏学校：${favoriteSchoolNames.length ? favoriteSchoolNames.join("、") : "暂无"}`,
+          `- 收藏项目：${favoriteProgramNames.length ? favoriteProgramNames.join("；") : "暂无"}`,
+          `- 当前对比项目：${compareNames.length ? compareNames.join("；") : "暂无"}`,
+          "",
+          "五、建议顾问跟进",
+          "- 先确认用户是否接受当前国家 / 专业方向的放宽范围。",
+          "- 优先围绕前 3 个正式项目确认预算、入学季和背景匹配度。",
+          "- 如果正式项目仍偏少，可继续查看全网候选官网页并人工补库。",
+        ]
+          .filter(Boolean)
+          .join("\n");
+      };
+
+      const renderConsultSummary = () => {
+        if (!(consultSummaryPanel instanceof HTMLElement) || !(consultSummaryText instanceof HTMLTextAreaElement)) {
+          return;
+        }
+
+        const summary = buildConsultSummaryText();
+        consultSummaryText.value = summary;
+        consultSummaryPanel.hidden = false;
+      };
+
+      const compareTableHtml = (items) => {
+        if (!Array.isArray(items) || !items.length) {
+          return `
+            <div class="school-toolbox-empty">
+              <strong>还没有加入对比的项目</strong>
+              <p>在项目卡片上点“加入对比”，最多可同时放 4 个项目。</p>
+            </div>
+          `;
+        }
+
+        const rows = [
+          { label: "学校", values: items.map((item) => item.schoolNameZh || item.schoolName) },
+          { label: "英文校名", values: items.map((item) => item.schoolNameZh && item.schoolNameZh !== item.schoolName ? item.schoolName : "") },
+          { label: "项目", values: items.map((item) => item.programName) },
+          { label: "国家", values: items.map((item) => item.country) },
+          { label: "学位", values: items.map((item) => item.degree) },
+          { label: "专业方向", values: items.map((item) => item.discipline) },
+          { label: "QS", values: items.map((item) => rankingLabel(item)) },
+          { label: "学费", values: items.map((item) => tuitionLabel(item)) },
+          { label: "学制", values: items.map((item) => item.duration) },
+          { label: "入学季", values: items.map((item) => item.intake) },
+          { label: "门槛状态", values: items.map((item) => admissionsSnapshotLabel(item)) },
+        ];
+
+        return `
+          <table>
+            <thead>
+              <tr>
+                <th>对比项</th>
+                ${items
+                  .map(
+                    (item) => `<th>${escapeHtml(item.schoolNameZh || item.schoolName)}<div class="school-toolbox-compare-title">${escapeHtml(item.programName)}</div></th>`
+                  )
+                  .join("")}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (row) => `
+                    <tr>
+                      <th>${escapeHtml(row.label)}</th>
+                      ${row.values
+                        .map((value) => `<td>${escapeHtml(value || "—")}</td>`)
+                        .join("")}
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
+      };
+
+      const renderComparePanel = () => {
+        if (!(comparePanel instanceof HTMLElement) || !(compareTableNode instanceof HTMLElement)) {
+          return;
+        }
+
+        comparePanel.hidden = comparePrograms.length === 0;
+        compareTableNode.innerHTML = compareTableHtml(comparePrograms);
+      };
+
+      const favoriteSchoolItemHtml = (item) => `
+        <article class="school-toolbox-item">
+          <div class="school-toolbox-item-head">
+            <strong>${escapeHtml(item.schoolNameZh || item.schoolName)}</strong>
+            <span>${escapeHtml(compactDateTime(item.savedAt))}</span>
+          </div>
+          <p>${escapeHtml([item.country, [item.city, item.stateOrProvince].filter(Boolean).join(", ")].filter(Boolean).join(" / ") || "已收藏学校")}</p>
+          <div class="school-toolbox-item-actions">
+            ${item.officialWebsite ? `<a href="${escapeHtml(item.officialWebsite)}" target="_blank" rel="noreferrer">打开官网</a>` : ""}
+            <button type="button" data-toolbox-action="remove-school-favorite" data-university-id="${escapeHtml(item.universityId)}">移除</button>
+          </div>
+        </article>
+      `;
+
+      const favoriteProgramItemHtml = (item) => `
+        <article class="school-toolbox-item">
+          <div class="school-toolbox-item-head">
+            <strong>${escapeHtml(item.schoolNameZh || item.schoolName)}</strong>
+            <span>${escapeHtml(compactDateTime(item.savedAt))}</span>
+          </div>
+          <p>${escapeHtml(item.programName)}</p>
+          <div class="school-toolbox-item-meta">
+            <span>${escapeHtml(item.country || "")}</span>
+            <span>${escapeHtml(item.degree || "")}</span>
+            <span>${escapeHtml(item.discipline || "")}</span>
+          </div>
+          <div class="school-toolbox-item-actions">
+            ${item.overviewUrl ? `<a href="${escapeHtml(item.overviewUrl)}" target="_blank" rel="noreferrer">打开项目页</a>` : ""}
+            <button type="button" data-toolbox-action="toggle-compare" data-program-id="${escapeHtml(item.id)}">${isProgramCompared(item.id) ? "移出对比" : "加入对比"}</button>
+            <button type="button" data-toolbox-action="remove-program-favorite" data-program-id="${escapeHtml(item.id)}">移除</button>
+          </div>
+        </article>
+      `;
+
+      const savedSearchItemHtml = (item) => `
+        <article class="school-toolbox-item">
+          <div class="school-toolbox-item-head">
+            <strong>${escapeHtml(item.label || "未命名搜索")}</strong>
+            <span>${escapeHtml(compactDateTime(item.createdAt))}</span>
+          </div>
+          <p>${escapeHtml(item.freeText || "使用结构化条件保存")}</p>
+          <div class="school-toolbox-item-meta">
+            ${[
+              item.country,
+              item.degree,
+              item.major,
+              item.specialization,
+            ]
+              .filter(Boolean)
+              .map((value) => `<span>${escapeHtml(value)}</span>`)
+              .join("")}
+          </div>
+          <div class="school-toolbox-item-actions">
+            <button type="button" data-toolbox-action="apply-saved-search" data-saved-search-id="${escapeHtml(item.id)}">重新搜索</button>
+            <button type="button" data-toolbox-action="remove-saved-search" data-saved-search-id="${escapeHtml(item.id)}">删除</button>
+          </div>
+        </article>
+      `;
+
+      const renderToolboxLists = () => {
+        if (favoriteSchoolsCountNode instanceof HTMLElement) {
+          favoriteSchoolsCountNode.textContent = String(favoriteSchools.length);
+        }
+        if (favoriteProgramsCountNode instanceof HTMLElement) {
+          favoriteProgramsCountNode.textContent = String(favoritePrograms.length);
+        }
+        if (compareCountNode instanceof HTMLElement) {
+          compareCountNode.textContent = String(comparePrograms.length);
+        }
+        if (savedSearchCountNode instanceof HTMLElement) {
+          savedSearchCountNode.textContent = String(savedSearches.length);
+        }
+
+        if (favoriteSchoolsListNode instanceof HTMLElement) {
+          favoriteSchoolsListNode.innerHTML = favoriteSchools.length
+            ? favoriteSchools.map(favoriteSchoolItemHtml).join("")
+            : `<div class="school-toolbox-empty"><strong>还没有收藏学校</strong><p>先点开某所学校，再点“收藏这所学校”。</p></div>`;
+        }
+
+        if (favoriteProgramsListNode instanceof HTMLElement) {
+          favoriteProgramsListNode.innerHTML = favoritePrograms.length
+            ? favoritePrograms.map(favoriteProgramItemHtml).join("")
+            : `<div class="school-toolbox-empty"><strong>还没有收藏项目</strong><p>在项目卡片上点“收藏项目”，后面导出和咨询会更方便。</p></div>`;
+        }
+
+        if (savedSearchesListNode instanceof HTMLElement) {
+          savedSearchesListNode.innerHTML = savedSearches.length
+            ? savedSearches.map(savedSearchItemHtml).join("")
+            : `<div class="school-toolbox-empty"><strong>还没有保存搜索</strong><p>把常用国家 / 专业组合先保存下来，下次可以一键重跑。</p></div>`;
+        }
+
+        renderComparePanel();
+      };
+
+      const syncUtilityActionStates = () => {
+        root.querySelectorAll("[data-program-favorite-button]").forEach((node) => {
+          if (!(node instanceof HTMLButtonElement)) return;
+          const programId = node.getAttribute("data-program-favorite-button") || "";
+          const active = isProgramFavorited(programId);
+          node.textContent = active ? "已收藏项目" : "收藏项目";
+          node.classList.toggle("is-active", active);
+        });
+
+        root.querySelectorAll("[data-program-compare-button]").forEach((node) => {
+          if (!(node instanceof HTMLButtonElement)) return;
+          const programId = node.getAttribute("data-program-compare-button") || "";
+          const active = isProgramCompared(programId);
+          node.textContent = active ? "移出对比" : "加入对比";
+          node.classList.toggle("is-active", active);
+        });
+
+        if (schoolSummaryFavoriteButton instanceof HTMLButtonElement && selectedSchoolSummary) {
+          const active = isSchoolFavorited(selectedSchoolSummary.universityId);
+          schoolSummaryFavoriteButton.hidden = false;
+          schoolSummaryFavoriteButton.textContent = active ? "已收藏这所学校" : "收藏这所学校";
+          schoolSummaryFavoriteButton.classList.toggle("is-active", active);
+        }
+      };
+
+      const persistFavorites = () => {
+        writeStorageValue(FAVORITES_STORAGE_KEY, {
+          schools: favoriteSchools,
+          programs: favoritePrograms,
+        });
+      };
+
+      const persistSavedSearches = () => {
+        writeStorageValue(SAVED_SEARCHES_STORAGE_KEY, savedSearches);
+      };
+
+      const persistComparePrograms = () => {
+        writeStorageValue(COMPARE_STORAGE_KEY, comparePrograms);
+      };
+
+      const loadUtilityState = () => {
+        const favoritePayload = readStorageValue(FAVORITES_STORAGE_KEY, {});
+        if (favoritePayload && !Array.isArray(favoritePayload) && typeof favoritePayload === "object") {
+          favoriteSchools = Array.isArray(favoritePayload.schools) ? favoritePayload.schools : [];
+          favoritePrograms = Array.isArray(favoritePayload.programs) ? favoritePayload.programs : [];
+        }
+
+        const savedSearchPayload = readStorageValue(SAVED_SEARCHES_STORAGE_KEY, []);
+        const comparePayload = readStorageValue(COMPARE_STORAGE_KEY, []);
+        savedSearches = Array.isArray(savedSearchPayload) ? savedSearchPayload : [];
+        comparePrograms = Array.isArray(comparePayload) ? comparePayload.slice(0, 4) : [];
+        renderToolboxLists();
+        syncUtilityActionStates();
+      };
+
+      const toggleProgramFavorite = (program) => {
+        const snapshot = snapshotProgram(program);
+        if (!snapshot.id) return;
+
+        if (isProgramFavorited(snapshot.id)) {
+          favoritePrograms = favoritePrograms.filter((item) => item.id !== snapshot.id);
+          setStatus(`已从收藏项目中移除 ${snapshot.schoolNameZh || snapshot.schoolName} · ${snapshot.programName}`);
+        } else {
+          favoritePrograms = [snapshot, ...favoritePrograms.filter((item) => item.id !== snapshot.id)].slice(0, 24);
+          setStatus(`已收藏项目：${snapshot.schoolNameZh || snapshot.schoolName} · ${snapshot.programName}`);
+        }
+
+        persistFavorites();
+        renderToolboxLists();
+        syncUtilityActionStates();
+      };
+
+      const toggleSchoolFavorite = (school) => {
+        const snapshot = snapshotSchool(school);
+        if (!snapshot.universityId) return;
+
+        if (isSchoolFavorited(snapshot.universityId)) {
+          favoriteSchools = favoriteSchools.filter((item) => item.universityId !== snapshot.universityId);
+          setStatus(`已从收藏学校中移除 ${snapshot.schoolNameZh || snapshot.schoolName}`);
+        } else {
+          favoriteSchools = [snapshot, ...favoriteSchools.filter((item) => item.universityId !== snapshot.universityId)].slice(0, 24);
+          setStatus(`已收藏学校：${snapshot.schoolNameZh || snapshot.schoolName}`);
+        }
+
+        persistFavorites();
+        renderToolboxLists();
+        syncUtilityActionStates();
+      };
+
+      const toggleCompareProgram = (program) => {
+        const snapshot = snapshotProgram(program);
+        if (!snapshot.id) return;
+
+        if (isProgramCompared(snapshot.id)) {
+          comparePrograms = comparePrograms.filter((item) => item.id !== snapshot.id);
+          setStatus(`已从项目对比中移除 ${snapshot.programName}`);
+        } else {
+          if (comparePrograms.length >= 4) {
+            setStatus("项目对比最多保留 4 个，请先移除一个再继续添加。");
+            return;
+          }
+
+          comparePrograms = [...comparePrograms, snapshot];
+          setStatus(`已加入项目对比：${snapshot.programName}`);
+        }
+
+        persistComparePrograms();
+        renderToolboxLists();
+        syncUtilityActionStates();
+      };
+
+      const saveCurrentSearch = () => {
+        const payload = collectPayload();
+        if (
+          !payload.freeText &&
+          !payload.country &&
+          !payload.degree &&
+          !payload.major &&
+          !payload.specialization &&
+          !payload.budgetTier &&
+          !payload.intake &&
+          !payload.gpaProfile &&
+          !payload.languageProfile
+        ) {
+          setStatus("先设置一组搜索条件，再保存当前搜索。");
+          return;
+        }
+
+        const entry = {
+          ...payload,
+          id: `${Date.now()}`,
+          label: savedSearchLabel(payload),
+          createdAt: isoNow(),
+        };
+        savedSearches = [entry, ...savedSearches.filter((item) => item.id !== entry.id)].slice(0, 12);
+        persistSavedSearches();
+        renderToolboxLists();
+        setStatus(`已保存搜索：${entry.label}`);
+      };
+
+      const exportCurrentResultsAsCsv = () => {
+        if (!Array.isArray(activeVerifiedResults) || !activeVerifiedResults.length) {
+          setStatus("当前还没有可导出的正式项目结果。");
+          return;
+        }
+
+        const header = [
+          "学校",
+          "英文校名",
+          "项目",
+          "国家",
+          "学位",
+          "专业方向",
+          "QS",
+          "学费",
+          "学制",
+          "入学季",
+          "项目页",
+          "申请要求页",
+        ];
+        const rows = activeVerifiedResults.map((item) => [
+          item.schoolNameZh || item.schoolName,
+          item.schoolName,
+          item.programName,
+          item.country,
+          item.degree,
+          item.discipline,
+          rankingLabel(item),
+          tuitionLabel(item),
+          item.duration,
+          item.intake,
+          item.overviewUrl,
+          item.admissionsUrl,
+        ]);
+        const csv = [header, ...rows]
+          .map((row) =>
+            row
+              .map((value) => `"${String(value || "").replaceAll('"', '""')}"`)
+              .join(",")
+          )
+          .join("\n");
+        downloadTextFile(csv, "study-abroad-search-results.csv", "text/csv;charset=utf-8");
+        setStatus(`已导出 ${activeVerifiedResults.length} 条正式项目结果（CSV）。`);
+      };
+
+      const exportCurrentResultsAsJson = () => {
+        if (!Array.isArray(activeVerifiedResults) || !activeVerifiedResults.length) {
+          setStatus("当前还没有可导出的正式项目结果。");
+          return;
+        }
+
+        const payload = {
+          generatedAt: isoNow(),
+          searchSessionId: activeSearchSessionId,
+          query: activeSearchPayload,
+          stats: activeSearchStats,
+          results: activeVerifiedResults,
+        };
+        downloadTextFile(JSON.stringify(payload, null, 2), "study-abroad-search-results.json", "application/json;charset=utf-8");
+        setStatus(`已导出 ${activeVerifiedResults.length} 条正式项目结果（JSON）。`);
+      };
+
+      const copyConsultSummary = async () => {
+        if (!(consultSummaryText instanceof HTMLTextAreaElement) || !consultSummaryText.value.trim()) {
+          setStatus("先生成咨询摘要，再复制给顾问。");
+          return;
+        }
+
+        try {
+          await navigator.clipboard.writeText(consultSummaryText.value);
+          setStatus("咨询摘要已复制，可以直接发给顾问。");
+        } catch {
+          consultSummaryText.focus();
+          consultSummaryText.select();
+          setStatus("当前浏览器没有完成自动复制，请手动复制下方摘要内容。");
+        }
+      };
+
+      const downloadConsultSummary = () => {
+        if (!(consultSummaryText instanceof HTMLTextAreaElement) || !consultSummaryText.value.trim()) {
+          setStatus("先生成咨询摘要，再下载。");
+          return;
+        }
+
+        downloadTextFile(consultSummaryText.value, "study-abroad-consult-summary.txt");
+        setStatus("咨询摘要已下载。");
+      };
+
+      const handoffConsultSummaryToContactForm = () => {
+        const summary = buildConsultSummaryText().trim();
+        if (!summary) {
+          setStatus("先生成咨询摘要，再带入咨询表单。");
+          return;
+        }
+
+        writeStorageValue(CONTACT_DRAFT_STORAGE_KEY, {
+          source: "school-finder",
+          summary,
+          createdAt: isoNow(),
+          appointmentType: "consultation",
+          examType: "留学申请",
+          preferredTime: "",
+        });
+        window.location.assign("/?prefill=school-finder#contact");
+      };
+
+      const applySavedSearch = (savedSearchId) => {
+        const entry = savedSearches.find((item) => String(item?.id || "") === String(savedSearchId || ""));
+        if (!entry) {
+          setStatus("没有找到这条已保存搜索。");
+          return;
+        }
+
+        const nextPayload = {
+          freeText: entry.freeText || "",
+          country: entry.country || "",
+          degree: entry.degree || "",
+          major: entry.major || "",
+          specialization: entry.specialization || "",
+          budgetTier: entry.budgetTier || "",
+          intake: entry.intake || "",
+          gpaProfile: entry.gpaProfile || "",
+          languageProfile: entry.languageProfile || "",
+          fitMode: entry.fitMode || "prefer",
+          snapshotQuality: entry.snapshotQuality || "",
+        };
+
+        applyResolvedQueryToControls(nextPayload);
+        setStatus(`正在重新搜索：${entry.label || "已保存搜索"}`);
+        void runSearch(nextPayload);
+      };
+
+      const clearUtilityCollection = (type) => {
+        if (type === "schools") {
+          favoriteSchools = [];
+          persistFavorites();
+          renderToolboxLists();
+          syncUtilityActionStates();
+          setStatus("已清空收藏学校。");
+          return;
+        }
+
+        if (type === "programs") {
+          favoritePrograms = [];
+          persistFavorites();
+          renderToolboxLists();
+          syncUtilityActionStates();
+          setStatus("已清空收藏项目。");
+          return;
+        }
+
+        if (type === "saved-searches") {
+          savedSearches = [];
+          persistSavedSearches();
+          renderToolboxLists();
+          setStatus("已清空保存的搜索条件。");
+          return;
+        }
+
+        if (type === "compare") {
+          comparePrograms = [];
+          persistComparePrograms();
+          renderToolboxLists();
+          syncUtilityActionStates();
+          setStatus("已清空项目对比。");
+        }
       };
 
       const normalizeClientText = (value) =>
@@ -1496,8 +2446,13 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       };
 
       const hideSchoolSummary = () => {
+        selectedSchoolSummary = null;
         if (schoolSummaryPanel instanceof HTMLElement) {
           schoolSummaryPanel.hidden = true;
+        }
+        if (schoolSummaryFavoriteButton instanceof HTMLButtonElement) {
+          schoolSummaryFavoriteButton.hidden = true;
+          schoolSummaryFavoriteButton.classList.remove("is-active");
         }
       };
 
@@ -1518,6 +2473,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           return;
         }
 
+        selectedSchoolSummary = school;
         schoolSummaryPanel.hidden = false;
         schoolSummaryTitleNode.textContent = school.schoolNameZh || school.schoolName;
         schoolSummarySubtitleNode.textContent =
@@ -1560,6 +2516,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           Number(school.programCount) > 0
             ? "你现在看到的是这所学校当前已经补进项目库的项目结果，后面还可以继续点“查看要求摘要”读取官网招生页。"
             : "这所学校已经进入学校底库，但项目页和学费页还在继续补全。现在可以先打开学校官网做第一轮核对。";
+        syncUtilityActionStates();
       };
 
       const cardHtml = (program) => {
@@ -1619,6 +2576,8 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
               <a href="${escapeHtml(program.officialWebsite || program.overviewUrl)}" target="_blank" rel="noreferrer">院校官网</a>
               <a href="${escapeHtml(program.overviewUrl)}" target="_blank" rel="noreferrer">项目页</a>
               ${admissionsLink}
+              <button type="button" class="school-card-trigger" data-program-favorite-button="${escapeHtml(program.id)}">收藏项目</button>
+              <button type="button" class="school-card-trigger" data-program-compare-button="${escapeHtml(program.id)}">加入对比</button>
               <button type="button" class="school-card-trigger" data-program-detail-button="${escapeHtml(program.id)}">查看要求摘要</button>
             </div>
           </article>
@@ -1788,6 +2747,20 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             </div>
             ${candidate.date ? `<span class="candidate-card-date">${escapeHtml(candidate.date)}</span>` : ""}
           </div>
+
+          <div class="candidate-card-credibility">
+            <span class="candidate-card-credibility-badge candidate-card-credibility-badge--${escapeHtml(candidate.credibilityLevel || "watch")}">${escapeHtml(candidate.credibilityLabel || "待核对")}</span>
+            <span class="candidate-card-credibility-text">${escapeHtml(candidate.credibilityReason || "来源和内容仍建议后台继续核对。")}</span>
+          </div>
+
+          ${
+            Array.isArray(candidate.relevanceSignals) && candidate.relevanceSignals.length
+              ? `<div class="candidate-card-signals">${candidate.relevanceSignals
+                  .filter(Boolean)
+                  .map((item) => `<span>${escapeHtml(item)}</span>`)
+                  .join("")}</div>`
+              : ""
+          }
 
           <p class="candidate-card-summary">${escapeHtml(
             String(
@@ -2010,6 +2983,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         }
 
         verifiedResultsNode.innerHTML = items.map(cardHtml).join("");
+        syncUtilityActionStates();
       };
 
       const renderCandidateResults = (items) => {
@@ -2369,6 +3343,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         if (!hasCandidateExpansionInput(payload)) {
           setStatusSummary({
             verifiedCount: Array.isArray(baseVerifiedResults) ? baseVerifiedResults.length : 0,
+            universityCount: Number(baseUniversityCount) || 0,
             candidateCount: Array.isArray(baseCandidateResults) ? baseCandidateResults.length : 0,
             blockedCount: 0,
             expansionEnabled: false,
@@ -2409,6 +3384,10 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           const nextCandidateResults = Array.isArray(data.candidateResults)
             ? data.candidateResults
             : [];
+          const nextSearchGuidance =
+            data?.searchGuidance && typeof data.searchGuidance === "object"
+              ? data.searchGuidance
+              : null;
           const nextBlockedCount = Number(data.blockedResultCount) || 0;
           const nextSearchSessionId = String(data.searchSessionId || "").trim();
           if (nextSearchSessionId) {
@@ -2423,8 +3402,14 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           setStatus(
             data.message ? `${statusText} ${data.message}`.trim() : statusText
           );
+          renderSearchQuality(nextSearchGuidance, {
+            verifiedCount: Array.isArray(baseVerifiedResults) ? baseVerifiedResults.length : 0,
+            universityCount: Number(baseUniversityCount) || 0,
+            candidateCount: nextCandidateResults.length,
+          });
           setStatusSummary({
             verifiedCount: Array.isArray(baseVerifiedResults) ? baseVerifiedResults.length : 0,
+            universityCount: Number(baseUniversityCount) || 0,
             candidateCount: nextCandidateResults.length,
             blockedCount: nextBlockedCount,
             expansionEnabled: Boolean(data.expansionEnabled),
@@ -2438,6 +3423,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           setStatus(statusText);
           setStatusSummary({
             verifiedCount: Array.isArray(baseVerifiedResults) ? baseVerifiedResults.length : 0,
+            universityCount: Number(baseUniversityCount) || 0,
             candidateCount: Array.isArray(baseCandidateResults) ? baseCandidateResults.length : 0,
             blockedCount: 0,
             expansionEnabled: true,
@@ -2568,6 +3554,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           "可以先放宽国家条件，或者改选更宽的专业方向，比如从“商业分析 / 数据”切到“商科 / 管理”。";
         setStatusSummary({
           verifiedCount: initialResults.length,
+          universityCount: seedUniversityMatches.length,
           candidateCount: 0,
           blockedCount: 0,
           expansionEnabled: false,
@@ -2580,6 +3567,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         renderCandidateResults([]);
         hideExpansionSuggestion();
         hideIntentExplanation();
+        hideSearchQuality();
         fitPreviewToken += 1;
         clearFitPreviews();
         hideDetailPanel();
@@ -2648,14 +3636,19 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             data?.resolvedQuery && typeof data.resolvedQuery === "object"
               ? data.resolvedQuery
               : payload;
+          const nextSearchGuidance =
+            data?.searchGuidance && typeof data.searchGuidance === "object"
+              ? data.searchGuidance
+              : null;
           const nextSearchSessionId = String(data.searchSessionId || "").trim();
           const nextBlockedCount = Number(data.blockedResultCount) || 0;
 
           activeDetailProgramId = "";
           lastEmptyText =
-            nextCandidateResults.length
+            String(nextSearchGuidance?.failureReason || "").trim() ||
+            (nextCandidateResults.length
               ? "当前没有找到完全匹配的已核验项目，可以先参考下方全网候选官网页。"
-              : "当前没有找到完全匹配的已核验项目。建议先放宽国家或专业方向。";
+              : "当前没有找到完全匹配的已核验项目。建议先放宽国家或专业方向。");
 
           if (fromSchoolFilter) {
             activeSearchPayload = {
@@ -2663,6 +3656,11 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             };
             applyResolvedQueryToControls(resolvedQuery);
             renderIntentExplanation(resolvedQuery);
+            renderSearchQuality(nextSearchGuidance, {
+              verifiedCount: nextVerifiedResults.length,
+              universityCount: 1,
+              candidateCount: 0,
+            });
             selectedUniversityId = String(payload.universityId || "");
             activeVerifiedResults = nextVerifiedResults;
             const selectedSchool =
@@ -2679,6 +3677,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             hideExpansionSuggestion();
             setStatusSummary({
               verifiedCount: nextVerifiedResults.length,
+              universityCount: 1,
               candidateCount: 0,
               blockedCount: nextBlockedCount,
               expansionEnabled: Boolean(data.expansionEnabled),
@@ -2733,8 +3732,14 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
             candidateCount: nextCandidateResults.length,
           });
           renderIntentExplanation(lastBasePayload);
+          renderSearchQuality(nextSearchGuidance, {
+            verifiedCount: nextVerifiedResults.length,
+            universityCount: nextUniversityCount,
+            candidateCount: nextCandidateResults.length,
+          });
           setStatusSummary({
             verifiedCount: nextVerifiedResults.length,
+            universityCount: nextUniversityCount,
             candidateCount: nextCandidateResults.length,
             blockedCount: nextBlockedCount,
             expansionEnabled: Boolean(data.expansionEnabled),
@@ -2752,8 +3757,10 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           renderCandidateResults([]);
           hideExpansionSuggestion();
           hideIntentExplanation();
+          hideSearchQuality();
           setStatusSummary({
             verifiedCount: 0,
+            universityCount: 0,
             candidateCount: 0,
             blockedCount: 0,
             expansionEnabled: false,
@@ -2944,20 +3951,36 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
       if (verifiedResultsNode instanceof HTMLElement) {
         verifiedResultsNode.addEventListener("click", (event) => {
-          const target = event.target instanceof Element
-            ? event.target.closest("[data-program-detail-button]")
-            : null;
+          const target = event.target instanceof Element ? event.target.closest("button") : null;
 
           if (!(target instanceof HTMLElement)) {
             return;
           }
 
-          const programId = target.getAttribute("data-program-detail-button") || "";
-          if (!programId) {
+          const favoriteProgramId = target.getAttribute("data-program-favorite-button") || "";
+          if (favoriteProgramId) {
+            const program = programCardLookup(favoriteProgramId);
+            if (program) {
+              toggleProgramFavorite(program);
+            }
             return;
           }
 
-          openProgramDetails(programId);
+          const compareProgramId = target.getAttribute("data-program-compare-button") || "";
+          if (compareProgramId) {
+            const program = programCardLookup(compareProgramId);
+            if (program) {
+              toggleCompareProgram(program);
+            }
+            return;
+          }
+
+          const detailProgramId = target.getAttribute("data-program-detail-button") || "";
+          if (!detailProgramId) {
+            return;
+          }
+
+          openProgramDetails(detailProgramId);
         });
       }
 
@@ -3017,9 +4040,125 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         detailCloseButton.addEventListener("click", hideDetailPanel);
       }
 
+      if (schoolSummaryFavoriteButton instanceof HTMLButtonElement) {
+        schoolSummaryFavoriteButton.addEventListener("click", () => {
+          if (selectedSchoolSummary) {
+            toggleSchoolFavorite(selectedSchoolSummary);
+          }
+        });
+      }
+
+      if (saveSearchButton instanceof HTMLButtonElement) {
+        saveSearchButton.addEventListener("click", saveCurrentSearch);
+      }
+
+      if (exportCsvButton instanceof HTMLButtonElement) {
+        exportCsvButton.addEventListener("click", exportCurrentResultsAsCsv);
+      }
+
+      if (exportJsonButton instanceof HTMLButtonElement) {
+        exportJsonButton.addEventListener("click", exportCurrentResultsAsJson);
+      }
+
+      if (generateSummaryButton instanceof HTMLButtonElement) {
+        generateSummaryButton.addEventListener("click", () => {
+          renderConsultSummary();
+          setStatus("咨询摘要已生成，你可以直接复制给顾问。");
+        });
+      }
+
+      if (copySummaryButton instanceof HTMLButtonElement) {
+        copySummaryButton.addEventListener("click", () => {
+          void copyConsultSummary();
+        });
+      }
+
+      if (downloadSummaryButton instanceof HTMLButtonElement) {
+        downloadSummaryButton.addEventListener("click", downloadConsultSummary);
+      }
+
+      if (handoffContactButton instanceof HTMLButtonElement) {
+        handoffContactButton.addEventListener("click", handoffConsultSummaryToContactForm);
+      }
+
+      if (clearFavoriteSchoolsButton instanceof HTMLButtonElement) {
+        clearFavoriteSchoolsButton.addEventListener("click", () => clearUtilityCollection("schools"));
+      }
+
+      if (clearFavoriteProgramsButton instanceof HTMLButtonElement) {
+        clearFavoriteProgramsButton.addEventListener("click", () => clearUtilityCollection("programs"));
+      }
+
+      if (clearSavedSearchesButton instanceof HTMLButtonElement) {
+        clearSavedSearchesButton.addEventListener("click", () => clearUtilityCollection("saved-searches"));
+      }
+
+      if (clearCompareButton instanceof HTMLButtonElement) {
+        clearCompareButton.addEventListener("click", () => clearUtilityCollection("compare"));
+      }
+
+      if (utilitySection instanceof HTMLElement) {
+        utilitySection.addEventListener("click", (event) => {
+          const target = event.target instanceof Element ? event.target.closest("button") : null;
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+
+          const action = target.getAttribute("data-toolbox-action");
+          if (!action) {
+            return;
+          }
+
+          if (action === "remove-school-favorite") {
+            const universityId = target.getAttribute("data-university-id") || "";
+            favoriteSchools = favoriteSchools.filter((item) => item.universityId !== universityId);
+            persistFavorites();
+            renderToolboxLists();
+            syncUtilityActionStates();
+            setStatus("已移除收藏学校。");
+            return;
+          }
+
+          if (action === "remove-program-favorite") {
+            const programId = target.getAttribute("data-program-id") || "";
+            favoritePrograms = favoritePrograms.filter((item) => item.id !== programId);
+            persistFavorites();
+            renderToolboxLists();
+            syncUtilityActionStates();
+            setStatus("已移除收藏项目。");
+            return;
+          }
+
+          if (action === "remove-saved-search") {
+            const savedSearchId = target.getAttribute("data-saved-search-id") || "";
+            savedSearches = savedSearches.filter((item) => item.id !== savedSearchId);
+            persistSavedSearches();
+            renderToolboxLists();
+            setStatus("已删除这条已保存搜索。");
+            return;
+          }
+
+          if (action === "apply-saved-search") {
+            const savedSearchId = target.getAttribute("data-saved-search-id") || "";
+            applySavedSearch(savedSearchId);
+            return;
+          }
+
+          if (action === "toggle-compare") {
+            const programId = target.getAttribute("data-program-id") || "";
+            const program = programCardLookup(programId);
+            if (program) {
+              toggleCompareProgram(program);
+            }
+          }
+        });
+      }
+
       renderUniversityMatches(seedUniversityMatches, seedUniversityMatches.length, "");
       updateSpecializationOptions("");
       clearFitPreviews();
+      loadUtilityState();
+      syncUtilityActionStates();
     }
   </script>
 </section>

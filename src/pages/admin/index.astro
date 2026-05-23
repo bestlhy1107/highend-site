@@ -116,6 +116,54 @@ const APPOINTMENT_LABELS: Record<string, string> = {
   consultation: "预约咨询",
 };
 
+const SOURCE_LABELS: Record<string, string> = {
+  homepage: "官网首页",
+  "school-finder": "选校页带入",
+};
+
+function normalizeLeadSource(value: string | null | undefined) {
+  return String(value ?? "").trim() || "homepage";
+}
+
+function isSchoolFinderSummaryLead(lead: { source?: string; need?: string }) {
+  const source = normalizeLeadSource(lead.source);
+  const need = String(lead.need ?? "");
+  return (
+    source === "school-finder" ||
+    need.includes("院校搜索咨询摘要") ||
+    need.includes("搜索会话：") ||
+    need.includes("一、当前搜索条件")
+  );
+}
+
+function getLeadInsightTags(lead: { source?: string; need?: string }) {
+  const tags: string[] = [];
+  const source = normalizeLeadSource(lead.source);
+  const need = String(lead.need ?? "");
+
+  if (source === "school-finder") {
+    tags.push("来自选校页");
+  }
+
+  if (isSchoolFinderSummaryLead(lead)) {
+    tags.push("带搜索摘要");
+  }
+
+  if (need.includes("当前优先推荐项目")) {
+    tags.push("含推荐项目");
+  }
+
+  if (need.includes("收藏学校：") || need.includes("收藏项目：")) {
+    tags.push("含收藏偏好");
+  }
+
+  if (need.includes("当前对比项目：")) {
+    tags.push("含项目对比");
+  }
+
+  return tags;
+}
+
 function startOfToday() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -168,6 +216,8 @@ const examStats = Object.entries(examStatsMap)
   .sort((a, b) => b.count - a.count);
 
 const latestLeads = leads.slice(0, 10);
+const schoolFinderLeadCount = leads.filter((lead) => normalizeLeadSource(lead.source) === "school-finder").length;
+const summaryLeadCount = leads.filter((lead) => isSchoolFinderSummaryLead(lead)).length;
 const latestCatalogSyncRun = studyAbroadCatalogSyncState.runs[0] ?? null;
 const latestCampaignRun = studyAbroadCampaignOutlook.recentRuns[0] ?? null;
 const structuredCoveragePercent = studyAbroadCatalog.stats.programCount
@@ -1130,6 +1180,20 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
           )}
         </div>
       </div>
+
+      <div class="cards cards--2 mt-6">
+        <div class="card">
+          <div class="muted text-sm">来自选校页的线索</div>
+          <div class="h2 mt-2">{schoolFinderLeadCount}</div>
+          <p class="muted mt-2">这类线索通常带有更明确的国家、方向或项目偏好。</p>
+        </div>
+
+        <div class="card">
+          <div class="muted text-sm">带搜索摘要的线索</div>
+          <div class="h2 mt-2">{summaryLeadCount}</div>
+          <p class="muted mt-2">顾问可以直接从摘要里看到用户当前搜索条件、推荐项目和收藏偏好。</p>
+        </div>
+      </div>
     </section>
 
     <section id="leads" class="mt-8">
@@ -1167,6 +1231,12 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
               </div>
 
               <div class="mt-2 muted">来源：{lead.source ?? "homepage"}</div>
+              <div class="mt-2" style="display:flex; gap:8px; flex-wrap:wrap;">
+                <span class="badge">{SOURCE_LABELS[normalizeLeadSource(lead.source)] ?? normalizeLeadSource(lead.source)}</span>
+                {getLeadInsightTags(lead).map((tag) => (
+                  <span class="badge">{tag}</span>
+                ))}
+              </div>
               <div class="mt-2 muted">
                 预约类型：{APPOINTMENT_LABELS[lead.appointmentType] ?? lead.appointmentType}
               </div>

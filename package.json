@@ -10,6 +10,8 @@
     "study-abroad:campaign": "tsx scripts/run-study-abroad-campaign.ts",
     "study-abroad:catalog-sync": "npx @dotenvx/dotenvx run -- tsx scripts/run-study-abroad-catalog-sync.ts",
     "study-abroad:eval": "tsx scripts/run-study-abroad-search-eval.ts",
+    "study-abroad:python-pipeline": "python3 scripts/study_abroad_python_pipeline.py",
+    "study-abroad:runtime-acceptance": "npx @dotenvx/dotenvx run -- tsx scripts/run-study-abroad-search-runtime-acceptance.ts",
     "study-abroad:runtime-check": "npx @dotenvx/dotenvx run -- tsx scripts/check-study-abroad-search-runtime.ts"
   },
   "dependencies": {

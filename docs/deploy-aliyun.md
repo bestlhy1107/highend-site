@@ -1,36 +1,50 @@
-# 阿里云 ECS 部署与搜索放量清单
+# 阿里云 ECS 正确部署步骤
 
-适用域名：
-
-- `www.wanhe68.com`
-- `wanhe68.com`
-
-适用目录：
+这份文档以**当前线上实际可用环境**为准，不再使用旧的：
 
 - `/www/wwwroot/highend-site`
+- `wanhe68-site`
+- `127.0.0.1:3000`
 
-## 1. 首次部署
+当前线上正确参数是：
+
+- 项目目录：`/root/highend-site`
+- PM2 进程名：`highend-site`
+- Node 监听：`HOST=127.0.0.1`
+- Node 端口：`PORT=4321`
+
+## 1. 正确的上线 / 更新流程
 
 ```bash
-cd /www/wwwroot
-git clone https://github.com/bestlhy1107/highend-site.git highend-site
-cd /www/wwwroot/highend-site
-cp .env.example .env
-npm ci
+cd /root/highend-site
+
+# 0. 先确认你在正确的项目目录
+ls -la package.json package-lock.json
+
+# 1. 加载 .env
+set -a
+source ./.env
+set +a
+
+# 2. 构建
 npm run build
-pm2 start ecosystem.config.cjs
+
+# 3. 如果 PM2 里已有进程，就重启并更新环境变量；
+#    如果没有，就直接启动
+pm2 describe highend-site >/dev/null 2>&1 \
+  && pm2 restart highend-site --update-env \
+  || HOST=127.0.0.1 PORT=4321 pm2 start ./dist/server/entry.mjs --name highend-site
+
+# 4. 保存 PM2 进程列表
 pm2 save
-```
 
-如果已经有旧目录，先备份再覆盖：
-
-```bash
-mv /www/wwwroot/highend-site /www/wwwroot/highend-site-backup-$(date +%F-%H%M%S)
+# 5. 查看状态
+pm2 status
 ```
 
 ## 2. 生产环境变量
 
-最少需要配置这些变量：
+最少需要配置这些：
 
 ```env
 ADMIN_USERNAME=your-admin-username
@@ -67,50 +81,22 @@ COLLEGE_SCORECARD_API_KEY=replace-me
 推荐做法：
 
 - 优先只配 `BAIDU_APPBUILDER_API_KEY`
-- 改完 `.env` 后一定要重启 PM2
-- 重启后立刻跑一次运行时自检，不要只看后台文案
+- 改完 `.env` 后一定要按上面的流程重新 `source ./.env`
+- 构建后一定要用 `pm2 restart highend-site --update-env`
 
-## 3. 日常更新
+## 3. 扩搜密钥自检
+
+### 先确认项目里有没有这个脚本
 
 ```bash
-cd /www/wwwroot/highend-site
-git pull origin main
-npm ci
-npm run build
-pm2 restart wanhe68-site
+cd /root/highend-site
+npm run | grep study-abroad:runtime-check
 ```
 
-如果改了 PM2 配置：
+### 运行时是否读到了密钥
 
 ```bash
-pm2 delete wanhe68-site
-pm2 start ecosystem.config.cjs
-pm2 save
-```
-
-## 4. 反向代理要求
-
-Nginx 模板在：
-
-- `deploy/nginx/wanhe68.com.conf`
-
-需要确认所有站点请求都转发到：
-
-- `http://127.0.0.1:3000`
-
-如果改了 Nginx：
-
-```bash
-nginx -t
-systemctl reload nginx
-```
-
-## 5. 上线后验收
-
-### 先验证扩搜密钥是否真正被运行时读到
-
-```bash
-cd /www/wwwroot/highend-site
+cd /root/highend-site
 npm run study-abroad:runtime-check
 ```
 
@@ -119,10 +105,10 @@ npm run study-abroad:runtime-check
 - `"externalSearchEnabled": true`
 - `"apiKeyPresent": true`
 
-如果你想进一步确认接口能真的打通，再跑一遍探测：
+### 做一次真实扩搜探测
 
 ```bash
-cd /www/wwwroot/highend-site
+cd /root/highend-site
 npm run study-abroad:runtime-check -- --probe --country=英国 --degree=硕士 --major=金融
 ```
 
@@ -134,11 +120,30 @@ npm run study-abroad:runtime-check -- --probe --country=英国 --degree=硕士 -
 
 如果这里已经是 `probe.ok = true`，再去前台搜索，候选官网页基本就会开始放量。
 
+## 4. 反向代理要求
+
+Nginx 模板在：
+
+- `deploy/nginx/wanhe68.com.conf`
+
+需要确认所有站点请求都转发到：
+
+- `http://127.0.0.1:4321`
+
+如果改了 Nginx：
+
+```bash
+nginx -t
+systemctl reload nginx
+```
+
+## 5. 上线后验收
+
 ### Node 服务是否真的起来
 
 ```bash
-curl -I http://127.0.0.1:3000/
-curl -I http://127.0.0.1:3000/admin/login
+curl -I http://127.0.0.1:4321/
+curl -I http://127.0.0.1:4321/admin/login
 ```
 
 正常结果：
@@ -157,7 +162,7 @@ curl -I https://www.wanhe68.com/admin/login
 
 ```bash
 pm2 status
-pm2 logs wanhe68-site --lines 100
+pm2 logs highend-site --lines 100
 ```
 
 ### 后台搜索放量是否接通
@@ -172,18 +177,10 @@ pm2 logs wanhe68-site --lines 100
 - 最近搜索留痕里 `候选官网页` 是否开始大于 `0`
 - `接入提醒` 不再显示“还未配置百度扩搜密钥”
 
-如果后台还是显示未启用，但你已经改了 `.env`，优先执行：
-
-```bash
-cd /www/wwwroot/highend-site
-pm2 restart wanhe68-site
-npm run study-abroad:runtime-check
-```
-
 ### 直接打一次搜索接口
 
 ```bash
-curl -X POST http://127.0.0.1:3000/api/study-abroad/search \
+curl -X POST http://127.0.0.1:4321/api/study-abroad/search \
   -H 'Content-Type: application/json' \
   -d '{"country":"英国","degree":"硕士","major":"金融"}'
 ```
@@ -194,16 +191,6 @@ curl -X POST http://127.0.0.1:3000/api/study-abroad/search \
 - `searchSessionId`
 - `blockedResultCount`
 - `message`
-
-如果线上已经接通扩搜，再继续观察后台：
-
-- `/admin/school-search`
-
-应该会逐步出现：
-
-- 搜索留痕
-- 候选官网页
-- 可规避结果
 
 ## 6. 当前这版搜索的运行逻辑
 
@@ -219,32 +206,57 @@ curl -X POST http://127.0.0.1:3000/api/study-abroad/search \
 
 ## 7. 常见问题排查
 
-### 1) 域名 502
+### 1) `npm run build` 报 `ENOENT package.json`
+
+说明你不在正确目录。先执行：
+
+```bash
+cd /root/highend-site
+ls -la package.json package-lock.json
+```
+
+只有这里能看到文件，后面的构建才有意义。
+
+### 2) `pm2 restart highend-site` 提示进程不存在
+
+说明这台机器上还没有成功启动过。直接执行：
+
+```bash
+cd /root/highend-site
+set -a
+source ./.env
+set +a
+npm run build
+HOST=127.0.0.1 PORT=4321 pm2 start ./dist/server/entry.mjs --name highend-site
+pm2 save
+```
+
+### 3) 域名 502
 
 先查：
 
 ```bash
-curl -I http://127.0.0.1:3000/
+curl -I http://127.0.0.1:4321/
 ```
 
 如果这里不通，说明 Node 服务没起来，不是前台页面本身坏了。
 
-### 2) `/admin` 500 或打不开
+### 4) `/admin` 500 或打不开
 
 先查：
 
 ```bash
-curl -I http://127.0.0.1:3000/admin/login
-ls -ld /www/wwwroot/highend-site/.astro /www/wwwroot/highend-site/.astro/sessions
+curl -I http://127.0.0.1:4321/admin/login
+ls -ld /root/highend-site/.astro /root/highend-site/.astro/sessions
 ```
 
 再看：
 
 ```bash
-pm2 logs wanhe68-site --lines 200
+pm2 logs highend-site --lines 200
 ```
 
-### 3) 前台搜索结果量还是不大
+### 5) 前台搜索结果量还是不大
 
 优先检查：
 
@@ -252,17 +264,3 @@ pm2 logs wanhe68-site --lines 200
 - `npm run study-abroad:runtime-check -- --probe --country=英国 --degree=硕士 --major=金融` 是否通过
 - `/admin/school-search` 的 `全网扩搜状态` 是否已启用
 - 最近搜索留痕的 `候选官网页` 是否为 `0`
-
-### 4) 结果很多但不准
-
-去：
-
-- `/admin/school-search`
-
-处理：
-
-- `后续规避这条`
-- `规避整个站点`
-- `恢复显示`
-
-管理员的规避动作会直接影响后续搜索结果。

@@ -200,6 +200,286 @@
     }
   },
   {
+    "id": "uk-master-media",
+    "label": "英国硕士 / 市场营销 / 传媒",
+    "input": {
+      "country": "英国",
+      "degree": "硕士",
+      "major": "市场营销 / 传媒"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "市场营销 / 传媒"
+      }
+    }
+  },
+  {
+    "id": "uk-master-business",
+    "label": "英国硕士 / 商科 / 管理",
+    "input": {
+      "country": "英国",
+      "degree": "硕士",
+      "major": "商科 / 管理"
+    },
+    "expectations": {
+      "minVerifiedCount": 3,
+      "minUniversityCount": 3,
+      "minMeaningfulCount": 3,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "商科 / 管理"
+      }
+    }
+  },
+  {
+    "id": "uk-master-business-analytics",
+    "label": "英国硕士 / 商业分析 / 数据",
+    "input": {
+      "country": "英国",
+      "degree": "硕士",
+      "major": "商业分析 / 数据"
+    },
+    "expectations": {
+      "minVerifiedCount": 3,
+      "minUniversityCount": 2,
+      "minMeaningfulCount": 3,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "商业分析 / 数据"
+      }
+    }
+  },
+  {
+    "id": "uk-master-architecture",
+    "label": "英国硕士 / 建筑 / 城市规划",
+    "input": {
+      "country": "英国",
+      "degree": "硕士",
+      "major": "建筑 / 城市规划"
+    },
+    "expectations": {
+      "minVerifiedCount": 2,
+      "minUniversityCount": 2,
+      "minMeaningfulCount": 2,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "建筑 / 城市规划"
+      }
+    }
+  },
+  {
+    "id": "hk-master-business",
+    "label": "中国香港硕士 / 商科 / 管理",
+    "input": {
+      "country": "中国香港",
+      "degree": "硕士",
+      "major": "商科 / 管理"
+    },
+    "expectations": {
+      "minVerifiedCount": 3,
+      "minUniversityCount": 2,
+      "minMeaningfulCount": 3,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "中国香港",
+        "degree": "硕士",
+        "major": "商科 / 管理"
+      }
+    }
+  },
+  {
+    "id": "hk-master-finance",
+    "label": "中国香港硕士 / 金融",
+    "input": {
+      "country": "中国香港",
+      "degree": "硕士",
+      "major": "金融"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "中国香港",
+        "degree": "硕士",
+        "major": "金融"
+      }
+    }
+  },
+  {
+    "id": "sg-master-finance",
+    "label": "新加坡硕士 / 金融",
+    "input": {
+      "country": "新加坡",
+      "degree": "硕士",
+      "major": "金融"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "新加坡",
+        "degree": "硕士",
+        "major": "金融"
+      }
+    }
+  },
+  {
+    "id": "sg-master-business-analytics",
+    "label": "新加坡硕士 / 商业分析 / 数据",
+    "input": {
+      "country": "新加坡",
+      "degree": "硕士",
+      "major": "商业分析 / 数据"
+    },
+    "expectations": {
+      "minVerifiedCount": 3,
+      "minUniversityCount": 2,
+      "minMeaningfulCount": 3,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "新加坡",
+        "degree": "硕士",
+        "major": "商业分析 / 数据"
+      }
+    }
+  },
+  {
+    "id": "au-master-finance",
+    "label": "澳大利亚硕士 / 金融",
+    "input": {
+      "country": "澳大利亚",
+      "degree": "硕士",
+      "major": "金融"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "澳大利亚",
+        "degree": "硕士",
+        "major": "金融"
+      }
+    }
+  },
+  {
+    "id": "au-master-media",
+    "label": "澳大利亚硕士 / 市场营销 / 传媒",
+    "input": {
+      "country": "澳大利亚",
+      "degree": "硕士",
+      "major": "市场营销 / 传媒"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "澳大利亚",
+        "degree": "硕士",
+        "major": "市场营销 / 传媒"
+      }
+    }
+  },
+  {
+    "id": "us-master-media",
+    "label": "美国硕士 / 市场营销 / 传媒",
+    "input": {
+      "country": "美国",
+      "degree": "硕士",
+      "major": "市场营销 / 传媒"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 350,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "市场营销 / 传媒"
+      }
+    }
+  },
+  {
+    "id": "us-master-engineering",
+    "label": "美国硕士 / 机械 / 电子 / 工程",
+    "input": {
+      "country": "美国",
+      "degree": "硕士",
+      "major": "机械 / 电子 / 工程"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 250,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "机械 / 电子 / 工程"
+      }
+    }
+  },
+  {
+    "id": "us-master-public-policy",
+    "label": "美国硕士 / 公共政策 / 国际关系",
+    "input": {
+      "country": "美国",
+      "degree": "硕士",
+      "major": "公共政策 / 国际关系"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 250,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "公共政策 / 国际关系"
+      }
+    }
+  },
+  {
+    "id": "us-master-psychology",
+    "label": "美国硕士 / 心理学",
+    "input": {
+      "country": "美国",
+      "degree": "硕士",
+      "major": "心理学"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 350,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "心理学"
+      }
+    }
+  },
+  {
     "id": "free-text-uk-business-analytics",
     "label": "自由输入 / 英国一年制商科硕士 / 偏商业分析",
     "input": {
@@ -215,6 +495,44 @@
         "degree": "硕士",
         "major": "商业分析 / 数据",
         "specialization": "商业分析"
+      }
+    }
+  },
+  {
+    "id": "free-text-uk-media",
+    "label": "自由输入 / 英国传媒硕士",
+    "input": {
+      "freeText": "英国传媒硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "市场营销 / 传媒",
+        "specialization": "传媒"
+      }
+    }
+  },
+  {
+    "id": "free-text-uk-design",
+    "label": "自由输入 / 英国交互设计硕士",
+    "input": {
+      "freeText": "英国交互设计硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 6,
+      "minUniversityCount": 5,
+      "minMeaningfulCount": 6,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "设计 / 艺术",
+        "specialization": "交互设计"
       }
     }
   },
@@ -238,6 +556,24 @@
     }
   },
   {
+    "id": "free-text-hk-business",
+    "label": "自由输入 / 香港一年制商科硕士",
+    "input": {
+      "freeText": "香港一年制商科硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 3,
+      "minUniversityCount": 2,
+      "minMeaningfulCount": 3,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "中国香港",
+        "degree": "硕士",
+        "major": "商科 / 管理"
+      }
+    }
+  },
+  {
     "id": "free-text-us-ai",
     "label": "自由输入 / 美国计算机AI硕士",
     "input": {
@@ -257,6 +593,43 @@
     }
   },
   {
+    "id": "free-text-us-engineering",
+    "label": "自由输入 / 美国电子工程硕士",
+    "input": {
+      "freeText": "美国电子工程硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 250,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "机械 / 电子 / 工程"
+      }
+    }
+  },
+  {
+    "id": "free-text-us-media",
+    "label": "自由输入 / 美国传媒硕士",
+    "input": {
+      "freeText": "美国传媒硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 350,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "市场营销 / 传媒",
+        "specialization": "传媒"
+      }
+    }
+  },
+  {
     "id": "free-text-sg-business",
     "label": "自由输入 / 新加坡商科硕士",
     "input": {
@@ -271,6 +644,427 @@
         "country": "新加坡",
         "degree": "硕士",
         "major": "商科 / 管理"
+      }
+    }
+  },
+  {
+    "id": "free-text-sg-business-analytics",
+    "label": "自由输入 / 新加坡商业分析硕士",
+    "input": {
+      "freeText": "新加坡商业分析硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 3,
+      "minUniversityCount": 2,
+      "minMeaningfulCount": 3,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "新加坡",
+        "degree": "硕士",
+        "major": "商业分析 / 数据",
+        "specialization": "商业分析"
+      }
+    }
+  },
+  {
+    "id": "us-master-accounting",
+    "label": "美国硕士 / 会计",
+    "input": {
+      "country": "美国",
+      "degree": "硕士",
+      "major": "会计"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 350,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "会计"
+      }
+    }
+  },
+  {
+    "id": "us-master-public-health",
+    "label": "美国硕士 / 公共卫生",
+    "input": {
+      "country": "美国",
+      "degree": "硕士",
+      "major": "公共卫生"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 250,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "公共卫生"
+      }
+    }
+  },
+  {
+    "id": "us-master-biomed",
+    "label": "美国硕士 / 生物医学",
+    "input": {
+      "country": "美国",
+      "degree": "硕士",
+      "major": "生物 / 医学"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 350,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "生物 / 医学"
+      }
+    }
+  },
+  {
+    "id": "us-master-data-science",
+    "label": "美国硕士 / 商业分析数据 / 数据科学",
+    "input": {
+      "country": "美国",
+      "degree": "硕士",
+      "major": "商业分析 / 数据",
+      "specialization": "数据科学"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 500,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "商业分析 / 数据",
+        "specialization": "数据科学"
+      }
+    }
+  },
+  {
+    "id": "uk-master-cs",
+    "label": "英国硕士 / 计算机 / AI",
+    "input": {
+      "country": "英国",
+      "degree": "硕士",
+      "major": "计算机 / AI"
+    },
+    "expectations": {
+      "minVerifiedCount": 5,
+      "minUniversityCount": 4,
+      "minMeaningfulCount": 5,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "计算机 / AI"
+      }
+    }
+  },
+  {
+    "id": "uk-master-education",
+    "label": "英国硕士 / 教育",
+    "input": {
+      "country": "英国",
+      "degree": "硕士",
+      "major": "教育"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "教育"
+      }
+    }
+  },
+  {
+    "id": "hk-master-cs",
+    "label": "中国香港硕士 / 计算机 / AI",
+    "input": {
+      "country": "中国香港",
+      "degree": "硕士",
+      "major": "计算机 / AI"
+    },
+    "expectations": {
+      "minVerifiedCount": 2,
+      "minUniversityCount": 2,
+      "minMeaningfulCount": 2,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "中国香港",
+        "degree": "硕士",
+        "major": "计算机 / AI"
+      }
+    }
+  },
+  {
+    "id": "sg-master-cs",
+    "label": "新加坡硕士 / 计算机 / AI",
+    "input": {
+      "country": "新加坡",
+      "degree": "硕士",
+      "major": "计算机 / AI"
+    },
+    "expectations": {
+      "minVerifiedCount": 5,
+      "minUniversityCount": 3,
+      "minMeaningfulCount": 5,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "新加坡",
+        "degree": "硕士",
+        "major": "计算机 / AI"
+      }
+    }
+  },
+  {
+    "id": "au-master-cs",
+    "label": "澳大利亚硕士 / 计算机 / AI",
+    "input": {
+      "country": "澳大利亚",
+      "degree": "硕士",
+      "major": "计算机 / AI"
+    },
+    "expectations": {
+      "minVerifiedCount": 4,
+      "minUniversityCount": 4,
+      "minMeaningfulCount": 4,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "澳大利亚",
+        "degree": "硕士",
+        "major": "计算机 / AI"
+      }
+    }
+  },
+  {
+    "id": "free-text-uk-cs",
+    "label": "自由输入 / 英国计算机硕士",
+    "input": {
+      "freeText": "英国计算机硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 5,
+      "minUniversityCount": 4,
+      "minMeaningfulCount": 5,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "计算机 / AI"
+      }
+    }
+  },
+  {
+    "id": "free-text-sg-finance",
+    "label": "自由输入 / 新加坡金融硕士",
+    "input": {
+      "freeText": "新加坡金融硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 2,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 2,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "新加坡",
+        "degree": "硕士",
+        "major": "金融"
+      }
+    }
+  },
+  {
+    "id": "free-text-au-media-full",
+    "label": "自由输入 / 澳大利亚传媒硕士",
+    "input": {
+      "freeText": "澳大利亚传媒硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "澳大利亚",
+        "degree": "硕士",
+        "major": "市场营销 / 传媒",
+        "specialization": "传媒"
+      }
+    }
+  },
+  {
+    "id": "free-text-au-cs",
+    "label": "自由输入 / 澳大利亚计算机硕士",
+    "input": {
+      "freeText": "澳大利亚计算机硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 4,
+      "minUniversityCount": 4,
+      "minMeaningfulCount": 4,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "澳大利亚",
+        "degree": "硕士",
+        "major": "计算机 / AI"
+      }
+    }
+  },
+  {
+    "id": "free-text-hk-cs",
+    "label": "自由输入 / 香港计算机硕士",
+    "input": {
+      "freeText": "香港计算机硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 2,
+      "minUniversityCount": 2,
+      "minMeaningfulCount": 2,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "中国香港",
+        "degree": "硕士",
+        "major": "计算机 / AI"
+      }
+    }
+  },
+  {
+    "id": "free-text-sg-cs",
+    "label": "自由输入 / 新加坡计算机硕士",
+    "input": {
+      "freeText": "新加坡计算机硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 5,
+      "minUniversityCount": 3,
+      "minMeaningfulCount": 5,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "新加坡",
+        "degree": "硕士",
+        "major": "计算机 / AI"
+      }
+    }
+  },
+  {
+    "id": "free-text-uk-education",
+    "label": "自由输入 / 英国教育硕士",
+    "input": {
+      "freeText": "英国教育硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 1,
+      "minUniversityCount": 1,
+      "minMeaningfulCount": 1,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "教育"
+      }
+    }
+  },
+  {
+    "id": "free-text-us-accounting",
+    "label": "自由输入 / 美国会计硕士",
+    "input": {
+      "freeText": "美国会计硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 350,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "会计",
+        "specialization": "会计"
+      }
+    }
+  },
+  {
+    "id": "free-text-us-public-health",
+    "label": "自由输入 / 美国公共卫生硕士",
+    "input": {
+      "freeText": "美国公共卫生硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 250,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "公共卫生"
+      }
+    }
+  },
+  {
+    "id": "free-text-us-data-science",
+    "label": "自由输入 / 美国数据科学硕士",
+    "input": {
+      "freeText": "美国数据科学硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 500,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "计算机 / AI",
+        "specialization": "数据科学"
+      }
+    }
+  },
+  {
+    "id": "free-text-us-finance-gpa",
+    "label": "自由输入 / 美国金融硕士 GPA 3.3",
+    "input": {
+      "freeText": "美国金融硕士 GPA 3.3 预算中等"
+    },
+    "expectations": {
+      "minVerifiedCount": 120,
+      "minUniversityCount": 250,
+      "minMeaningfulCount": 120,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "美国",
+        "degree": "硕士",
+        "major": "金融"
+      }
+    }
+  },
+  {
+    "id": "free-text-uk-ai",
+    "label": "自由输入 / 英国人工智能硕士",
+    "input": {
+      "freeText": "英国人工智能硕士"
+    },
+    "expectations": {
+      "minVerifiedCount": 6,
+      "minUniversityCount": 4,
+      "minMeaningfulCount": 6,
+      "maxBlockedCount": 0,
+      "resolved": {
+        "country": "英国",
+        "degree": "硕士",
+        "major": "计算机 / AI",
+        "specialization": "人工智能"
       }
     }
   }

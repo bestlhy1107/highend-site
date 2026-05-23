@@ -15,6 +15,10 @@ import {
   SPECIALIZATION_TO_MAJOR,
 } from "./study-abroad-programs";
 import { readStudyAbroadReviewQueue } from "./study-abroad-review-queue";
+import {
+  isBlockedStudyAbroadCandidate,
+  readStudyAbroadSearchBlocklist,
+} from "./study-abroad-search-governance";
 import { slugify } from "./text-fields";
 
 const REVIEW_IMPORT_SOURCE_ID = "review-queue-manual-import";
@@ -567,4 +571,180 @@ export async function importStudyAbroadReviewCandidate(params: {
     program: nextProgram,
     message: `已把候选官网页导入正式项目库：${nextProgram.schoolName} / ${nextProgram.programName}。`,
   };
+}
+
+export async function importStudyAbroadReviewCandidatesByCredibility(params: {
+  entryId: string;
+  credibilityMode: "high" | "high-medium" | "all";
+}) {
+  const entryId = String(params.entryId ?? "").trim();
+  const credibilityMode =
+    params.credibilityMode === "high" ||
+    params.credibilityMode === "high-medium" ||
+    params.credibilityMode === "all"
+      ? params.credibilityMode
+      : "high";
+
+  if (!entryId) {
+    return {
+      ok: false,
+      processedCount: 0,
+      createdCount: 0,
+      alreadyExistsCount: 0,
+      skippedBlockedCount: 0,
+      skippedPdfCount: 0,
+      failedCount: 0,
+      message: "缺少候选任务 ID，暂时无法批量导入。",
+    };
+  }
+
+  const [queue, blocklist] = await Promise.all([
+    readStudyAbroadReviewQueue(),
+    readStudyAbroadSearchBlocklist(),
+  ]);
+  const entry = queue.find((item) => item.id === entryId);
+
+  if (!entry) {
+    return {
+      ok: false,
+      processedCount: 0,
+      createdCount: 0,
+      alreadyExistsCount: 0,
+      skippedBlockedCount: 0,
+      skippedPdfCount: 0,
+      failedCount: 0,
+      message: "这条候选任务不存在，可能已经被处理。",
+    };
+  }
+
+  const eligibleCandidates = [...entry.candidates]
+    .filter((candidate) => matchesCredibilityMode(candidate.credibilityLevel, credibilityMode))
+    .sort(compareCandidatesForBatchImport);
+
+  if (!eligibleCandidates.length) {
+    return {
+      ok: true,
+      processedCount: 0,
+      createdCount: 0,
+      alreadyExistsCount: 0,
+      skippedBlockedCount: 0,
+      skippedPdfCount: 0,
+      failedCount: 0,
+      message: `当前没有符合“${describeCredibilityMode(credibilityMode)}”条件的候选可批量导入。`,
+    };
+  }
+
+  let createdCount = 0;
+  let alreadyExistsCount = 0;
+  let skippedBlockedCount = 0;
+  let skippedPdfCount = 0;
+  let failedCount = 0;
+
+  for (const candidate of eligibleCandidates) {
+    if (isBlockedStudyAbroadCandidate(candidate, blocklist)) {
+      skippedBlockedCount += 1;
+      continue;
+    }
+
+    if (isPdfLink(candidate.link)) {
+      skippedPdfCount += 1;
+      continue;
+    }
+
+    const result = await importStudyAbroadReviewCandidate({
+      entryId,
+      candidateLink: candidate.link,
+    });
+
+    if (result.created) {
+      createdCount += 1;
+    } else if (result.alreadyExists) {
+      alreadyExistsCount += 1;
+    } else {
+      failedCount += 1;
+    }
+  }
+
+  const processedCount =
+    createdCount +
+    alreadyExistsCount +
+    skippedBlockedCount +
+    skippedPdfCount +
+    failedCount;
+
+  return {
+    ok: processedCount > 0,
+    processedCount,
+    createdCount,
+    alreadyExistsCount,
+    skippedBlockedCount,
+    skippedPdfCount,
+    failedCount,
+    message: [
+      `已批量处理 ${processedCount} 条${describeCredibilityMode(credibilityMode)}候选。`,
+      createdCount ? `新导入 ${createdCount} 条` : "",
+      alreadyExistsCount ? `已在正式库 ${alreadyExistsCount} 条` : "",
+      skippedBlockedCount ? `跳过规避来源 ${skippedBlockedCount} 条` : "",
+      skippedPdfCount ? `跳过 PDF ${skippedPdfCount} 条` : "",
+      failedCount ? `失败 ${failedCount} 条` : "",
+    ]
+      .filter(Boolean)
+      .join("，"),
+  };
+}
+
+function matchesCredibilityMode(
+  value: "high" | "medium" | "watch" | undefined,
+  mode: "high" | "high-medium" | "all"
+) {
+  if (mode === "all") return true;
+  if (mode === "high-medium") return value === "high" || value === "medium";
+  return value === "high";
+}
+
+function compareCandidatesForBatchImport(
+  left: {
+    credibilityLevel?: "high" | "medium" | "watch";
+    score?: number;
+    authorityScore?: number;
+    rerankScore?: number;
+    title?: string;
+  },
+  right: {
+    credibilityLevel?: "high" | "medium" | "watch";
+    score?: number;
+    authorityScore?: number;
+    rerankScore?: number;
+    title?: string;
+  }
+) {
+  return (
+    credibilityPriority(right.credibilityLevel) - credibilityPriority(left.credibilityLevel) ||
+    Number(right.score ?? 0) - Number(left.score ?? 0) ||
+    Number(right.authorityScore ?? 0) - Number(left.authorityScore ?? 0) ||
+    Number(right.rerankScore ?? 0) - Number(left.rerankScore ?? 0) ||
+    String(left.title || "").localeCompare(String(right.title || ""), "zh-CN")
+  );
+}
+
+function credibilityPriority(value?: "high" | "medium" | "watch") {
+  switch (value) {
+    case "high":
+      return 3;
+    case "medium":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function describeCredibilityMode(mode: "high" | "high-medium" | "all") {
+  switch (mode) {
+    case "high-medium":
+      return "高+中可信";
+    case "all":
+      return "全部";
+    default:
+      return "高可信";
+  }
 }

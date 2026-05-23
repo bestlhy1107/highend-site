@@ -4,7 +4,10 @@ export const prerender = false;
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { actions } from "astro:actions";
 import { readStudyAbroadCatalogPrograms } from "../../lib/study-abroad-catalog-store";
-import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
+import {
+  collectStudyAbroadReviewAvoidDomainSuggestions,
+  readStudyAbroadReviewQueue,
+} from "../../lib/study-abroad-review-queue";
 import { getStudyAbroadSearchRuntimeStatus } from "../../lib/study-abroad-search";
 import {
   normalizeStudyAbroadGovernanceLink,
@@ -17,8 +20,11 @@ import {
   readStudyAbroadSearchEvalReport,
   type StudyAbroadSearchEvalCaseReport,
   type StudyAbroadSearchEvalHistoryItem,
+  type StudyAbroadSearchEvalSegmentSummary,
 } from "../../lib/study-abroad-search-eval";
+import { readStudyAbroadSearchRuntimeAcceptanceReport } from "../../lib/study-abroad-search-runtime-acceptance";
 import {
+  autoArchiveCompletedStudyAbroadSearchExecutionPlans,
   buildStudyAbroadSearchExecutionPlanId,
   readStudyAbroadSearchExecutionPlanRecords,
 } from "../../lib/study-abroad-search-execution-plan";
@@ -33,6 +39,83 @@ function extractReviewDomain(value?: string) {
   } catch {
     return "";
   }
+}
+
+function looksLikePdfReviewLink(value?: string) {
+  return normalizeReviewLink(value).toLowerCase().endsWith(".pdf");
+}
+
+function getCandidateCredibilityLevel(candidate: {
+  credibilityLevel?: "high" | "medium" | "watch";
+}) {
+  return candidate.credibilityLevel === "high" || candidate.credibilityLevel === "medium"
+    ? candidate.credibilityLevel
+    : "watch";
+}
+
+function getCandidateCredibilityLabel(level: "high" | "medium" | "watch") {
+  switch (level) {
+    case "high":
+      return "高可信";
+    case "medium":
+      return "中可信";
+    default:
+      return "待核对";
+  }
+}
+
+function getCandidateCredibilityPriority(level: "high" | "medium" | "watch") {
+  switch (level) {
+    case "high":
+      return 3;
+    case "medium":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function summarizeReviewCandidateCredibility(candidates: {
+  credibilityLevel?: "high" | "medium" | "watch";
+}[]) {
+  return candidates.reduce(
+    (acc, candidate) => {
+      const level = getCandidateCredibilityLevel(candidate);
+      acc[level] += 1;
+      return acc;
+    },
+    {
+      high: 0,
+      medium: 0,
+      watch: 0,
+    }
+  );
+}
+
+function compareReviewCandidates(
+  left: {
+    credibilityLevel?: "high" | "medium" | "watch";
+    score?: number;
+    authorityScore?: number;
+    rerankScore?: number;
+    title?: string;
+  },
+  right: {
+    credibilityLevel?: "high" | "medium" | "watch";
+    score?: number;
+    authorityScore?: number;
+    rerankScore?: number;
+    title?: string;
+  }
+) {
+  return (
+    getCandidateCredibilityPriority(getCandidateCredibilityLevel(right)) -
+      getCandidateCredibilityPriority(getCandidateCredibilityLevel(left)) ||
+    Number(right.score || 0) - Number(left.score || 0) ||
+    Number(right.authorityScore || 0) - Number(left.authorityScore || 0) ||
+    Number(right.rerankScore || 0) - Number(left.rerankScore || 0) ||
+    String(left.title || "").localeCompare(String(right.title || ""), "zh-CN")
+  );
 }
 
 function summarizeSearchQuery(query?: {
@@ -153,9 +236,17 @@ function buildEvalHistoryItemFromReport(report: {
   zeroResultCases: number;
   lowResultCases: number;
   candidateHeavyCases: number;
+  candidateHeavyRate?: number;
+  blockedCases?: number;
+  totalBlockedCount?: number;
+  averageBlockedCount?: number;
+  blockedResultRate?: number;
+  postAvoidQualityRate?: number;
   averageVerifiedCount: number;
   averageUniversityCount: number;
   averageCandidateCount: number;
+  byCountry?: StudyAbroadSearchEvalSegmentSummary[];
+  byMajor?: StudyAbroadSearchEvalSegmentSummary[];
 }): StudyAbroadSearchEvalHistoryItem {
   return {
     generatedAt: report.generatedAt,
@@ -166,9 +257,18 @@ function buildEvalHistoryItemFromReport(report: {
     zeroResultCases: report.zeroResultCases,
     lowResultCases: report.lowResultCases,
     candidateHeavyCases: report.candidateHeavyCases,
+    candidateHeavyRate: report.candidateHeavyRate || 0,
+    blockedCases: report.blockedCases || 0,
+    totalBlockedCount: report.totalBlockedCount || 0,
+    averageBlockedCount: report.averageBlockedCount || 0,
+    blockedResultRate: report.blockedResultRate || 0,
+    postAvoidQualityRate:
+      typeof report.postAvoidQualityRate === "number" ? report.postAvoidQualityRate : 100,
     averageVerifiedCount: report.averageVerifiedCount,
     averageUniversityCount: report.averageUniversityCount,
     averageCandidateCount: report.averageCandidateCount,
+    byCountry: Array.isArray(report.byCountry) ? report.byCountry : [],
+    byMajor: Array.isArray(report.byMajor) ? report.byMajor : [],
   };
 }
 
@@ -230,11 +330,18 @@ function buildWeeklyExecutionSummary(input: {
   topActionLabel?: string;
   completedLabels?: string[];
   attentionLabels?: string[];
+  weakestCountryLabel?: string;
+  weakestMajorLabel?: string;
 }) {
   if (!input.touchedCount) {
+    const weakestSummary = [input.weakestCountryLabel, input.weakestMajorLabel]
+      .filter(Boolean)
+      .join(" / ");
     return {
       headline: "本周还没有实际推进记录。",
-      detail: "建议先从下周自动执行清单的前 1 到 3 组开始，先把最优先的国家和方向跑起来。",
+      detail: weakestSummary
+        ? `建议先从下周自动执行清单的前 1 到 3 组开始，优先处理当前最弱的 ${weakestSummary}。`
+        : "建议先从下周自动执行清单的前 1 到 3 组开始，先把最优先的国家和方向跑起来。",
     };
   }
 
@@ -250,6 +357,14 @@ function buildWeeklyExecutionSummary(input: {
 
   if (input.topActionLabel) {
     detailParts.push(`最近最常执行：${input.topActionLabel}`);
+  }
+
+  if (input.weakestCountryLabel) {
+    detailParts.push(`当前最弱国家：${input.weakestCountryLabel}`);
+  }
+
+  if (input.weakestMajorLabel) {
+    detailParts.push(`当前最弱方向：${input.weakestMajorLabel}`);
   }
 
   return {
@@ -301,6 +416,8 @@ function buildWeeklyExecutionRecommendations(input: {
   topActionLabel?: string;
   completedLabels?: string[];
   attentionLabels?: string[];
+  weakestCountryLabel?: string;
+  weakestMajorLabel?: string;
   primaryPlan?: {
     id: string;
     label: string;
@@ -310,19 +427,24 @@ function buildWeeklyExecutionRecommendations(input: {
       major: string;
       specialization: string;
     };
+    pendingEntryId?: string;
+    batchImportHighCount?: number;
+    batchImportHighMediumCount?: number;
+    batchAvoidWatchCount?: number;
+    batchAvoidWatchMediumCount?: number;
     status?: "pending" | "in_progress" | "completed";
     lastActionSummary?: string;
     lastActionAt?: string;
     completedAt?: string;
-    } | null;
-  }) {
+  } | null;
+}) {
   const primaryPlanStatus = input.primaryPlan?.status || "pending";
   const primaryPlanActionable = Boolean(input.primaryPlan && primaryPlanStatus !== "completed");
   const recommendations: Array<{
     title: string;
     detail: string;
     actionLabel: string;
-    actionType: "anchor" | "sync" | "country";
+    actionType: "anchor" | "sync" | "country" | "import-high" | "avoid-watch-medium";
     actionHref?: string;
     plan?: {
       id: string;
@@ -333,6 +455,11 @@ function buildWeeklyExecutionRecommendations(input: {
         major: string;
         specialization: string;
       };
+      pendingEntryId?: string;
+      batchImportHighCount?: number;
+      batchImportHighMediumCount?: number;
+      batchAvoidWatchCount?: number;
+      batchAvoidWatchMediumCount?: number;
     } | null;
     statusLabel?: string;
     statusDetail?: string;
@@ -341,7 +468,10 @@ function buildWeeklyExecutionRecommendations(input: {
   if (!input.touchedCount) {
     recommendations.push({
       title: "先把本周第一组计划跑起来",
-      detail: "先从下周自动执行清单的前 1 组开始，把最优先的国家和方向真正跑起来。",
+      detail:
+        input.weakestCountryLabel || input.weakestMajorLabel
+          ? `先从下周自动执行清单的前 1 组开始，优先处理当前最弱的 ${[input.weakestCountryLabel, input.weakestMajorLabel].filter(Boolean).join(" / ")}。`
+          : "先从下周自动执行清单的前 1 组开始，把最优先的国家和方向真正跑起来。",
       actionLabel: primaryPlanActionable ? "直接去补这组门槛" : "去执行清单处理",
       actionType: primaryPlanActionable ? "sync" : "anchor",
       actionHref: primaryPlanActionable ? undefined : "#eval-next-week-plan",
@@ -374,7 +504,7 @@ function buildWeeklyExecutionRecommendations(input: {
     recommendations.push({
       title: "先清掉还卡着的计划",
       detail: stuckLabels
-        ? `优先回到执行清单处理 ${input.attentionCount} 组未完成计划，先清掉 ${stuckLabels}。`
+        ? `优先回到执行清单处理 ${input.attentionCount} 组未完成计划，先清掉 ${stuckLabels}${input.weakestCountryLabel ? `，同时盯住当前最弱国家 ${input.weakestCountryLabel}` : ""}。`
         : `优先回到执行清单处理 ${input.attentionCount} 组未完成计划，避免这周动作只停留在“处理中”。`,
       actionLabel: "去执行清单处理",
       actionType: "anchor",
@@ -394,6 +524,40 @@ function buildWeeklyExecutionRecommendations(input: {
     }
   }
 
+  if (
+    primaryPlanActionable &&
+    input.primaryPlan?.pendingEntryId &&
+    input.primaryPlan.batchImportHighCount &&
+    recommendations.length < 3
+  ) {
+    recommendations.push({
+      title: "先批量导入高可信候选",
+      detail: `${input.primaryPlan.label} 当前还有 ${input.primaryPlan.batchImportHighCount} 条高可信候选没进正式库，先导入这批通常最能直接放大正式结果。`,
+      actionLabel: `导入高可信候选（${input.primaryPlan.batchImportHighCount}）`,
+      actionType: "import-high",
+      plan: input.primaryPlan,
+      statusLabel: buildWeeklyRecommendationPlanStatus(input.primaryPlan).label,
+      statusDetail: buildWeeklyRecommendationPlanStatus(input.primaryPlan).detail,
+    });
+  }
+
+  if (
+    primaryPlanActionable &&
+    input.primaryPlan?.pendingEntryId &&
+    input.primaryPlan.batchAvoidWatchMediumCount &&
+    recommendations.length < 3
+  ) {
+    recommendations.push({
+      title: "顺手清掉重复低质来源",
+      detail: `${input.primaryPlan.label} 当前有 ${input.primaryPlan.batchAvoidWatchMediumCount} 个中低可信重复来源可直接规避，清掉后候选噪音会更低。`,
+      actionLabel: `规避中低可信来源（${input.primaryPlan.batchAvoidWatchMediumCount}）`,
+      actionType: "avoid-watch-medium",
+      plan: input.primaryPlan,
+      statusLabel: buildWeeklyRecommendationPlanStatus(input.primaryPlan).label,
+      statusDetail: buildWeeklyRecommendationPlanStatus(input.primaryPlan).detail,
+    });
+  }
+
   if (input.touchedCount > 0 && input.completedCount === 0) {
     recommendations.push({
       title: "先收口一组已完成计划",
@@ -408,7 +572,7 @@ function buildWeeklyExecutionRecommendations(input: {
   if (input.completedLabels?.length && recommendations.length < 3) {
     recommendations.push({
       title: "把已完成节奏复制到同类方向",
-      detail: `已完成的节奏开始形成了，下一步建议复制到同类方向，比如 ${input.completedLabels.slice(0, 2).join("、")}。`,
+      detail: `已完成的节奏开始形成了，下一步建议复制到同类方向，比如 ${input.completedLabels.slice(0, 2).join("、")}${input.weakestMajorLabel ? `，优先对当前最弱方向 ${input.weakestMajorLabel} 复用这套节奏。` : "。"} `,
       actionLabel: "查看本周补库榜单",
       actionType: "anchor",
       actionHref: "#eval-weekly-focus",
@@ -419,7 +583,10 @@ function buildWeeklyExecutionRecommendations(input: {
   if (!input.attentionCount && input.completedCount > 0 && recommendations.length < 3) {
     recommendations.push({
       title: "当前优先计划已经做完，切到下一组方向",
-      detail: "这周最核心的执行计划已经完成，下一步建议回到本周补库榜单，从下一组国家 / 专业方向继续推进。",
+      detail:
+        input.weakestCountryLabel || input.weakestMajorLabel
+          ? `这周最核心的执行计划已经完成，下一步建议回到本周补库榜单，优先接手当前最弱的 ${[input.weakestCountryLabel, input.weakestMajorLabel].filter(Boolean).join(" / ")}。`
+          : "这周最核心的执行计划已经完成，下一步建议回到本周补库榜单，从下一组国家 / 专业方向继续推进。",
       actionLabel: "查看本周补库榜单",
       actionType: "anchor",
       actionHref: "#eval-weekly-focus",
@@ -449,9 +616,22 @@ if (!adminUser) {
 const importCandidateResult = Astro.getActionResult(actions.importStudyAbroadReviewCandidate);
 const importCandidateNotice =
   importCandidateResult && !importCandidateResult.error ? importCandidateResult.data : null;
+const importCandidateBatchResult = Astro.getActionResult(
+  actions.importStudyAbroadReviewCandidatesByCredibility
+);
+const importCandidateBatchNotice =
+  importCandidateBatchResult && !importCandidateBatchResult.error
+    ? importCandidateBatchResult.data
+    : null;
+const batchAvoidRuleResult = Astro.getActionResult(actions.createStudyAbroadReviewBatchAvoidRules);
+const batchAvoidRuleNotice =
+  batchAvoidRuleResult && !batchAvoidRuleResult.error ? batchAvoidRuleResult.data : null;
 const reviewQueueResult = Astro.getActionResult(actions.updateStudyAbroadReviewQueueStatus);
 const reviewQueueNotice =
   reviewQueueResult && !reviewQueueResult.error ? reviewQueueResult.data : null;
+const reviewQueueNoteResult = Astro.getActionResult(actions.updateStudyAbroadReviewEntryNote);
+const reviewQueueNoteNotice =
+  reviewQueueNoteResult && !reviewQueueNoteResult.error ? reviewQueueNoteResult.data : null;
 const admissionsSyncResult = Astro.getActionResult(actions.syncStudyAbroadAdmissionsSnapshots);
 const admissionsSyncNotice =
   admissionsSyncResult && !admissionsSyncResult.error ? admissionsSyncResult.data : null;
@@ -476,7 +656,20 @@ const updateExecutionPlanStatusNotice =
     ? updateExecutionPlanStatusResult.data
     : null;
 
-const [queue, catalogPrograms, auditEntries, avoidRules, evalReport, evalHistoryRaw, executionPlanRecords] = await Promise.all([
+const archivedExecutionPlanResult = await autoArchiveCompletedStudyAbroadSearchExecutionPlans({
+  olderThanDays: 7,
+});
+
+const [
+  queue,
+  catalogPrograms,
+  auditEntries,
+  avoidRules,
+  evalReport,
+  evalHistoryRaw,
+  executionPlanRecords,
+  runtimeAcceptanceReport,
+] = await Promise.all([
   readStudyAbroadReviewQueue(),
   readStudyAbroadCatalogPrograms(),
   readStudyAbroadSearchAuditEntries(),
@@ -484,6 +677,7 @@ const [queue, catalogPrograms, auditEntries, avoidRules, evalReport, evalHistory
   readStudyAbroadSearchEvalReport(),
   readStudyAbroadSearchEvalHistory(),
   readStudyAbroadSearchExecutionPlanRecords(),
+  readStudyAbroadSearchRuntimeAcceptanceReport(),
 ]);
 const studyAbroadSearchRuntime = getStudyAbroadSearchRuntimeStatus();
 
@@ -495,8 +689,101 @@ const importedProgramByLink = new Map(
       .map((link) => [link, program] as const)
   )
 );
+const activeAvoidDomainSet = new Set(
+  avoidRules
+    .filter((rule) => rule.status === "active" && rule.targetType === "domain" && rule.domain)
+    .map((rule) => rule.domain)
+);
 
-const pendingItems = queue.filter((item) => item.status === "pending");
+const candidateCredibilityFilterRaw = String(
+  Astro.url.searchParams.get("candidateCredibility") || "all"
+).trim();
+const candidateCredibilityFilter =
+  candidateCredibilityFilterRaw === "high" ||
+  candidateCredibilityFilterRaw === "medium" ||
+  candidateCredibilityFilterRaw === "watch"
+    ? candidateCredibilityFilterRaw
+    : "all";
+
+const pendingQueueCount = queue.filter((item) => item.status === "pending").length;
+const archivedExecutionPlanCount = archivedExecutionPlanResult.archivedCount;
+
+const pendingItems = queue
+  .filter((item) => item.status === "pending")
+  .map((item) => {
+    const sortedCandidates = [...item.candidates].sort(compareReviewCandidates);
+    const filteredCandidates =
+      candidateCredibilityFilter === "all"
+        ? sortedCandidates
+        : sortedCandidates.filter(
+            (candidate) => getCandidateCredibilityLevel(candidate) === candidateCredibilityFilter
+          );
+    const credibilitySummary = summarizeReviewCandidateCredibility(sortedCandidates);
+    const batchAvoidWatchSuggestions = collectStudyAbroadReviewAvoidDomainSuggestions(
+      { candidates: sortedCandidates },
+      {
+        credibilityMode: "watch",
+        blockedDomains: activeAvoidDomainSet,
+        minOccurrences: 2,
+      }
+    );
+    const batchAvoidWatchMediumSuggestions = collectStudyAbroadReviewAvoidDomainSuggestions(
+      { candidates: sortedCandidates },
+      {
+        credibilityMode: "watch-medium",
+        blockedDomains: activeAvoidDomainSet,
+        minOccurrences: 2,
+      }
+    );
+
+    return {
+      ...item,
+      candidates: filteredCandidates,
+      totalCandidateCount: sortedCandidates.length,
+      filteredCandidateCount: filteredCandidates.length,
+      credibilitySummary,
+      batchEligibleHighCount: sortedCandidates.filter((candidate) => {
+        const normalizedLink = normalizeReviewLink(candidate.link);
+        return (
+          getCandidateCredibilityLevel(candidate) === "high" &&
+          !importedProgramByLink.has(normalizedLink) &&
+          !findActiveAvoidRuleForLink(candidate.link) &&
+          !looksLikePdfReviewLink(candidate.link)
+        );
+      }).length,
+      batchEligibleHighMediumCount: sortedCandidates.filter((candidate) => {
+        const normalizedLink = normalizeReviewLink(candidate.link);
+        const credibilityLevel = getCandidateCredibilityLevel(candidate);
+        return (
+          (credibilityLevel === "high" || credibilityLevel === "medium") &&
+          !importedProgramByLink.has(normalizedLink) &&
+          !findActiveAvoidRuleForLink(candidate.link) &&
+          !looksLikePdfReviewLink(candidate.link)
+        );
+      }).length,
+      batchAvoidWatchSuggestions,
+      batchAvoidWatchMediumSuggestions,
+      batchAvoidWatchCount: batchAvoidWatchSuggestions.length,
+      batchAvoidWatchMediumCount: batchAvoidWatchMediumSuggestions.length,
+    };
+  })
+  .filter((item) => item.filteredCandidateCount > 0)
+  .sort((left, right) => {
+    const leftImported = left.candidates.filter((candidate) =>
+      importedProgramByLink.has(normalizeReviewLink(candidate.link))
+    ).length;
+    const rightImported = right.candidates.filter((candidate) =>
+      importedProgramByLink.has(normalizeReviewLink(candidate.link))
+    ).length;
+
+    return (
+      right.credibilitySummary.high - left.credibilitySummary.high ||
+      right.credibilitySummary.medium - left.credibilitySummary.medium ||
+      leftImported - rightImported ||
+      right.filteredCandidateCount - left.filteredCandidateCount ||
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+    );
+  });
 const reviewedItems = queue.filter((item) => item.status === "reviewed");
 const discardedItems = queue.filter((item) => item.status === "discarded");
 const recentHandledItems = [...queue]
@@ -513,6 +800,40 @@ const highBlockedAuditEntries = auditEntries
   .filter((entry) => Number(entry.blockedResultCount) > 0)
   .slice(0, 8);
 const activeAvoidRules = avoidRules.filter((rule) => rule.status === "active");
+const pendingCandidateCredibilitySummary = pendingItems.reduce(
+  (acc, item) => {
+    acc.high += item.credibilitySummary.high;
+    acc.medium += item.credibilitySummary.medium;
+    acc.watch += item.credibilitySummary.watch;
+    acc.total += item.totalCandidateCount;
+    return acc;
+  },
+  {
+    high: 0,
+    medium: 0,
+    watch: 0,
+    total: 0,
+  }
+);
+const runtimeAcceptanceCases = runtimeAcceptanceReport?.cases || [];
+const runtimeAcceptanceCandidateTotal = runtimeAcceptanceCases.reduce(
+  (sum, item) => sum + item.candidateCount,
+  0
+);
+const runtimeAcceptanceHighTotal = runtimeAcceptanceCases.reduce(
+  (sum, item) => sum + item.highCredibilityCount,
+  0
+);
+const runtimeAcceptanceAvoidSuggestionTotal = runtimeAcceptanceCases.reduce(
+  (sum, item) => sum + item.avoidSuggestionWatchMediumCount,
+  0
+);
+const runtimeAcceptanceFailedCases = runtimeAcceptanceCases.filter((item) => !item.ok);
+const runtimeAcceptanceActionableCases = runtimeAcceptanceCases.filter(
+  (item) =>
+    item.pendingQueueEntryId &&
+    (item.highCredibilityCount > 0 || item.avoidSuggestionWatchMediumCount > 0)
+);
 const activeRuleByProgramId = new Map(
   activeAvoidRules
     .filter((rule) => rule.targetType === "program" && rule.programId)
@@ -829,6 +1150,151 @@ const evalGovernanceLeaderboard = Array.from(
   .sort((left, right) => right.priority - left.priority || right.caseCount - left.caseCount)
   .slice(0, 6);
 
+function findEvalGovernanceLeaderboardItemForSegment(input: {
+  kind: "country" | "major";
+  key: string;
+}) {
+  return (
+    evalGovernanceLeaderboard.find((item) =>
+      input.kind === "country"
+        ? item.query.country === input.key
+        : item.query.major === input.key
+    ) || null
+  );
+}
+
+function buildEvalSegmentActionQuery(input: {
+  kind: "country" | "major";
+  key: string;
+}) {
+  const leaderboardItem = findEvalGovernanceLeaderboardItemForSegment(input);
+  if (leaderboardItem) {
+    return leaderboardItem.query;
+  }
+
+  return normalizeGovernanceQuery({
+    country: input.kind === "country" ? input.key : "",
+    degree: "",
+    major: input.kind === "major" ? input.key : "",
+    specialization: "",
+  });
+}
+
+function buildEvalSegmentSuggestion(input: {
+  kind: "country" | "major";
+  label: string;
+  passRate: number;
+  zeroResultCases: number;
+  lowResultCases: number;
+  candidateHeavyCases: number;
+}) {
+  if (input.zeroResultCases > 0) {
+    return input.kind === "country"
+      ? `这个国家已经出现零结果样例，优先补 ${input.label} 的基础项目池，再补门槛。`
+      : `这个方向已经出现零结果样例，优先补 ${input.label} 的正式项目，再检查方向映射是不是过窄。`;
+  }
+
+  if (input.candidateHeavyCases > 0) {
+    return input.kind === "country"
+      ? `这个国家有多条查询主要靠候选结果撑着，建议先导入高可信候选，再清理重复低质来源。`
+      : `这个方向正在被候选结果支撑，建议先导入高可信候选，再补正式库和门槛。`;
+  }
+
+  if (input.lowResultCases > 0 || input.passRate < 100) {
+    return input.kind === "country"
+      ? `这个国家的正式结果开始变薄，适合先补门槛，再补热门学校和项目。`
+      : `这个方向的召回还不够厚，适合先补正式项目，再放宽同类方向映射。`;
+  }
+
+  return input.kind === "country"
+    ? `这个国家当前整体稳定，继续观察是否有新查询开始掉到候选主导。`
+    : `这个方向当前整体稳定，继续观察是否需要扩细分方向和同类方向覆盖。`;
+}
+
+function buildEvalSegmentSeverityLabel(input: {
+  passRate: number;
+  zeroResultCases: number;
+  lowResultCases: number;
+  candidateHeavyCases: number;
+}) {
+  if (input.zeroResultCases > 0) return "优先补库";
+  if (input.candidateHeavyCases > 0) return "候选偏重";
+  if (input.lowResultCases > 0 || input.passRate < 100) return "需要加厚";
+  return "整体稳定";
+}
+
+function buildEvalSegmentTrendLeaders(input: {
+  kind: "country" | "major";
+  currentItems: StudyAbroadSearchEvalSegmentSummary[];
+  previousItems: StudyAbroadSearchEvalSegmentSummary[];
+}) {
+  const previousMap = new Map(input.previousItems.map((item) => [item.key, item] as const));
+
+  return input.currentItems
+    .map((item) => {
+      const previous = previousMap.get(item.key) || null;
+      const passRateDelta = previous ? Number((item.passRate - previous.passRate).toFixed(1)) : 0;
+      const lowDelta = previous ? item.lowResultCases - previous.lowResultCases : 0;
+      const zeroDelta = previous ? item.zeroResultCases - previous.zeroResultCases : 0;
+      const candidateHeavyDelta = previous
+        ? item.candidateHeavyCases - previous.candidateHeavyCases
+        : 0;
+      const weaknessScore =
+        item.zeroResultCases * 80 +
+        item.lowResultCases * 40 +
+        item.candidateHeavyCases * 35 +
+        Math.max(0, 100 - item.passRate) +
+        (zeroDelta > 0 ? zeroDelta * 30 : 0) +
+        (lowDelta > 0 ? lowDelta * 18 : 0) +
+        (candidateHeavyDelta > 0 ? candidateHeavyDelta * 16 : 0) +
+        (passRateDelta < 0 ? Math.abs(passRateDelta) * 2 : 0);
+
+      const trendSummary = !previous
+        ? "这是第一轮分段记录，后续继续跑评测后这里会开始显示真实趋势。"
+        : [
+            passRateDelta < 0
+              ? `通过率下降 ${Math.abs(passRateDelta).toFixed(1)}%`
+              : passRateDelta > 0
+                ? `通过率提升 ${passRateDelta.toFixed(1)}%`
+                : "通过率持平",
+            zeroDelta > 0
+              ? `零结果 +${zeroDelta}`
+              : zeroDelta < 0
+                ? `零结果 ${zeroDelta}`
+                : "零结果持平",
+            lowDelta > 0
+              ? `低结果 +${lowDelta}`
+              : lowDelta < 0
+                ? `低结果 ${lowDelta}`
+                : "低结果持平",
+            candidateHeavyDelta > 0
+              ? `候选主导 +${candidateHeavyDelta}`
+              : candidateHeavyDelta < 0
+                ? `候选主导 ${candidateHeavyDelta}`
+                : "候选主导持平",
+          ].join(" · ");
+
+      return {
+        ...item,
+        previous,
+        passRateDelta,
+        lowDelta,
+        zeroDelta,
+        candidateHeavyDelta,
+        weaknessScore,
+        trendSummary,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.weaknessScore - left.weaknessScore ||
+        left.passRate - right.passRate ||
+        right.zeroResultCases - left.zeroResultCases ||
+        right.lowResultCases - left.lowResultCases
+    )
+    .slice(0, 6);
+}
+
 const evalHistory =
   evalHistoryRaw.length > 0
     ? evalHistoryRaw
@@ -855,8 +1321,39 @@ const evalTrendSummary = latestEvalSnapshot
         previousEvalSnapshot?.averageUniversityCount ?? null,
         { digits: 1, higherIsBetter: true, unit: " 所" }
       ),
+      candidateHeavyRate: formatEvalTrendDelta(
+        latestEvalSnapshot.candidateHeavyRate,
+        previousEvalSnapshot?.candidateHeavyRate ?? null,
+        { digits: 1, higherIsBetter: false, unit: "%" }
+      ),
+      postAvoidQualityRate: formatEvalTrendDelta(
+        latestEvalSnapshot.postAvoidQualityRate,
+        previousEvalSnapshot?.postAvoidQualityRate ?? null,
+        { digits: 1, higherIsBetter: true, unit: "%" }
+      ),
+      blockedResultRate: formatEvalTrendDelta(
+        latestEvalSnapshot.blockedResultRate,
+        previousEvalSnapshot?.blockedResultRate ?? null,
+        { digits: 1, higherIsBetter: false, unit: "%" }
+      ),
     }
   : null;
+const evalCountrySegments = evalReport?.byCountry.slice(0, 6) || [];
+const evalMajorSegments = evalReport?.byMajor.slice(0, 6) || [];
+const previousEvalCountrySegments = previousEvalSnapshot?.byCountry || [];
+const previousEvalMajorSegments = previousEvalSnapshot?.byMajor || [];
+const evalCountryWeakTrendLeaders = buildEvalSegmentTrendLeaders({
+  kind: "country",
+  currentItems: evalCountrySegments,
+  previousItems: previousEvalCountrySegments,
+});
+const evalMajorWeakTrendLeaders = buildEvalSegmentTrendLeaders({
+  kind: "major",
+  currentItems: evalMajorSegments,
+  previousItems: previousEvalMajorSegments,
+});
+const weakestEvalCountryLeader = evalCountryWeakTrendLeaders[0] || null;
+const weakestEvalMajorLeader = evalMajorWeakTrendLeaders[0] || null;
 const primaryEvalLeaderboardItem = evalGovernanceLeaderboard[0] || null;
 const primaryEvalTrendQuery = primaryEvalLeaderboardItem?.query || null;
 const primaryEvalTrendExecutionPlanId = primaryEvalTrendQuery
@@ -915,6 +1412,25 @@ const evalTrendAlerts =
               suggestion: "优先导入热门候选并补门槛，同时规避重复误命中的来源站点。",
             }
           : null,
+        latestEvalSnapshot.postAvoidQualityRate < previousEvalSnapshot.postAvoidQualityRate
+          ? {
+              id: "post-avoid-quality-down",
+              title: "规避后质量率下降",
+              severity: "需要复盘",
+              summary: `规避后质量率从 ${previousEvalSnapshot.postAvoidQualityRate}% 降到 ${latestEvalSnapshot.postAvoidQualityRate}%，说明坏来源或误命中变多。`,
+              suggestion: "复查最近审核备注和高规避命中搜索，优先处理重复域名和低可信候选来源。",
+            }
+          : null,
+        latestEvalSnapshot.postAvoidQualityRate > previousEvalSnapshot.postAvoidQualityRate &&
+        latestEvalSnapshot.blockedResultRate <= previousEvalSnapshot.blockedResultRate
+          ? {
+              id: "post-avoid-quality-up",
+              title: "规避后质量率提升",
+              severity: "继续保持",
+              summary: `规避后质量率从 ${previousEvalSnapshot.postAvoidQualityRate}% 提升到 ${latestEvalSnapshot.postAvoidQualityRate}%，低质来源占比正在下降。`,
+              suggestion: "继续沿用当前规避规则，同时把高可信候选导入正式库，减少前台依赖候选结果。",
+            }
+          : null,
       ].filter(
         (
           item
@@ -953,6 +1469,7 @@ const evalExecutionPlan = evalGovernanceLeaderboard.slice(0, 5).map((item, index
   ...item,
   planRecord: executionPlanRecordById.get(item.id) || null,
 }));
+const activeExecutionPlanRecords = executionPlanRecords.filter((item) => !item.archivedAt);
 const executionPlanPendingCount = evalExecutionPlan.filter(
   (item) => (item.planRecord?.status || "pending") === "pending"
 ).length;
@@ -963,16 +1480,41 @@ const executionPlanCompletedCount = evalExecutionPlan.filter(
   (item) => item.planRecord?.status === "completed"
 ).length;
 const currentWeekStart = getStartOfWeek();
-const executionPlanTouchedThisWeek = executionPlanRecords.filter((item) =>
+const executionPlanTouchedThisWeek = activeExecutionPlanRecords.filter((item) =>
   isWithinCurrentWeek(item.updatedAt, currentWeekStart)
 );
-const executionPlanCompletedThisWeek = executionPlanRecords
+const executionPlanCompletedThisWeek = activeExecutionPlanRecords
   .filter((item) => isWithinCurrentWeek(item.completedAt, currentWeekStart))
   .sort(
     (left, right) =>
       new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime()
   )
   .slice(0, 5);
+const executionPlanCompletedThisWeekCount = activeExecutionPlanRecords.filter((item) =>
+  isWithinCurrentWeek(item.completedAt, currentWeekStart)
+).length;
+const executionPlanStartedThisWeek = activeExecutionPlanRecords.filter((item) =>
+  isWithinCurrentWeek(item.startedAt, currentWeekStart)
+);
+const executionPlanCompletionRate = executionPlanStartedThisWeek.length
+  ? Math.round((executionPlanCompletedThisWeekCount / executionPlanStartedThisWeek.length) * 100)
+  : 0;
+const executionPlanAverageProcessingDurationHours = (() => {
+  const durations = activeExecutionPlanRecords
+    .filter((item) => isWithinCurrentWeek(item.completedAt, currentWeekStart) && item.startedAt && item.completedAt)
+    .map((item) => {
+      const startedAt = new Date(item.startedAt).getTime();
+      const completedAt = new Date(item.completedAt).getTime();
+      if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || completedAt < startedAt) {
+        return null;
+      }
+      return (completedAt - startedAt) / (1000 * 60 * 60);
+    })
+    .filter((item): item is number => typeof item === "number");
+
+  if (!durations.length) return 0;
+  return durations.reduce((sum, value) => sum + value, 0) / durations.length;
+})();
 const executionPlanTopActions = Array.from(
   executionPlanTouchedThisWeek.reduce((map, item) => {
     const key = summarizeExecutionAction(item.lastActionSummary);
@@ -1002,7 +1544,15 @@ const executionWeeklySummary = buildWeeklyExecutionSummary({
   topActionLabel: executionPlanTopActions[0]?.label,
   completedLabels: executionPlanCompletedThisWeek.map((item) => item.label),
   attentionLabels: executionPlanAttentionItems.map((item) => item.label),
+  weakestCountryLabel: weakestEvalCountryLeader?.label,
+  weakestMajorLabel: weakestEvalMajorLeader?.label,
 });
+const executionWeeklyPrimaryPendingEntry = executionWeeklyPrimaryPlan
+  ? findPendingReviewEntryForQuery(normalizeGovernanceQuery(executionWeeklyPrimaryPlan.query))
+  : null;
+const executionWeeklyPrimaryPendingSummary = getPendingEntryBatchAvoidSummary(
+  executionWeeklyPrimaryPendingEntry
+);
 const executionWeeklyRecommendations = buildWeeklyExecutionRecommendations({
   touchedCount: executionPlanTouchedThisWeek.length,
   completedCount: executionPlanCompletedThisWeek.length,
@@ -1010,11 +1560,18 @@ const executionWeeklyRecommendations = buildWeeklyExecutionRecommendations({
   topActionLabel: executionPlanTopActions[0]?.label,
   completedLabels: executionPlanCompletedThisWeek.map((item) => item.label),
   attentionLabels: executionPlanAttentionItems.map((item) => item.label),
+  weakestCountryLabel: weakestEvalCountryLeader?.label,
+  weakestMajorLabel: weakestEvalMajorLeader?.label,
   primaryPlan: executionWeeklyPrimaryPlan
     ? {
         id: executionWeeklyPrimaryPlan.id,
         label: executionWeeklyPrimaryPlan.label,
         query: executionWeeklyPrimaryPlan.query,
+        pendingEntryId: executionWeeklyPrimaryPendingEntry?.id,
+        batchImportHighCount: executionWeeklyPrimaryPendingSummary.highCount,
+        batchImportHighMediumCount: executionWeeklyPrimaryPendingSummary.highMediumCount,
+        batchAvoidWatchCount: executionWeeklyPrimaryPendingSummary.watchCount,
+        batchAvoidWatchMediumCount: executionWeeklyPrimaryPendingSummary.watchMediumCount,
         status: executionWeeklyPrimaryPlan.planRecord?.status || "pending",
         lastActionSummary: executionWeeklyPrimaryPlan.planRecord?.lastActionSummary,
         lastActionAt: executionWeeklyPrimaryPlan.planRecord?.lastActionAt,
@@ -1071,6 +1628,30 @@ function findPendingReviewEntryForQuery(query: {
       )
     ) || null
   );
+}
+
+function getPendingEntryBatchAvoidSummary(
+  entry:
+    | {
+        id?: string;
+        batchEligibleHighCount?: number;
+        batchEligibleHighMediumCount?: number;
+        batchAvoidWatchCount?: number;
+        batchAvoidWatchMediumCount?: number;
+        batchAvoidWatchSuggestions?: Array<{ domain: string; count: number }>;
+      }
+    | null
+    | undefined
+) {
+  return {
+    highCount: Number(entry?.batchEligibleHighCount || 0),
+    highMediumCount: Number(entry?.batchEligibleHighMediumCount || 0),
+    watchCount: Number(entry?.batchAvoidWatchCount || 0),
+    watchMediumCount: Number(entry?.batchAvoidWatchMediumCount || 0),
+    watchPreview: Array.isArray(entry?.batchAvoidWatchSuggestions)
+      ? entry.batchAvoidWatchSuggestions.slice(0, 3)
+      : [],
+  };
 }
 
 function findRecentAuditEntryForBucket(bucket: {
@@ -1187,7 +1768,10 @@ function findSuggestedAvoidDomainForQuery(query: {
 
 const notices = [
   importCandidateNotice,
+  importCandidateBatchNotice,
+  batchAvoidRuleNotice,
   reviewQueueNotice,
+  reviewQueueNoteNotice,
   admissionsSyncNotice,
   admissionsCountryTargetNotice,
   createAvoidRuleNotice,
@@ -1268,6 +1852,129 @@ const notices = [
       </div>
     </div>
 
+    {runtimeAcceptanceReport ? (
+      <div id="runtime-acceptance-report" class="card mt-4">
+        <div class="card-top">
+          <div>
+            <div class="h3">最近线上扩搜验收</div>
+            <p class="muted mt-2">
+              {runtimeAcceptanceReport.summary || "已读取最近一次线上验收报告。"} ·
+              {" "}
+              {runtimeAcceptanceReport.generatedAt
+                ? new Date(runtimeAcceptanceReport.generatedAt).toLocaleString("zh-CN")
+                : "暂无生成时间"}
+            </p>
+          </div>
+          <span class="badge">
+            {runtimeAcceptanceReport.skipped
+              ? "已跳过"
+              : `${runtimeAcceptanceReport.passedCases}/${runtimeAcceptanceReport.totalCases} 通过`}
+          </span>
+        </div>
+
+        <div class="cards cards--3 mt-4">
+          <div class="card">
+            <div class="muted text-sm">验收候选总量</div>
+            <div class="h2 mt-2">{runtimeAcceptanceCandidateTotal}</div>
+            <p class="muted mt-2">
+              高可信 {runtimeAcceptanceHighTotal} 条 · 失败样例 {runtimeAcceptanceFailedCases.length} 条
+            </p>
+          </div>
+          <div class="card">
+            <div class="muted text-sm">后台承接状态</div>
+            <div class="h2 mt-2">{runtimeAcceptanceActionableCases.length}</div>
+            <p class="muted mt-2">
+              有待审核任务和可执行动作的验收样例数。
+            </p>
+          </div>
+          <div class="card">
+            <div class="muted text-sm">低质来源建议</div>
+            <div class="h2 mt-2">{runtimeAcceptanceAvoidSuggestionTotal}</div>
+            <p class="muted mt-2">
+              可优先在候选审核里批量规避中低可信重复来源。
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          {runtimeAcceptanceCases.length ? runtimeAcceptanceCases.map((item) => (
+            <div class="faq">
+              <div class="card-top">
+                <div>
+                  <div class="h3">{item.label}</div>
+                  <div class="muted mt-1">
+                    {summarizeSearchQuery(item.resolvedQuery)} · Session：{item.sessionId}
+                  </div>
+                </div>
+                <span class={`badge ${item.ok ? "" : "badge-danger"}`}>
+                  {item.ok ? "通过" : "需处理"}
+                </span>
+              </div>
+              <div class="detail-actions mt-3">
+                <span class="badge">正式 {item.verifiedCount}</span>
+                <span class="badge">候选 {item.candidateCount}</span>
+                <span class="badge">高可信 {item.highCredibilityCount}</span>
+                <span class="badge">中可信 {item.mediumCredibilityCount}</span>
+                <span class="badge">待核对 {item.watchCredibilityCount}</span>
+                {item.avoidSuggestionWatchMediumCount ? (
+                  <span class="badge">可规避来源 {item.avoidSuggestionWatchMediumCount}</span>
+                ) : null}
+              </div>
+              {item.failures.length ? (
+                <div class="muted mt-3">
+                  {item.failures.join(" ")}
+                </div>
+              ) : null}
+              <div class="detail-actions mt-3">
+                {item.pendingQueueEntryId ? (
+                  <a class="btn btn-ghost" href={`#review-entry-${item.pendingQueueEntryId}`}>
+                    查看待审核候选
+                  </a>
+                ) : null}
+                {item.auditEntryFound ? (
+                  <a class="btn btn-ghost" href={`#search-audit-${item.sessionId}`}>
+                    查看搜索留痕
+                  </a>
+                ) : null}
+                {item.pendingQueueEntryId && item.highCredibilityCount ? (
+                  <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                    <input type="hidden" name="entryId" value={item.pendingQueueEntryId} />
+                    <input type="hidden" name="credibilityMode" value="high" />
+                    <button class="btn" type="submit">
+                      批量导入高可信（{item.highCredibilityCount}）
+                    </button>
+                  </form>
+                ) : null}
+                {item.pendingQueueEntryId && item.avoidSuggestionWatchMediumCount ? (
+                  <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                    <input type="hidden" name="entryId" value={item.pendingQueueEntryId} />
+                    <input type="hidden" name="credibilityMode" value="watch-medium" />
+                    <button class="btn btn-ghost" type="submit">
+                      批量规避中低可信（{item.avoidSuggestionWatchMediumCount}）
+                    </button>
+                  </form>
+                ) : null}
+              </div>
+            </div>
+          )) : (
+            <div class="muted">
+              还没有线上验收样例。执行 <code>npm run study-abroad:runtime-acceptance</code> 后，这里会显示最新结果。
+            </div>
+          )}
+        </div>
+      </div>
+    ) : (
+      <div class="card mt-4">
+        <div class="card-top">
+          <div class="h3">最近线上扩搜验收</div>
+          <span class="badge">未生成</span>
+        </div>
+        <p class="muted mt-2">
+          还没有读取到线上验收报告。执行 <code>npm run study-abroad:runtime-acceptance</code> 后，这里会显示候选放量、搜索留痕和后台承接情况。
+        </p>
+      </div>
+    )}
+
     {evalReport ? (
       <>
         <div class="cards cards--3 mt-4">
@@ -1299,6 +2006,32 @@ const notices = [
           </div>
         </div>
 
+        <div class="cards cards--3 mt-4">
+          <div class="card">
+            <div class="muted text-sm">候选主导率</div>
+            <div class="h2 mt-2">{evalReport.candidateHeavyRate}%</div>
+            <p class="muted mt-2">
+              候选主导 {evalReport.candidateHeavyCases}/{evalReport.totalCases} 条，用来判断正式库是不是撑得住用户搜索。
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="muted text-sm">规避命中</div>
+            <div class="h2 mt-2">{evalReport.totalBlockedCount}</div>
+            <p class="muted mt-2">
+              命中规避 {evalReport.blockedCases} 条样例 · 规避占比 {evalReport.blockedResultRate}%
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="muted text-sm">规避后质量率</div>
+            <div class="h2 mt-2">{evalReport.postAvoidQualityRate}%</div>
+            <p class="muted mt-2">
+              质量率越高，说明被规避名单清掉后的有效结果越稳定。
+            </p>
+          </div>
+        </div>
+
         {latestEvalSnapshot && evalTrendSummary ? (
           <div class="card mt-4">
             <div class="card-top">
@@ -1306,7 +2039,7 @@ const notices = [
               <span class="badge">{recentEvalHistory.length} 次记录</span>
             </div>
             <p class="muted mt-2">
-              这里不是只看这一轮的分数，而是看最近几次评测是不是持续在变好。优先盯住通过率、低结果样例和平均学校池这三项。
+              这里不是只看这一轮的分数，而是看最近几次评测是不是持续在变好。优先盯住通过率、低结果样例、候选主导率和规避后质量率。
             </p>
 
             <div class="cards cards--3 mt-4">
@@ -1329,6 +2062,26 @@ const notices = [
               </div>
             </div>
 
+            <div class="cards cards--3 mt-4">
+              <div class="card">
+                <div class="muted text-sm">候选主导率趋势</div>
+                <div class="h2 mt-2">{latestEvalSnapshot.candidateHeavyRate}%</div>
+                <p class="muted mt-2">{evalTrendSummary.candidateHeavyRate}</p>
+              </div>
+
+              <div class="card">
+                <div class="muted text-sm">规避后质量趋势</div>
+                <div class="h2 mt-2">{latestEvalSnapshot.postAvoidQualityRate}%</div>
+                <p class="muted mt-2">{evalTrendSummary.postAvoidQualityRate}</p>
+              </div>
+
+              <div class="card">
+                <div class="muted text-sm">规避占比趋势</div>
+                <div class="h2 mt-2">{latestEvalSnapshot.blockedResultRate}%</div>
+                <p class="muted mt-2">{evalTrendSummary.blockedResultRate}</p>
+              </div>
+            </div>
+
             <div class="mt-4">
               {recentEvalHistory.map((item) => (
                 <div class="faq">
@@ -1339,10 +2092,374 @@ const notices = [
                     <span class="badge">{item.passRate}%</span>
                   </div>
                   <div class="muted mt-2">
-                    通过 {item.passedCases}/{item.totalCases} 条 · 零结果 {item.zeroResultCases} 条 · 低结果 {item.lowResultCases} 条 · 平均学校池 {item.averageUniversityCount} 所 · 平均正式项目 {item.averageVerifiedCount} 条
+                    通过 {item.passedCases}/{item.totalCases} 条 · 零结果 {item.zeroResultCases} 条 · 低结果 {item.lowResultCases} 条 · 候选主导率 {item.candidateHeavyRate}% · 规避后质量率 {item.postAvoidQualityRate}% · 平均学校池 {item.averageUniversityCount} 所
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        ) : null}
+
+        {evalCountrySegments.length || evalMajorSegments.length ? (
+          <div class="cards cards--2 mt-4">
+            <div class="card">
+              <div class="card-top">
+                <div class="h3">按国家看评测</div>
+                <span class="badge">{evalCountrySegments.length} 组</span>
+              </div>
+              <p class="muted mt-2">
+                优先看通过率偏低、低结果偏多、候选主导明显的国家，通常能最快找到正式库薄弱点。
+              </p>
+              <div class="mt-4">
+                {evalCountrySegments.map((item) => {
+                  const segmentQuery = buildEvalSegmentActionQuery({
+                    kind: "country",
+                    key: item.key,
+                  });
+                  const matchingPendingEntry = findPendingReviewEntryForQuery(segmentQuery);
+                  const matchingAuditEntry = findRecentAuditEntryForQuery(segmentQuery);
+                  const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(
+                    matchingPendingEntry
+                  );
+                  const severityLabel = buildEvalSegmentSeverityLabel(item);
+                  const segmentSuggestion = buildEvalSegmentSuggestion({
+                    kind: "country",
+                    label: item.label,
+                    passRate: item.passRate,
+                    zeroResultCases: item.zeroResultCases,
+                    lowResultCases: item.lowResultCases,
+                    candidateHeavyCases: item.candidateHeavyCases,
+                  });
+
+                  return (
+                    <div class="faq">
+                      <div class="card-top">
+                        <div class="h3">{item.label}</div>
+                        <span class="badge">{item.passRate}% · {severityLabel}</span>
+                      </div>
+                      <div class="muted mt-2">
+                        样例 {item.totalCases} 条 · 零结果 {item.zeroResultCases} 条 · 低结果 {item.lowResultCases} 条 · 候选主导 {item.candidateHeavyCases} 条（{item.candidateHeavyRate}%）
+                      </div>
+                      <div class="muted mt-2">
+                        平均正式项目 {item.averageVerifiedCount} 条 · 平均学校池 {item.averageUniversityCount} 所 · 平均候选 {item.averageCandidateCount} 条 · 规避后质量 {item.postAvoidQualityRate}%
+                      </div>
+                      <div class="muted mt-2">{segmentSuggestion}</div>
+                      <div class="detail-actions mt-3">
+                        <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                          <input type="hidden" name="country" value={segmentQuery.country} />
+                          <input type="hidden" name="degree" value={segmentQuery.degree} />
+                          <input type="hidden" name="major" value={segmentQuery.major} />
+                          <input type="hidden" name="specialization" value={segmentQuery.specialization} />
+                          <input type="hidden" name="mode" value="missing-first" />
+                          <input type="hidden" name="maxPrograms" value="16" />
+                          <input type="hidden" name="recordHistory" value="true" />
+                          <button class="btn" type="submit">补这个国家的门槛</button>
+                        </form>
+
+                        <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                          <input type="hidden" name="country" value={segmentQuery.country} />
+                          <input type="hidden" name="degree" value={segmentQuery.degree} />
+                          <input type="hidden" name="major" value={segmentQuery.major} />
+                          <input type="hidden" name="specialization" value={segmentQuery.specialization} />
+                          <input type="hidden" name="maxCountries" value="1" />
+                          <input type="hidden" name="maxFocusPerCountry" value="2" />
+                          <button class="btn btn-ghost" type="submit">按国家推进</button>
+                        </form>
+
+                        {matchingPendingEntry ? (
+                          <a class="btn btn-ghost" href={`#review-entry-${matchingPendingEntry.id}`}>
+                            查看同类候选
+                          </a>
+                        ) : null}
+
+                        {matchingPendingEntry && pendingAvoidSummary.highCount ? (
+                          <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                            <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                            <input type="hidden" name="credibilityMode" value="high" />
+                            <button class="btn btn-ghost" type="submit">
+                              批量导入高可信（{pendingAvoidSummary.highCount}）
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {matchingPendingEntry && pendingAvoidSummary.watchMediumCount ? (
+                          <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                            <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                            <input type="hidden" name="credibilityMode" value="watch-medium" />
+                            <button class="btn btn-ghost" type="submit">
+                              批量规避中低可信（{pendingAvoidSummary.watchMediumCount}）
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {matchingAuditEntry ? (
+                          <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
+                            查看最近留痕
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-top">
+                <div class="h3">按专业方向看评测</div>
+                <span class="badge">{evalMajorSegments.length} 组</span>
+              </div>
+              <p class="muted mt-2">
+                这里更适合看学科映射、细分方向和召回宽度是不是合理，尤其能发现“方向太窄”或“正式库太薄”的问题。
+              </p>
+              <div class="mt-4">
+                {evalMajorSegments.map((item) => {
+                  const segmentQuery = buildEvalSegmentActionQuery({
+                    kind: "major",
+                    key: item.key,
+                  });
+                  const matchingPendingEntry = findPendingReviewEntryForQuery(segmentQuery);
+                  const matchingAuditEntry = findRecentAuditEntryForQuery(segmentQuery);
+                  const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(
+                    matchingPendingEntry
+                  );
+                  const severityLabel = buildEvalSegmentSeverityLabel(item);
+                  const segmentSuggestion = buildEvalSegmentSuggestion({
+                    kind: "major",
+                    label: item.label,
+                    passRate: item.passRate,
+                    zeroResultCases: item.zeroResultCases,
+                    lowResultCases: item.lowResultCases,
+                    candidateHeavyCases: item.candidateHeavyCases,
+                  });
+
+                  return (
+                    <div class="faq">
+                      <div class="card-top">
+                        <div class="h3">{item.label}</div>
+                        <span class="badge">{item.passRate}% · {severityLabel}</span>
+                      </div>
+                      <div class="muted mt-2">
+                        样例 {item.totalCases} 条 · 零结果 {item.zeroResultCases} 条 · 低结果 {item.lowResultCases} 条 · 候选主导 {item.candidateHeavyCases} 条（{item.candidateHeavyRate}%）
+                      </div>
+                      <div class="muted mt-2">
+                        平均正式项目 {item.averageVerifiedCount} 条 · 平均学校池 {item.averageUniversityCount} 所 · 平均候选 {item.averageCandidateCount} 条 · 规避后质量 {item.postAvoidQualityRate}%
+                      </div>
+                      <div class="muted mt-2">{segmentSuggestion}</div>
+                      <div class="detail-actions mt-3">
+                        <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                          <input type="hidden" name="country" value={segmentQuery.country} />
+                          <input type="hidden" name="degree" value={segmentQuery.degree} />
+                          <input type="hidden" name="major" value={segmentQuery.major} />
+                          <input type="hidden" name="specialization" value={segmentQuery.specialization} />
+                          <input type="hidden" name="mode" value="missing-first" />
+                          <input type="hidden" name="maxPrograms" value="16" />
+                          <input type="hidden" name="recordHistory" value="true" />
+                          <button class="btn" type="submit">补这个方向的门槛</button>
+                        </form>
+
+                        {matchingPendingEntry ? (
+                          <a class="btn btn-ghost" href={`#review-entry-${matchingPendingEntry.id}`}>
+                            查看同类候选
+                          </a>
+                        ) : null}
+
+                        {matchingPendingEntry && pendingAvoidSummary.highCount ? (
+                          <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                            <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                            <input type="hidden" name="credibilityMode" value="high" />
+                            <button class="btn btn-ghost" type="submit">
+                              批量导入高可信（{pendingAvoidSummary.highCount}）
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {matchingPendingEntry && pendingAvoidSummary.watchMediumCount ? (
+                          <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                            <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                            <input type="hidden" name="credibilityMode" value="watch-medium" />
+                            <button class="btn btn-ghost" type="submit">
+                              批量规避中低可信（{pendingAvoidSummary.watchMediumCount}）
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {matchingAuditEntry ? (
+                          <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
+                            查看最近留痕
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {evalCountryWeakTrendLeaders.length || evalMajorWeakTrendLeaders.length ? (
+          <div class="cards cards--2 mt-4">
+            <div class="card">
+              <div class="card-top">
+                <div class="h3">国家弱项趋势榜</div>
+                <span class="badge">{evalCountryWeakTrendLeaders.length} 组</span>
+              </div>
+              <p class="muted mt-2">
+                这里优先看哪些国家在最近两轮评测里持续偏弱或开始变差，适合直接拿来排本周治理优先级。
+              </p>
+              <div class="mt-4">
+                {evalCountryWeakTrendLeaders.map((item) => {
+                  const segmentQuery = buildEvalSegmentActionQuery({
+                    kind: "country",
+                    key: item.key,
+                  });
+                  const matchingPendingEntry = findPendingReviewEntryForQuery(segmentQuery);
+                  const matchingAuditEntry = findRecentAuditEntryForQuery(segmentQuery);
+                  const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(
+                    matchingPendingEntry
+                  );
+
+                  return (
+                    <div class="faq">
+                      <div class="card-top">
+                        <div class="h3">{item.label}</div>
+                        <span class="badge">{buildEvalSegmentSeverityLabel(item)}</span>
+                      </div>
+                      <div class="muted mt-2">
+                        {item.trendSummary}
+                      </div>
+                      <div class="muted mt-2">
+                        当前通过率 {item.passRate}% · 零结果 {item.zeroResultCases} 条 · 低结果 {item.lowResultCases} 条 · 候选主导 {item.candidateHeavyCases} 条
+                      </div>
+                      <div class="detail-actions mt-3">
+                        <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                          <input type="hidden" name="country" value={segmentQuery.country} />
+                          <input type="hidden" name="degree" value={segmentQuery.degree} />
+                          <input type="hidden" name="major" value={segmentQuery.major} />
+                          <input type="hidden" name="specialization" value={segmentQuery.specialization} />
+                          <input type="hidden" name="mode" value="missing-first" />
+                          <input type="hidden" name="maxPrograms" value="16" />
+                          <input type="hidden" name="recordHistory" value="true" />
+                          <button class="btn" type="submit">优先补这个国家</button>
+                        </form>
+
+                        <form method="POST" action={actions.executeStudyAbroadAdmissionsCountryTargetPlan}>
+                          <input type="hidden" name="country" value={segmentQuery.country} />
+                          <input type="hidden" name="degree" value={segmentQuery.degree} />
+                          <input type="hidden" name="major" value={segmentQuery.major} />
+                          <input type="hidden" name="specialization" value={segmentQuery.specialization} />
+                          <input type="hidden" name="maxCountries" value="1" />
+                          <input type="hidden" name="maxFocusPerCountry" value="2" />
+                          <button class="btn btn-ghost" type="submit">按国家推进</button>
+                        </form>
+
+                        {matchingPendingEntry && pendingAvoidSummary.highCount ? (
+                          <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                            <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                            <input type="hidden" name="credibilityMode" value="high" />
+                            <button class="btn btn-ghost" type="submit">
+                              批量导入高可信（{pendingAvoidSummary.highCount}）
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {matchingPendingEntry && pendingAvoidSummary.watchMediumCount ? (
+                          <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                            <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                            <input type="hidden" name="credibilityMode" value="watch-medium" />
+                            <button class="btn btn-ghost" type="submit">
+                              批量规避中低可信（{pendingAvoidSummary.watchMediumCount}）
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {matchingAuditEntry ? (
+                          <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
+                            查看最近留痕
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-top">
+                <div class="h3">专业弱项趋势榜</div>
+                <span class="badge">{evalMajorWeakTrendLeaders.length} 组</span>
+              </div>
+              <p class="muted mt-2">
+                这里更适合看哪些专业方向的正式库、映射和候选质量在拖后腿，适合直接安排补库和规避动作。
+              </p>
+              <div class="mt-4">
+                {evalMajorWeakTrendLeaders.map((item) => {
+                  const segmentQuery = buildEvalSegmentActionQuery({
+                    kind: "major",
+                    key: item.key,
+                  });
+                  const matchingPendingEntry = findPendingReviewEntryForQuery(segmentQuery);
+                  const matchingAuditEntry = findRecentAuditEntryForQuery(segmentQuery);
+                  const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(
+                    matchingPendingEntry
+                  );
+
+                  return (
+                    <div class="faq">
+                      <div class="card-top">
+                        <div class="h3">{item.label}</div>
+                        <span class="badge">{buildEvalSegmentSeverityLabel(item)}</span>
+                      </div>
+                      <div class="muted mt-2">
+                        {item.trendSummary}
+                      </div>
+                      <div class="muted mt-2">
+                        当前通过率 {item.passRate}% · 零结果 {item.zeroResultCases} 条 · 低结果 {item.lowResultCases} 条 · 候选主导 {item.candidateHeavyCases} 条
+                      </div>
+                      <div class="detail-actions mt-3">
+                        <form method="POST" action={actions.syncStudyAbroadAdmissionsSnapshots}>
+                          <input type="hidden" name="country" value={segmentQuery.country} />
+                          <input type="hidden" name="degree" value={segmentQuery.degree} />
+                          <input type="hidden" name="major" value={segmentQuery.major} />
+                          <input type="hidden" name="specialization" value={segmentQuery.specialization} />
+                          <input type="hidden" name="mode" value="missing-first" />
+                          <input type="hidden" name="maxPrograms" value="16" />
+                          <input type="hidden" name="recordHistory" value="true" />
+                          <button class="btn" type="submit">优先补这个方向</button>
+                        </form>
+
+                        {matchingPendingEntry && pendingAvoidSummary.highCount ? (
+                          <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                            <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                            <input type="hidden" name="credibilityMode" value="high" />
+                            <button class="btn btn-ghost" type="submit">
+                              批量导入高可信（{pendingAvoidSummary.highCount}）
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {matchingPendingEntry && pendingAvoidSummary.watchMediumCount ? (
+                          <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                            <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                            <input type="hidden" name="credibilityMode" value="watch-medium" />
+                            <button class="btn btn-ghost" type="submit">
+                              批量规避中低可信（{pendingAvoidSummary.watchMediumCount}）
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {matchingAuditEntry ? (
+                          <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
+                            查看最近留痕
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         ) : null}
@@ -1360,6 +2477,7 @@ const notices = [
               const matchingPendingEntry = findPendingReviewEntryForQuery(task.query);
               const matchingAuditEntry = findRecentAuditEntryForQuery(task.query);
               const suggestedAvoidDomain = findSuggestedAvoidDomainForQuery(task.query);
+              const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(matchingPendingEntry);
               const hasStructuredHint = Boolean(
                 task.query.country || task.query.major || task.query.specialization
               );
@@ -1417,6 +2535,26 @@ const notices = [
                       </a>
                     ) : null}
 
+                    {matchingPendingEntry && pendingAvoidSummary.highCount ? (
+                      <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                        <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                        <input type="hidden" name="credibilityMode" value="high" />
+                        <button class="btn btn-ghost" type="submit">
+                          批量导入高可信候选（{pendingAvoidSummary.highCount}）
+                        </button>
+                      </form>
+                    ) : null}
+
+                    {matchingPendingEntry && pendingAvoidSummary.watchCount ? (
+                      <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                        <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                        <input type="hidden" name="credibilityMode" value="watch" />
+                        <button class="btn btn-ghost" type="submit">
+                          批量规避待核对来源（{pendingAvoidSummary.watchCount}）
+                        </button>
+                      </form>
+                    ) : null}
+
                     {matchingAuditEntry ? (
                       <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
                         查看最近同类留痕
@@ -1444,6 +2582,15 @@ const notices = [
                       </form>
                     ) : null}
                   </div>
+                  {matchingPendingEntry && pendingAvoidSummary.watchPreview.length ? (
+                    <div class="detail-actions mt-2">
+                      {pendingAvoidSummary.watchPreview.map((item) => (
+                        <span class="badge">
+                          {item.domain} × {item.count}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               );
             }) : (
@@ -1467,6 +2614,7 @@ const notices = [
               const matchingPendingEntry = findPendingReviewEntryForQuery(item.query);
               const matchingAuditEntry = findRecentAuditEntryForQuery(item.query);
               const suggestedAvoidDomain = findSuggestedAvoidDomainForQuery(item.query);
+              const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(matchingPendingEntry);
               const severityLabel =
                 item.criticalCount > 0
                   ? "本周优先"
@@ -1515,6 +2663,26 @@ const notices = [
                       </a>
                     ) : null}
 
+                    {matchingPendingEntry && pendingAvoidSummary.highCount ? (
+                      <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                        <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                        <input type="hidden" name="credibilityMode" value="high" />
+                        <button class="btn btn-ghost" type="submit">
+                          批量导入高可信候选（{pendingAvoidSummary.highCount}）
+                        </button>
+                      </form>
+                    ) : null}
+
+                    {matchingPendingEntry && pendingAvoidSummary.watchMediumCount ? (
+                      <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                        <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                        <input type="hidden" name="credibilityMode" value="watch-medium" />
+                        <button class="btn btn-ghost" type="submit">
+                          批量规避中低可信来源（{pendingAvoidSummary.watchMediumCount}）
+                        </button>
+                      </form>
+                    ) : null}
+
                     {matchingAuditEntry ? (
                       <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
                         查看留痕
@@ -1542,6 +2710,15 @@ const notices = [
                       </form>
                     ) : null}
                   </div>
+                  {matchingPendingEntry && pendingAvoidSummary.watchPreview.length ? (
+                    <div class="detail-actions mt-2">
+                      {pendingAvoidSummary.watchPreview.map((suggestion) => (
+                        <span class="badge">
+                          {suggestion.domain} × {suggestion.count}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               );
             }) : (
@@ -1682,6 +2859,7 @@ const notices = [
               const matchingPendingEntry = findPendingReviewEntryForQuery(plan.query);
               const matchingAuditEntry = findRecentAuditEntryForQuery(plan.query);
               const suggestedAvoidDomain = findSuggestedAvoidDomainForQuery(plan.query);
+              const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(matchingPendingEntry);
               const hasStructuredHint = Boolean(
                 plan.query.country || plan.query.major || plan.query.specialization
               );
@@ -1804,6 +2982,26 @@ const notices = [
                       </a>
                     ) : null}
 
+                    {matchingPendingEntry && pendingAvoidSummary.highCount ? (
+                      <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                        <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                        <input type="hidden" name="credibilityMode" value="high" />
+                        <button class="btn btn-ghost" type="submit">
+                          批量导入高可信候选（{pendingAvoidSummary.highCount}）
+                        </button>
+                      </form>
+                    ) : null}
+
+                    {matchingPendingEntry && pendingAvoidSummary.watchMediumCount ? (
+                      <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                        <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                        <input type="hidden" name="credibilityMode" value="watch-medium" />
+                        <button class="btn btn-ghost" type="submit">
+                          批量规避中低可信来源（{pendingAvoidSummary.watchMediumCount}）
+                        </button>
+                      </form>
+                    ) : null}
+
                     {matchingAuditEntry ? (
                       <a class="btn btn-ghost" href={`#search-audit-${matchingAuditEntry.id}`}>
                         查看最近同类留痕
@@ -1831,6 +3029,15 @@ const notices = [
                       </form>
                     ) : null}
                   </div>
+                  {matchingPendingEntry && pendingAvoidSummary.watchPreview.length ? (
+                    <div class="detail-actions mt-2">
+                      {pendingAvoidSummary.watchPreview.map((suggestion) => (
+                        <span class="badge">
+                          {suggestion.domain} × {suggestion.count}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               );
             }) : (
@@ -1851,6 +3058,11 @@ const notices = [
           <p class="muted mt-2">
             这里不看“建议”，而是看这周实际已经推进了什么、哪些计划还卡着、团队最近最常执行的动作是什么。
           </p>
+          {archivedExecutionPlanCount ? (
+            <div class="muted mt-2">
+              系统本次自动归档了 {archivedExecutionPlanCount} 条已完成超过 7 天的执行计划，周报会更聚焦当前仍需推进的事项。
+            </div>
+          ) : null}
           <div class="card mt-4">
             <div class="card-top">
               <div class="h3">本周一句话结论</div>
@@ -1918,6 +3130,22 @@ const notices = [
                         <button class="btn" type="submit">{item.actionLabel}</button>
                       </form>
                     ) : null}
+
+                    {item.actionType === "import-high" && item.plan?.pendingEntryId ? (
+                      <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                        <input type="hidden" name="entryId" value={item.plan.pendingEntryId} />
+                        <input type="hidden" name="credibilityMode" value="high" />
+                        <button class="btn" type="submit">{item.actionLabel}</button>
+                      </form>
+                    ) : null}
+
+                    {item.actionType === "avoid-watch-medium" && item.plan?.pendingEntryId ? (
+                      <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                        <input type="hidden" name="entryId" value={item.plan.pendingEntryId} />
+                        <input type="hidden" name="credibilityMode" value="watch-medium" />
+                        <button class="btn btn-ghost" type="submit">{item.actionLabel}</button>
+                      </form>
+                    ) : null}
                   </div>
                 </div>
               )) : (
@@ -1939,6 +3167,27 @@ const notices = [
             <div class="card">
               <div class="muted text-sm">当前仍待推进</div>
               <div class="h2 mt-2">{executionPlanAttentionItems.length}</div>
+            </div>
+          </div>
+          <div class="cards cards--3 mt-4">
+            <div class="card">
+              <div class="muted text-sm">本周完成率</div>
+              <div class="h2 mt-2">{executionPlanCompletionRate}%</div>
+              <div class="muted mt-1">已完成 {executionPlanCompletedThisWeekCount} / 已启动 {executionPlanStartedThisWeek.length}</div>
+            </div>
+            <div class="card">
+              <div class="muted text-sm">平均处理时长</div>
+              <div class="h2 mt-2">
+                {executionPlanAverageProcessingDurationHours
+                  ? `${executionPlanAverageProcessingDurationHours.toFixed(1)}h`
+                  : "暂无"}
+              </div>
+              <div class="muted mt-1">按本周已完成且有开始时间的计划计算</div>
+            </div>
+            <div class="card">
+              <div class="muted text-sm">已自动归档</div>
+              <div class="h2 mt-2">{activeExecutionPlanRecords.length !== executionPlanRecords.length ? executionPlanRecords.length - activeExecutionPlanRecords.length : 0}</div>
+              <div class="muted mt-1">避免历史已完成计划持续干扰本周执行面板</div>
             </div>
           </div>
 
@@ -2250,6 +3499,7 @@ const notices = [
                 const matchingPendingEntry = findPendingReviewEntryForBucket(bucket);
                 const matchingAuditEntry = findRecentAuditEntryForBucket(bucket);
                 const suggestedAvoidDomain = findSuggestedAvoidDomainForBucket(bucket);
+                const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(matchingPendingEntry);
                 const hasStructuredHint = Boolean(
                   bucket.query.country || bucket.query.major || bucket.query.specialization
                 );
@@ -2311,6 +3561,16 @@ const notices = [
                         </a>
                       )}
 
+                      {matchingPendingEntry && pendingAvoidSummary.watchCount ? (
+                        <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                          <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                          <input type="hidden" name="credibilityMode" value="watch" />
+                          <button class="btn btn-ghost" type="submit">
+                            批量规避待核对来源（{pendingAvoidSummary.watchCount}）
+                          </button>
+                        </form>
+                      ) : null}
+
                       {matchingAuditEntry ? (
                         <a
                           class="btn btn-ghost"
@@ -2341,6 +3601,15 @@ const notices = [
                         </form>
                       ) : null}
                     </div>
+                    {matchingPendingEntry && pendingAvoidSummary.watchPreview.length ? (
+                      <div class="detail-actions mt-2">
+                        {pendingAvoidSummary.watchPreview.map((suggestion) => (
+                          <span class="badge">
+                            {suggestion.domain} × {suggestion.count}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })()
@@ -2364,6 +3633,7 @@ const notices = [
                 const matchingPendingEntry = findPendingReviewEntryForBucket(bucket);
                 const matchingAuditEntry = findRecentAuditEntryForBucket(bucket);
                 const suggestedAvoidDomain = findSuggestedAvoidDomainForBucket(bucket);
+                const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(matchingPendingEntry);
                 const hasStructuredHint = Boolean(
                   bucket.query.country || bucket.query.major || bucket.query.specialization
                 );
@@ -2425,6 +3695,16 @@ const notices = [
                         </a>
                       )}
 
+                      {matchingPendingEntry && pendingAvoidSummary.watchMediumCount ? (
+                        <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                          <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                          <input type="hidden" name="credibilityMode" value="watch-medium" />
+                          <button class="btn btn-ghost" type="submit">
+                            批量规避中低可信来源（{pendingAvoidSummary.watchMediumCount}）
+                          </button>
+                        </form>
+                      ) : null}
+
                       {matchingAuditEntry ? (
                         <a
                           class="btn btn-ghost"
@@ -2455,6 +3735,15 @@ const notices = [
                         </form>
                       ) : null}
                     </div>
+                    {matchingPendingEntry && pendingAvoidSummary.watchPreview.length ? (
+                      <div class="detail-actions mt-2">
+                        {pendingAvoidSummary.watchPreview.map((suggestion) => (
+                          <span class="badge">
+                            {suggestion.domain} × {suggestion.count}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })()
@@ -2478,6 +3767,7 @@ const notices = [
                 const matchingPendingEntry = findPendingReviewEntryForBucket(bucket);
                 const matchingAuditEntry = findRecentAuditEntryForBucket(bucket);
                 const suggestedAvoidDomain = findSuggestedAvoidDomainForBucket(bucket);
+                const pendingAvoidSummary = getPendingEntryBatchAvoidSummary(matchingPendingEntry);
                 const hasStructuredHint = Boolean(
                   bucket.query.country || bucket.query.major || bucket.query.specialization
                 );
@@ -2522,6 +3812,16 @@ const notices = [
                         </a>
                       ) : null}
 
+                      {matchingPendingEntry && pendingAvoidSummary.watchMediumCount ? (
+                        <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                          <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
+                          <input type="hidden" name="credibilityMode" value="watch-medium" />
+                          <button class="btn btn-ghost" type="submit">
+                            批量规避中低可信来源（{pendingAvoidSummary.watchMediumCount}）
+                          </button>
+                        </form>
+                      ) : null}
+
                       <a
                         class="btn btn-ghost"
                         href="/admin/study-abroad-catalog#catalog-targets"
@@ -2559,6 +3859,15 @@ const notices = [
                         </form>
                       ) : null}
                     </div>
+                    {matchingPendingEntry && pendingAvoidSummary.watchPreview.length ? (
+                      <div class="detail-actions mt-2">
+                        {pendingAvoidSummary.watchPreview.map((suggestion) => (
+                          <span class="badge">
+                            {suggestion.domain} × {suggestion.count}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })()
@@ -2570,8 +3879,47 @@ const notices = [
       </div>
     ) : null}
 
-    {pendingItems.length ? (
-      <div class="cards mt-6">
+    {pendingQueueCount ? (
+      <>
+      <div class="card mt-6" id="pending-review-candidates">
+        <div class="card-top">
+          <div>
+            <div class="h3">待审核候选可信度总览</div>
+            <div class="muted mt-1">
+              当前筛选：{candidateCredibilityFilter === "all" ? "全部候选" : `${getCandidateCredibilityLabel(candidateCredibilityFilter)} 候选`}
+            </div>
+          </div>
+          <span class="badge">{pendingCandidateCredibilitySummary.total} 条候选</span>
+        </div>
+        <div class="detail-actions mt-4">
+          <a class={`btn ${candidateCredibilityFilter === "all" ? "" : "btn-ghost"}`} href="?candidateCredibility=all#pending-review-candidates">
+            全部 {pendingCandidateCredibilitySummary.total}
+          </a>
+          <a
+            class={`btn ${candidateCredibilityFilter === "high" ? "" : "btn-ghost"}`}
+            href="?candidateCredibility=high#pending-review-candidates"
+          >
+            高可信 {pendingCandidateCredibilitySummary.high}
+          </a>
+          <a
+            class={`btn ${candidateCredibilityFilter === "medium" ? "" : "btn-ghost"}`}
+            href="?candidateCredibility=medium#pending-review-candidates"
+          >
+            中可信 {pendingCandidateCredibilitySummary.medium}
+          </a>
+          <a
+            class={`btn ${candidateCredibilityFilter === "watch" ? "" : "btn-ghost"}`}
+            href="?candidateCredibility=watch#pending-review-candidates"
+          >
+            待核对 {pendingCandidateCredibilitySummary.watch}
+          </a>
+        </div>
+        <p class="muted mt-3">
+          系统会优先把高可信来源排在前面。建议先处理高可信院校官网，再看中可信来源，最后集中清理待核对噪音。
+        </p>
+      </div>
+
+      {pendingItems.length ? <div class="cards mt-6">
         {pendingItems.map((item) => (
           <article class="card" id={`review-entry-${item.id}`}>
             <div class="card-top">
@@ -2590,13 +3938,57 @@ const notices = [
                       importedProgramByLink.has(normalizeReviewLink(candidate.link))
                     ).length
                   }
-                  /{item.candidates.length}
+                  /{item.filteredCandidateCount}
+                </div>
+                <div class="detail-actions mt-3">
+                  <span class="badge">高可信 {item.credibilitySummary.high}</span>
+                  <span class="badge">中可信 {item.credibilitySummary.medium}</span>
+                  <span class="badge">待核对 {item.credibilitySummary.watch}</span>
+                  {item.filteredCandidateCount !== item.totalCandidateCount ? (
+                    <span class="badge">当前筛到 {item.filteredCandidateCount}/{item.totalCandidateCount}</span>
+                  ) : null}
                 </div>
               </div>
-              <span class="badge">{item.candidates.length} 条候选</span>
+              <span class="badge">{item.filteredCandidateCount} 条候选</span>
             </div>
 
             <div class="detail-actions mt-4">
+              {item.batchEligibleHighCount ? (
+                <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                  <input type="hidden" name="entryId" value={item.id} />
+                  <input type="hidden" name="credibilityMode" value="high" />
+                  <button class="btn" type="submit">
+                    批量导入高可信候选（{item.batchEligibleHighCount}）
+                  </button>
+                </form>
+              ) : null}
+              {item.batchEligibleHighMediumCount ? (
+                <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
+                  <input type="hidden" name="entryId" value={item.id} />
+                  <input type="hidden" name="credibilityMode" value="high-medium" />
+                  <button class="btn btn-ghost" type="submit">
+                    批量导入高+中可信（{item.batchEligibleHighMediumCount}）
+                  </button>
+                </form>
+              ) : null}
+              {item.batchAvoidWatchCount ? (
+                <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                  <input type="hidden" name="entryId" value={item.id} />
+                  <input type="hidden" name="credibilityMode" value="watch" />
+                  <button class="btn btn-ghost" type="submit">
+                    批量规避待核对重复来源（{item.batchAvoidWatchCount} 个域名）
+                  </button>
+                </form>
+              ) : null}
+              {item.batchAvoidWatchMediumCount ? (
+                <form method="POST" action={actions.createStudyAbroadReviewBatchAvoidRules}>
+                  <input type="hidden" name="entryId" value={item.id} />
+                  <input type="hidden" name="credibilityMode" value="watch-medium" />
+                  <button class="btn btn-ghost" type="submit">
+                    批量规避中低可信重复来源（{item.batchAvoidWatchMediumCount} 个域名）
+                  </button>
+                </form>
+              ) : null}
               <form method="POST" action={actions.updateStudyAbroadReviewQueueStatus}>
                 <input type="hidden" name="id" value={item.id} />
                 <input type="hidden" name="status" value="reviewed" />
@@ -2609,17 +4001,52 @@ const notices = [
               </form>
             </div>
 
+            {item.batchAvoidWatchSuggestions.length ? (
+              <div class="muted mt-3">
+                待核对重复来源候选：
+                <div class="detail-actions mt-2">
+                  {item.batchAvoidWatchSuggestions.slice(0, 4).map((suggestion) => (
+                    <span class="badge">
+                      {suggestion.domain} × {suggestion.count}
+                    </span>
+                  ))}
+                  {item.batchAvoidWatchSuggestions.length > 4 ? (
+                    <span class="badge">其余 {item.batchAvoidWatchSuggestions.length - 4} 个域名</span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             <div class="mt-4">
               {item.candidates.map((candidate) => {
                 const importedProgram = importedProgramByLink.get(
                   normalizeReviewLink(candidate.link)
                 );
                 const activeAvoidRule = findActiveAvoidRuleForLink(candidate.link);
+                const credibilityLevel = getCandidateCredibilityLevel(candidate);
+                const credibilityLabel = candidate.credibilityLabel || getCandidateCredibilityLabel(credibilityLevel);
 
                 return (
                   <div class="faq">
                     <div class="h3">{candidate.title}</div>
                     <div class="muted mt-1">{candidate.displayLink || candidate.provider}</div>
+                    <div class="detail-actions mt-2">
+                      <span class="badge">{credibilityLabel}</span>
+                      {candidate.authorityScore ? (
+                        <span class="badge">authority {candidate.authorityScore.toFixed(2)}</span>
+                      ) : null}
+                      {candidate.rerankScore ? (
+                        <span class="badge">rerank {candidate.rerankScore.toFixed(2)}</span>
+                      ) : null}
+                      {Array.isArray(candidate.relevanceSignals)
+                        ? candidate.relevanceSignals
+                            .filter(Boolean)
+                            .map((signal) => <span class="badge">{signal}</span>)
+                        : null}
+                    </div>
+                    {candidate.credibilityReason ? (
+                      <p class="muted mt-2">{candidate.credibilityReason}</p>
+                    ) : null}
                     {candidate.snippet ? <p class="muted mt-2">{candidate.snippet}</p> : null}
                     <div class="detail-actions mt-3">
                       {importedProgram ? (
@@ -2650,6 +4077,7 @@ const notices = [
                             <input type="hidden" name="source" value="candidate" />
                             <input type="hidden" name="label" value={candidate.title} />
                             <input type="hidden" name="link" value={candidate.link} />
+                            <input type="hidden" name="reviewEntryId" value={item.id} />
                             <input
                               type="hidden"
                               name="reason"
@@ -2662,6 +4090,7 @@ const notices = [
                             <input type="hidden" name="source" value="candidate" />
                             <input type="hidden" name="label" value={candidate.displayLink || candidate.title} />
                             <input type="hidden" name="link" value={candidate.link} />
+                            <input type="hidden" name="reviewEntryId" value={item.id} />
                             <input
                               type="hidden"
                               name="reason"
@@ -2680,14 +4109,60 @@ const notices = [
                 );
               })}
             </div>
+
+            <div class="card mt-4">
+              <div class="card-top">
+                <div class="h3">审核备注</div>
+                <span class="badge">{item.reviewHistory.length} 条历史</span>
+              </div>
+              <form class="mt-3" method="POST" action={actions.updateStudyAbroadReviewEntryNote}>
+                <input type="hidden" name="id" value={item.id} />
+                <textarea
+                  class="input"
+                  name="note"
+                  rows="3"
+                  placeholder="记录这组候选需要人工注意的点，例如：某些来源不是官网、某个项目标题需要核对。"
+                >{item.adminNote}</textarea>
+                <div class="detail-actions mt-3">
+                  <button class="btn btn-ghost" type="submit">保存审核备注</button>
+                </div>
+              </form>
+              {item.reviewHistory.length ? (
+                <div class="mt-4">
+                  {item.reviewHistory.slice(0, 6).map((historyItem) => (
+                    <div class="faq">
+                      <div class="card-top">
+                        <div class="h3">{historyItem.action}</div>
+                        <span class="badge">
+                          {new Date(historyItem.createdAt).toLocaleString("zh-CN")}
+                        </span>
+                      </div>
+                      {historyItem.note ? <div class="muted mt-2">{historyItem.note}</div> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div class="muted mt-3">这组候选还没有审核历史，第一次处理后会自动留下记录。</div>
+              )}
+            </div>
           </article>
         ))}
-      </div>
+      </div> : (
+        <div class="card mt-6">
+          <div class="h3">当前筛选下没有待审核候选</div>
+          <p class="muted mt-2">
+            当前没有符合“{candidateCredibilityFilter === "all" ? "全部候选" : getCandidateCredibilityLabel(candidateCredibilityFilter)}”筛选条件的候选。你可以先切回全部，或优先处理其他可信度层级。
+          </p>
+        </div>
+      )}
+      </>
     ) : (
       <div class="card mt-6">
         <div class="h3">目前还没有待核验候选</div>
         <p class="muted mt-2">
-          当前搜索主要命中站内已核验项目库；当结果较少且服务器配置了全网扩搜 API 后，新候选会出现在这里。
+          {candidateCredibilityFilter === "all"
+            ? "当前搜索主要命中站内已核验项目库；当结果较少且服务器配置了全网扩搜 API 后，新候选会出现在这里。"
+            : `当前没有符合“${getCandidateCredibilityLabel(candidateCredibilityFilter)}”筛选条件的待审核候选。`}
         </p>
       </div>
     )}
@@ -2881,6 +4356,15 @@ const notices = [
                   <div class="muted mt-1">
                     生效时间：{new Date(rule.updatedAt).toLocaleString("zh-CN")}
                   </div>
+                  <div class="muted mt-1">
+                    命中统计：{rule.hitCount || 0} 次
+                    {rule.lastHitAt
+                      ? ` · 最近命中 ${new Date(rule.lastHitAt).toLocaleString("zh-CN")}`
+                      : ""}
+                  </div>
+                  {rule.lastHitLabel ? (
+                    <div class="muted mt-1">最近命中结果：{rule.lastHitLabel}</div>
+                  ) : null}
                 </div>
                 <form method="POST" action={actions.updateStudyAbroadSearchAvoidRuleStatus}>
                   <input type="hidden" name="id" value={rule.id} />
@@ -2912,6 +4396,17 @@ const notices = [
               <div class="muted mt-1">
                 处理时间：{new Date(item.updatedAt).toLocaleString("zh-CN")} · 候选 {item.candidates.length} 条
               </div>
+              {item.adminNote ? <div class="muted mt-2">审核备注：{item.adminNote}</div> : null}
+              {item.reviewHistory.length ? (
+                <div class="mt-3">
+                  {item.reviewHistory.slice(0, 4).map((historyItem) => (
+                    <div class="muted mt-1">
+                      {new Date(historyItem.createdAt).toLocaleString("zh-CN")} · {historyItem.action}
+                      {historyItem.note ? `：${historyItem.note}` : ""}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

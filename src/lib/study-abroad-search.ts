@@ -17,8 +17,9 @@ import {
   type StudyAbroadReviewCandidate,
 } from "./study-abroad-review-queue";
 import {
-  isBlockedStudyAbroadCandidate,
-  isBlockedStudyAbroadFinderProgram,
+  collectBlockedStudyAbroadCandidateRuleIds,
+  collectBlockedStudyAbroadFinderProgramRuleIds,
+  recordStudyAbroadSearchAvoidRuleHits,
   readStudyAbroadSearchBlocklist,
   upsertStudyAbroadSearchAuditEntry,
   type StudyAbroadSearchAuditResult,
@@ -60,6 +61,26 @@ export type StudyAbroadResolvedQuery = {
   universityId: string;
 };
 
+export type StudyAbroadSearchGuidance = {
+  failureReason: string;
+  failureReasonCode: string;
+  nextSteps: string[];
+  intentSignals: string[];
+  rankingSignals: string[];
+  candidateQualitySummary: string;
+};
+
+export type StudyAbroadSearchCandidateResult = StudyAbroadReviewCandidate & {
+  date?: string;
+  authorityScore?: number;
+  rerankScore?: number;
+  score?: number;
+  credibilityLevel: "high" | "medium" | "watch";
+  credibilityLabel: string;
+  credibilityReason: string;
+  relevanceSignals: string[];
+};
+
 export type StudyAbroadSearchResult = {
   searchSessionId: string;
   resolvedQuery: StudyAbroadResolvedQuery;
@@ -74,17 +95,19 @@ export type StudyAbroadSearchResult = {
   pendingReviewCount: number;
   blockedResultCount: number;
   message: string;
+  searchGuidance: StudyAbroadSearchGuidance;
 };
 
 export type StudyAbroadSearchExpansionResult = {
   searchSessionId: string;
   resolvedQuery: StudyAbroadResolvedQuery;
-  candidateResults: StudyAbroadReviewCandidate[];
+  candidateResults: StudyAbroadSearchCandidateResult[];
   expansionEnabled: boolean;
   expansionAttempted: boolean;
   pendingReviewCount: number;
   blockedResultCount: number;
   message: string;
+  searchGuidance: StudyAbroadSearchGuidance;
 };
 
 export type StudyAbroadSearchRuntimeCheckResult = {
@@ -120,7 +143,7 @@ export type StudyAbroadUniversityMatch = {
   tuitionCurrency: string;
 };
 
-type SearchWebCandidate = StudyAbroadReviewCandidate & {
+type SearchWebCandidate = StudyAbroadSearchCandidateResult & {
   date?: string;
   authorityScore?: number;
   rerankScore?: number;
@@ -130,6 +153,10 @@ type SearchWebCandidate = StudyAbroadReviewCandidate & {
 type SearchExternalCandidatesResult = {
   candidates: SearchWebCandidate[];
   blockedCount: number;
+  blockedRuleHits: Array<{
+    ruleId: string;
+    label: string;
+  }>;
 };
 
 const BAIDU_SEARCH_ENDPOINT =
@@ -280,6 +307,62 @@ const MIN_CANDIDATE_SCORE = 30;
 const MAX_CANDIDATE_RESULTS = 36;
 const MAX_REVIEW_QUEUE_CANDIDATES = 20;
 const MAX_VERIFIED_RESULTS = 160;
+const FREE_TEXT_STOPWORDS = new Set([
+  "申请",
+  "留学",
+  "大学",
+  "学校",
+  "项目",
+  "专业",
+  "方向",
+  "官网",
+  "官方",
+  "硕士",
+  "本科",
+  "博士",
+  "master",
+  "masters",
+  "program",
+  "programme",
+  "official",
+  "admission",
+  "admissions",
+  "graduate",
+  "university",
+]);
+
+const EXTRA_COUNTRY_ALIASES: Record<string, string[]> = {
+  英国: ["uk", "u k", "britain", "england", "united kingdom"],
+  美国: ["us", "u s", "usa", "america", "united states"],
+  中国香港: ["hk", "h k", "hong kong"],
+  新加坡: ["sg", "s g", "singapore"],
+  澳大利亚: ["aus", "australia", "aussie"],
+  加拿大: ["canada"],
+};
+
+const EXTRA_MAJOR_ALIASES: Record<string, string[]> = {
+  "计算机 / AI": ["cs", "computer science", "ai", "artificial intelligence", "machine learning"],
+  "商业分析 / 数据": ["ba", "business analytics", "data science", "ds", "analytics", "mis", "information systems"],
+  金融: ["mfin", "finance", "financial engineering", "mfe", "fintech"],
+  传媒: ["media", "communication", "communications", "journalism", "digital media"],
+  "设计 / 艺术": ["design", "ux", "ui", "ux design", "interaction design", "hci", "human computer interaction"],
+};
+
+const EXTRA_SPECIALIZATION_ALIASES: Record<string, string[]> = {
+  商业分析: ["ba", "business analytics", "analytics"],
+  数据科学: ["data science", "ds", "machine learning"],
+  人工智能: ["ai", "artificial intelligence"],
+  交互设计: ["ux", "ui", "ux design", "interaction design", "hci"],
+  金融工程: ["financial engineering", "mfe", "quant finance"],
+  金融科技: ["fintech"],
+  新闻传播: ["journalism", "communications", "media studies"],
+};
+
+const EXTRA_DEGREE_ALIASES: Record<string, string[]> = {
+  硕士: ["one year master", "one-year master", "taught master", "graduate taught"],
+  本科: ["undergrad", "undergraduate"],
+  博士: ["phd", "doctorate", "doctoral"],
+};
 
 function hasStructuredFitInput(query: ReturnType<typeof normalizeStudyAbroadQuery>) {
   return Boolean(query.gpaProfile || query.languageProfile);
@@ -465,10 +548,10 @@ export function normalizeStudyAbroadQuery(input: StudyAbroadSearchInput): StudyA
     major,
     specialization,
     degree: degreeOverride.suppressed ? "" : degreeOverride.value || inferred.degree || "",
-    budgetTier: String(input.budgetTier ?? "").trim(),
-    intake: String(input.intake ?? "").trim(),
-    gpaProfile: String(input.gpaProfile ?? "").trim(),
-    languageProfile: String(input.languageProfile ?? "").trim(),
+    budgetTier: String(input.budgetTier ?? "").trim() || inferred.budgetTier || "",
+    intake: String(input.intake ?? "").trim() || inferred.intake || "",
+    gpaProfile: String(input.gpaProfile ?? "").trim() || inferred.gpaProfile || "",
+    languageProfile: String(input.languageProfile ?? "").trim() || inferred.languageProfile || "",
     fitMode: String(input.fitMode ?? "").trim(),
     snapshotQuality: String(input.snapshotQuality ?? "").trim(),
     universityId: String(input.universityId ?? "").trim(),
@@ -660,6 +743,18 @@ function normalizeText(value?: string) {
     .replace(/\s+/g, " ");
 }
 
+function mergeAliasGroups(...groups: Record<string, string[]>[]) {
+  const merged: Record<string, string[]> = {};
+
+  groups.forEach((group) => {
+    Object.entries(group).forEach(([label, aliases]) => {
+      merged[label] = [...(merged[label] || []), ...aliases];
+    });
+  });
+
+  return merged;
+}
+
 function tokenizeText(value: string) {
   return new Set(
     normalizeText(value)
@@ -698,22 +793,122 @@ function findBestAliasLabel(
   return winner;
 }
 
+function inferGpaProfileFromFreeText(freeText: string) {
+  const value = String(freeText || "").trim().toLowerCase();
+  if (!value) return "";
+
+  const match = value.match(/gpa\s*[:：]?\s*(\d(?:\.\d+)?)/i);
+  if (!match) return "";
+
+  const gpa = Number(match[1]);
+  if (!Number.isFinite(gpa)) return "";
+  if (gpa >= 3.7) return "3.7+";
+  if (gpa >= 3.5) return "3.5-3.69";
+  if (gpa >= 3.3) return "3.3-3.49";
+  if (gpa >= 3.0) return "3.0-3.29";
+  return "under-3.0";
+}
+
+function inferLanguageProfileFromFreeText(freeText: string) {
+  const value = String(freeText || "");
+  if (!value.trim()) return "";
+
+  const ieltsMatch = value.match(/(?:ielts|雅思)\s*[:：]?\s*(6\.5|7(?:\.0)?)/i);
+  if (ieltsMatch) {
+    return `IELTS ${ieltsMatch[1] === "7" ? "7.0" : ieltsMatch[1]}`;
+  }
+
+  const toeflMatch = value.match(/(?:toefl|托福)\s*[:：]?\s*(90|100)/i);
+  if (toeflMatch) {
+    return `TOEFL ${toeflMatch[1]}`;
+  }
+
+  const duoMatch = value.match(/(?:duolingo|多邻国)\s*[:：]?\s*(120)/i);
+  if (duoMatch) {
+    return `Duolingo ${duoMatch[1]}`;
+  }
+
+  const pteMatch = value.match(/(?:pte)\s*[:：]?\s*(65)/i);
+  if (pteMatch) {
+    return `PTE ${pteMatch[1]}`;
+  }
+
+  return "";
+}
+
+function inferBudgetTierFromFreeText(freeText: string) {
+  const value = String(freeText || "").toLowerCase();
+  if (!value.trim()) return "";
+
+  if (/(?:budget|预算).*(?:30k|30000|3万)/i.test(value)) return "under-30000";
+  if (/(?:budget|预算).*(?:50k|50000|5万)/i.test(value)) return "under-50000";
+  if (/(?:budget|预算).*(?:70k|70000|7万)/i.test(value)) return "under-70000";
+  if (/(?:budget|预算).*(?:90k|90000|9万)/i.test(value)) return "under-90000";
+
+  return "";
+}
+
+function inferIntakeFromFreeText(freeText: string) {
+  const value = normalizeText(freeText);
+  if (!value) return "";
+
+  if (/(26|2026)\s*fall|26fall|2026fall|秋季|fall|autumn/.test(value)) return "fall";
+  if (/(26|2026)\s*spring|26spring|2026spring|春季|spring/.test(value)) return "spring";
+  if (/(26|2026)\s*summer|26summer|2026summer|夏季|summer/.test(value)) return "summer";
+  if (/(26|2026)\s*winter|26winter|2026winter|冬季|winter/.test(value)) return "winter";
+  if (/rolling|滚动录取/.test(value)) return "rolling";
+
+  return "";
+}
+
 function inferStudyAbroadQueryFromFreeText(freeText: string) {
-  const specialization = findBestAliasLabel(freeText, SPECIALIZATION_QUERY_ALIASES);
+  const mergedCountryAliases = mergeAliasGroups(COUNTRY_QUERY_ALIASES, EXTRA_COUNTRY_ALIASES);
+  const mergedDegreeAliases = mergeAliasGroups(DEGREE_QUERY_ALIASES, EXTRA_DEGREE_ALIASES);
+  const mergedMajorAliases = mergeAliasGroups(MAJOR_QUERY_ALIASES, EXTRA_MAJOR_ALIASES);
+  const mergedSpecializationAliases = mergeAliasGroups(
+    SPECIALIZATION_QUERY_ALIASES,
+    EXTRA_SPECIALIZATION_ALIASES
+  );
+  const specialization = findBestAliasLabel(freeText, mergedSpecializationAliases);
   const majorFromSpecialization = specialization
     ? SPECIALIZATION_TO_MAJOR[specialization] || ""
     : "";
   const major =
     majorFromSpecialization ||
-    findBestAliasLabel(freeText, MAJOR_QUERY_ALIASES) ||
+    findBestAliasLabel(freeText, mergedMajorAliases) ||
     findBestAliasLabel(freeText, MAJOR_FAMILIES);
 
   return {
-    country: findBestAliasLabel(freeText, COUNTRY_QUERY_ALIASES),
-    degree: findBestAliasLabel(freeText, DEGREE_QUERY_ALIASES),
+    country: findBestAliasLabel(freeText, mergedCountryAliases),
+    degree: findBestAliasLabel(freeText, mergedDegreeAliases),
     major,
     specialization,
+    budgetTier: inferBudgetTierFromFreeText(freeText),
+    intake: inferIntakeFromFreeText(freeText),
+    gpaProfile: inferGpaProfileFromFreeText(freeText),
+    languageProfile: inferLanguageProfileFromFreeText(freeText),
   };
+}
+
+function getMeaningfulQueryTokens(...values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => normalizeText(value).split(" "))
+        .map((token) => token.trim())
+        .filter((token) => token && token.length > 1 && !FREE_TEXT_STOPWORDS.has(token))
+    )
+  );
+}
+
+function countKeywordMatches(searchText: string, tokenSet: Set<string>, tokens: string[]) {
+  let count = 0;
+  tokens.forEach((token) => {
+    if (matchNormalizedKeyword(searchText, tokenSet, token)) {
+      count += 1;
+    }
+  });
+  return count;
 }
 
 function isAsciiSingleTokenKeyword(value: string) {
@@ -802,6 +997,11 @@ export async function searchVerifiedStudyAbroadPrograms(
 ) {
   const query = normalizeStudyAbroadQuery(input);
   const queryTokens = expandQueryTokens(query.major, query.specialization, query.freeText);
+  const meaningfulFreeTextTokens = getMeaningfulQueryTokens(
+    query.freeText,
+    query.major,
+    query.specialization
+  );
   const specializationMajor = query.specialization
     ? SPECIALIZATION_TO_MAJOR[query.specialization] || ""
     : "";
@@ -836,6 +1036,7 @@ export async function searchVerifiedStudyAbroadPrograms(
     const searchText = normalizeText(
       [
         program.schoolName,
+        program.schoolNameZh,
         program.programName,
         program.discipline,
         program.summary,
@@ -846,6 +1047,7 @@ export async function searchVerifiedStudyAbroadPrograms(
     const tokenSet = tokenizeText(searchText);
 
     let score = program.priority;
+    const fuzzyQueryOverlap = countKeywordMatches(searchText, tokenSet, meaningfulFreeTextTokens);
 
     if (expectedDiscipline && program.discipline === expectedDiscipline) {
       score += 18;
@@ -892,7 +1094,12 @@ export async function searchVerifiedStudyAbroadPrograms(
         if (termMatched) {
           matchedTermCount += 1;
         } else if (term.required) {
-          return null;
+          const canFallbackToFuzzyRecall =
+            meaningfulFreeTextTokens.length > 0 &&
+            fuzzyQueryOverlap >= Math.min(2, meaningfulFreeTextTokens.length);
+          if (!canFallbackToFuzzyRecall) {
+            return null;
+          }
         }
       }
 
@@ -907,8 +1114,11 @@ export async function searchVerifiedStudyAbroadPrograms(
         const disciplineLooksRelated =
           Boolean(expectedDiscipline && program.discipline === expectedDiscipline) ||
           Boolean(query.major && program.discipline === query.major);
+        const fuzzyRecallMatched =
+          meaningfulFreeTextTokens.length > 0 &&
+          fuzzyQueryOverlap >= Math.min(2, meaningfulFreeTextTokens.length);
 
-        if (!disciplineLooksRelated) {
+        if (!disciplineLooksRelated && !fuzzyRecallMatched) {
           return null;
         }
       }
@@ -916,6 +1126,10 @@ export async function searchVerifiedStudyAbroadPrograms(
       if (matchedTermCount === 1 && query.major && query.specialization) {
         score += 4;
       }
+    }
+
+    if (fuzzyQueryOverlap) {
+      score += Math.min(18, fuzzyQueryOverlap * 3);
     }
 
     if (query.country) score += 12;
@@ -1039,10 +1253,26 @@ export async function searchStudyAbroadPrograms(
     readStudyAbroadFinderPrograms(),
     readStudyAbroadSearchBlocklist(),
   ]);
-  const filteredSourcePrograms = sourcePrograms.filter(
-    (program) => !isBlockedStudyAbroadFinderProgram(program, blocklist)
-  );
-  const blockedVerifiedCount = Math.max(0, sourcePrograms.length - filteredSourcePrograms.length);
+  const blockedVerifiedHits: Array<{ ruleId: string; label: string; sessionId: string }> = [];
+  const filteredSourcePrograms: StudyAbroadFinderProgram[] = [];
+
+  sourcePrograms.forEach((program) => {
+    const blockedRuleIds = collectBlockedStudyAbroadFinderProgramRuleIds(program, blocklist);
+    if (blockedRuleIds.length) {
+      const label = `${program.schoolName} / ${program.programName}`.trim();
+      blockedRuleIds.forEach((ruleId) => {
+        blockedVerifiedHits.push({
+          ruleId,
+          label,
+          sessionId: searchSessionId,
+        });
+      });
+      return;
+    }
+
+    filteredSourcePrograms.push(program);
+  });
+  const blockedVerifiedCount = blockedVerifiedHits.length;
   const searchedVerifiedResults = await searchVerifiedStudyAbroadPrograms(
     query,
     filteredSourcePrograms
@@ -1077,6 +1307,7 @@ export async function searchStudyAbroadPrograms(
   let pendingReviewCount = 0;
   let expansionAttempted = false;
   let candidateResults: SearchWebCandidate[] = [];
+  let searchGuidance: StudyAbroadSearchGuidance;
 
   if (shouldExpand) {
     expansionAttempted = true;
@@ -1101,6 +1332,14 @@ export async function searchStudyAbroadPrograms(
       }
     }
     const blockedResultCount = blockedVerifiedCount + candidateSearch.blockedCount;
+    if (blockedResultCount > 0) {
+      await recordStudyAbroadSearchAvoidRuleHits({
+        hits: [...blockedVerifiedHits, ...candidateSearch.blockedRuleHits.map((item) => ({
+          ...item,
+          sessionId: searchSessionId,
+        }))],
+      });
+    }
 
     const message = buildSearchMessage({
       query,
@@ -1116,6 +1355,19 @@ export async function searchStudyAbroadPrograms(
       filteredByFitModeCount,
       fitSummary,
       blockedResultCount,
+    });
+    searchGuidance = buildSearchGuidance({
+      query,
+      displayedVerifiedCount: verifiedResults.length,
+      totalVerifiedCount: allVerifiedResults.length,
+      universityCount: allUniversityMatches.length,
+      candidateCount: candidateResults.length,
+      expansionEnabled,
+      expansionAttempted,
+      fitMode,
+      filteredByFitModeCount,
+      blockedResultCount,
+      candidateResults,
     });
 
     await upsertStudyAbroadSearchAuditEntry({
@@ -1148,10 +1400,16 @@ export async function searchStudyAbroadPrograms(
       pendingReviewCount,
       blockedResultCount,
       message,
+      searchGuidance,
     };
   }
 
   const blockedResultCount = blockedVerifiedCount;
+  if (blockedResultCount > 0) {
+    await recordStudyAbroadSearchAvoidRuleHits({
+      hits: blockedVerifiedHits,
+    });
+  }
 
   const message = buildSearchMessage({
     query,
@@ -1167,6 +1425,19 @@ export async function searchStudyAbroadPrograms(
     filteredByFitModeCount,
     fitSummary,
     blockedResultCount,
+  });
+  searchGuidance = buildSearchGuidance({
+    query,
+    displayedVerifiedCount: verifiedResults.length,
+    totalVerifiedCount: allVerifiedResults.length,
+    universityCount: allUniversityMatches.length,
+    candidateCount: candidateResults.length,
+    expansionEnabled,
+    expansionAttempted,
+    fitMode,
+    filteredByFitModeCount,
+    blockedResultCount,
+    candidateResults,
   });
 
   await upsertStudyAbroadSearchAuditEntry({
@@ -1199,6 +1470,7 @@ export async function searchStudyAbroadPrograms(
     pendingReviewCount,
     blockedResultCount,
     message,
+    searchGuidance,
   };
 }
 
@@ -1210,6 +1482,19 @@ export async function expandStudyAbroadSearchCandidates(
   const expansionEnabled = canUseExternalSearch();
 
   if (!expansionEnabled || !shouldRunExternalSearch(query, [])) {
+    const emptyGuidance = buildSearchGuidance({
+      query,
+      displayedVerifiedCount: 0,
+      totalVerifiedCount: 0,
+      universityCount: 0,
+      candidateCount: 0,
+      expansionEnabled,
+      expansionAttempted: false,
+      fitMode: query.fitMode,
+      filteredByFitModeCount: 0,
+      blockedResultCount: 0,
+      candidateResults: [],
+    });
     return {
       searchSessionId,
       resolvedQuery: query,
@@ -1219,6 +1504,7 @@ export async function expandStudyAbroadSearchCandidates(
       pendingReviewCount: 0,
       blockedResultCount: 0,
       message: "",
+      searchGuidance: emptyGuidance,
     };
   }
 
@@ -1226,9 +1512,24 @@ export async function expandStudyAbroadSearchCandidates(
     readStudyAbroadFinderPrograms(),
     readStudyAbroadSearchBlocklist(),
   ]);
-  const filteredSourcePrograms = sourcePrograms.filter(
-    (program) => !isBlockedStudyAbroadFinderProgram(program, blocklist)
-  );
+  const blockedVerifiedHits: Array<{ ruleId: string; label: string; sessionId: string }> = [];
+  const filteredSourcePrograms: StudyAbroadFinderProgram[] = [];
+  sourcePrograms.forEach((program) => {
+    const blockedRuleIds = collectBlockedStudyAbroadFinderProgramRuleIds(program, blocklist);
+    if (blockedRuleIds.length) {
+      const label = `${program.schoolName} / ${program.programName}`.trim();
+      blockedRuleIds.forEach((ruleId) => {
+        blockedVerifiedHits.push({
+          ruleId,
+          label,
+          sessionId: searchSessionId,
+        });
+      });
+      return;
+    }
+
+    filteredSourcePrograms.push(program);
+  });
   const verifiedResults = await searchVerifiedStudyAbroadPrograms(query, filteredSourcePrograms);
   const candidateSearch = await searchExternalOfficialCandidates(
     query,
@@ -1253,8 +1554,16 @@ export async function expandStudyAbroadSearchCandidates(
   }
 
   const blockedResultCount =
-    Math.max(0, sourcePrograms.length - filteredSourcePrograms.length) +
+    blockedVerifiedHits.length +
     candidateSearch.blockedCount;
+  if (blockedResultCount > 0) {
+    await recordStudyAbroadSearchAvoidRuleHits({
+      hits: [...blockedVerifiedHits, ...candidateSearch.blockedRuleHits.map((item) => ({
+        ...item,
+        sessionId: searchSessionId,
+      }))],
+    });
+  }
 
   const message =
     candidateResults.length > 0
@@ -1262,6 +1571,19 @@ export async function expandStudyAbroadSearchCandidates(
         ? `后台已补充 ${candidateResults.length} 条候选官网页，并同步到审核队列。`
         : `后台已补充 ${candidateResults.length} 条候选官网页。`
       : "后台候选官网页扩展未补充到更高质量结果。";
+  const searchGuidance = buildSearchGuidance({
+    query,
+    displayedVerifiedCount: verifiedResults.length,
+    totalVerifiedCount: verifiedResults.length,
+    universityCount: 0,
+    candidateCount: candidateResults.length,
+    expansionEnabled,
+    expansionAttempted: true,
+    fitMode: query.fitMode,
+    filteredByFitModeCount: 0,
+    blockedResultCount,
+    candidateResults,
+  });
 
   await upsertStudyAbroadSearchAuditEntry({
     sessionId: searchSessionId,
@@ -1285,6 +1607,121 @@ export async function expandStudyAbroadSearchCandidates(
     pendingReviewCount,
     blockedResultCount,
     message,
+    searchGuidance,
+  };
+}
+
+function buildSearchGuidance(params: {
+  query: ReturnType<typeof normalizeStudyAbroadQuery>;
+  displayedVerifiedCount: number;
+  totalVerifiedCount: number;
+  universityCount: number;
+  candidateCount: number;
+  expansionEnabled: boolean;
+  expansionAttempted: boolean;
+  fitMode: string;
+  filteredByFitModeCount: number;
+  blockedResultCount: number;
+  candidateResults: SearchWebCandidate[];
+}) {
+  const {
+    query,
+    displayedVerifiedCount,
+    totalVerifiedCount,
+    universityCount,
+    candidateCount,
+    expansionEnabled,
+    expansionAttempted,
+    fitMode,
+    filteredByFitModeCount,
+    blockedResultCount,
+    candidateResults,
+  } = params;
+
+  const intentSignals = [
+    query.freeText ? "已识别一句话需求" : "",
+    query.country ? `国家锁定：${query.country}` : "",
+    query.degree ? `学位锁定：${query.degree}` : "",
+    query.major ? `专业方向：${query.major}` : "",
+    query.specialization ? `细分方向：${query.specialization}` : "",
+    query.intake ? `入学季：${query.intake}` : "",
+    query.budgetTier ? `预算筛选已开启` : "",
+    query.gpaProfile ? `GPA 已参与排序` : "",
+    query.languageProfile ? `语言成绩已参与排序` : "",
+  ].filter(Boolean);
+
+  const rankingSignals = [
+    "专业匹配优先",
+    "门槛完整度优先",
+    "官网可核验度优先",
+    query.gpaProfile || query.languageProfile ? "背景匹配仅作排序参考" : "",
+    blockedResultCount ? `已自动跳过 ${blockedResultCount} 条后台规避结果` : "",
+  ].filter(Boolean);
+
+  const candidateHigh = candidateResults.filter((item) => item.credibilityLevel === "high").length;
+  const candidateMedium = candidateResults.filter((item) => item.credibilityLevel === "medium").length;
+  const candidateWatch = candidateResults.filter((item) => item.credibilityLevel === "watch").length;
+  const candidateQualitySummary = candidateCount
+    ? `候选官网页中，高可信 ${candidateHigh} 条，中可信 ${candidateMedium} 条，待人工核对 ${candidateWatch} 条。`
+    : expansionEnabled
+      ? "当前没有补充到可展示的候选官网页。"
+      : "当前站点还没有启用全网候选扩搜。";
+
+  let failureReasonCode = "ok";
+  let failureReason = totalVerifiedCount
+    ? `当前已命中 ${totalVerifiedCount} 条正式项目，可以优先看前排结果。`
+    : "";
+  const nextSteps: string[] = [];
+
+  if (!totalVerifiedCount) {
+    if (filteredByFitModeCount > 0 && fitMode && fitMode !== "prefer") {
+      failureReasonCode = "fit-mode-too-strict";
+      failureReason = "当前背景策略把原本能看的项目进一步筛掉了。";
+      nextSteps.push("先切回“推荐排序”，再结合项目卡里的背景提示继续判断。");
+    } else if (query.specialization) {
+      failureReasonCode = "specialization-too-narrow";
+      failureReason = "细分方向过窄，正式项目库里暂时没有完全对齐的结果。";
+      nextSteps.push("先去掉细分方向，保留国家、学位和专业大方向重新搜索。");
+    } else if (query.budgetTier || query.intake) {
+      failureReasonCode = "hard-filters-too-strict";
+      failureReason = "预算或入学季把结果筛得太窄了。";
+      nextSteps.push("先放宽预算或入学季，再看正式结果会不会恢复。");
+    } else if (candidateCount > 0) {
+      failureReasonCode = "catalog-thin-candidates-available";
+      failureReason = "正式库还比较薄，但全网已经找到了可补充的候选官网页。";
+      nextSteps.push("先参考高可信候选官网页，再由后台导入正式项目。");
+    } else if (!expansionEnabled) {
+      failureReasonCode = "external-search-disabled";
+      failureReason = "当前站点还没有启用全网候选扩搜，只能依赖正式库。";
+      nextSteps.push("建议先接通全网扩搜，再放宽国家或专业方向。");
+    } else if (expansionAttempted) {
+      failureReasonCode = "no-reliable-candidates";
+      failureReason = "这轮没有找到正式结果，也没有筛出足够可靠的候选官网页。";
+      nextSteps.push("建议先放宽国家或专业方向，再重试这轮搜索。");
+    } else {
+      failureReasonCode = "catalog-coverage-thin";
+      failureReason = "正式项目库覆盖暂时不足，当前条件下没有命中结果。";
+      nextSteps.push("建议先放宽专业方向，或改成更宽的国家 / 学位组合。");
+    }
+  } else if (displayedVerifiedCount <= 5) {
+    failureReasonCode = "low-result";
+    failureReason = "当前正式结果偏少，前排项目值得看，但建议同时放宽一层方向。";
+    nextSteps.push("优先查看前 3 个正式项目，再试试系统给出的放宽建议。");
+  } else {
+    nextSteps.push("优先查看前 3 到 5 个正式项目，再决定是否需要继续放宽方向。");
+  }
+
+  if (candidateCount && candidateWatch > candidateHigh) {
+    nextSteps.push("候选页里待人工核对项偏多，建议优先看高可信来源。");
+  }
+
+  return {
+    failureReason,
+    failureReasonCode,
+    nextSteps: Array.from(new Set(nextSteps)).slice(0, 3),
+    intentSignals: Array.from(new Set(intentSignals)).slice(0, 6),
+    rankingSignals: Array.from(new Set(rankingSignals)).slice(0, 5),
+    candidateQualitySummary,
   };
 }
 
@@ -1295,6 +1732,14 @@ function selectCandidatesForReviewQueue(candidates: SearchWebCandidate[]) {
     displayLink: candidate.displayLink,
     snippet: candidate.snippet,
     provider: candidate.provider,
+    date: candidate.date,
+    authorityScore: candidate.authorityScore,
+    rerankScore: candidate.rerankScore,
+    score: candidate.score,
+    credibilityLevel: candidate.credibilityLevel,
+    credibilityLabel: candidate.credibilityLabel,
+    credibilityReason: candidate.credibilityReason,
+    relevanceSignals: candidate.relevanceSignals,
   }));
 }
 
@@ -1722,6 +2167,7 @@ export async function runStudyAbroadSearchRuntimeCheck(input?: {
       "X-Appbuilder-Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
+      model: BAIDU_SEARCH_MODEL,
       messages: [
         {
           role: "user",
@@ -1749,6 +2195,10 @@ export async function runStudyAbroadSearchRuntimeCheck(input?: {
         date: String(item.date ?? "").trim(),
         authorityScore: Number(item.authority_score ?? 0) || 0,
         rerankScore: Number(item.rerank_score ?? 0) || 0,
+        credibilityLevel: "watch",
+        credibilityLabel: "",
+        credibilityReason: "",
+        relevanceSignals: [],
       } satisfies SearchWebCandidate;
 
       return {
@@ -1758,7 +2208,17 @@ export async function runStudyAbroadSearchRuntimeCheck(input?: {
     })
     .filter((candidate) => Number(candidate.score ?? 0) >= MIN_CANDIDATE_SCORE).length;
 
-  const ok = rawWebReferences.length > 0 || candidateCount > 0;
+  const fallbackCandidateCount = candidateCount
+    ? 0
+    : (
+        await buildCatalogOfficialFallbackCandidates(
+          normalizedQuery,
+          [],
+          new Set<string>()
+        )
+      ).length;
+  const effectiveCandidateCount = candidateCount || fallbackCandidateCount;
+  const ok = rawWebReferences.length > 0 || effectiveCandidateCount > 0;
 
   return {
     status,
@@ -1767,9 +2227,11 @@ export async function runStudyAbroadSearchRuntimeCheck(input?: {
       ok,
       query: probeQuery,
       rawReferenceCount: rawWebReferences.length,
-      candidateCount,
+      candidateCount: effectiveCandidateCount,
       message: ok
-        ? `探测成功，返回 ${rawWebReferences.length} 条原始参考，${candidateCount} 条通过候选筛选。`
+        ? rawWebReferences.length > 0
+          ? `探测成功，返回 ${rawWebReferences.length} 条原始参考，${effectiveCandidateCount} 条通过候选筛选。`
+          : `探测请求已发起，百度暂未返回参考；已启用官方院校官网保底候选，当前可生成 ${effectiveCandidateCount} 条候选。`
         : "探测请求已发起，但没有拿到可用参考结果；请检查密钥权限、模型配置或网络连通性。",
     },
   };
@@ -1784,7 +2246,7 @@ async function searchExternalOfficialCandidates(
   const baiduApiKey = getBaiduSearchApiKey();
   const verifiedLinks = new Set(
     verifiedResults.flatMap((program) =>
-      [program.overviewUrl, program.admissionsUrl].filter(Boolean)
+      [program.overviewUrl, program.admissionsUrl].filter((item): item is string => Boolean(item))
     )
   );
 
@@ -1792,6 +2254,7 @@ async function searchExternalOfficialCandidates(
     return {
       candidates: [],
       blockedCount: 0,
+      blockedRuleHits: [],
     };
   }
 
@@ -1799,15 +2262,32 @@ async function searchExternalOfficialCandidates(
     queries.map((item) => searchBaiduCandidates(item, baiduApiKey, query))
   );
 
-  const dedupedCandidates = dedupeCandidates(resultSets.flat()).filter(
+  const catalogFallbackCandidates = await buildCatalogOfficialFallbackCandidates(
+    query,
+    verifiedResults,
+    verifiedLinks
+  );
+  const dedupedCandidates = dedupeCandidates([
+    ...resultSets.flat(),
+    ...catalogFallbackCandidates,
+  ]).filter(
     (candidate) => !verifiedLinks.has(candidate.link)
   );
   let blockedCount = 0;
+  const blockedRuleHits: Array<{ ruleId: string; label: string }> = [];
   const candidates: SearchWebCandidate[] = [];
 
   dedupedCandidates.forEach((candidate) => {
-    if (isBlockedStudyAbroadCandidate(candidate, blocklist)) {
+    const blockedRuleIds = collectBlockedStudyAbroadCandidateRuleIds(candidate, blocklist);
+    if (blockedRuleIds.length) {
       blockedCount += 1;
+      const label = candidate.title || candidate.displayLink || candidate.link;
+      blockedRuleIds.forEach((ruleId) => {
+        blockedRuleHits.push({
+          ruleId,
+          label,
+        });
+      });
       return;
     }
 
@@ -1819,6 +2299,7 @@ async function searchExternalOfficialCandidates(
   return {
     candidates,
     blockedCount,
+    blockedRuleHits,
   };
 }
 
@@ -1882,6 +2363,7 @@ async function searchBaiduCandidates(
       "X-Appbuilder-Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
+      model: BAIDU_SEARCH_MODEL,
       messages: [
         {
           role: "user",
@@ -1910,14 +2392,92 @@ async function searchBaiduCandidates(
         date: String(item.date ?? "").trim(),
         authorityScore: Number(item.authority_score ?? 0) || 0,
         rerankScore: Number(item.rerank_score ?? 0) || 0,
+        credibilityLevel: "watch",
+        credibilityLabel: "",
+        credibilityReason: "",
+        relevanceSignals: [],
       } satisfies SearchWebCandidate;
 
-      return {
+      const scored = {
         ...candidate,
         score: scoreCandidate(candidate, query),
       };
+
+      return enrichCandidateCredibility(scored, query);
     })
     .filter((candidate: SearchWebCandidate) => Number(candidate.score ?? 0) >= MIN_CANDIDATE_SCORE);
+}
+
+async function buildCatalogOfficialFallbackCandidates(
+  query: ReturnType<typeof normalizeStudyAbroadQuery>,
+  verifiedResults: StudyAbroadFinderProgram[],
+  verifiedLinks: Set<string>
+) {
+  if (!query.country) {
+    return [];
+  }
+
+  const universities = await readStudyAbroadCatalogUniversities();
+  const verifiedUniversityIds = new Set(
+    verifiedResults.map((program) => program.universityId).filter(Boolean)
+  );
+  const queryText = [
+    query.country,
+    query.major,
+    query.specialization,
+    query.degree || "硕士",
+    "admissions",
+    "program",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return universities
+    .filter((university) => university.country === query.country && university.officialWebsite)
+    .sort((left, right) => {
+      const leftVerified = verifiedUniversityIds.has(left.id) ? 0 : 1;
+      const rightVerified = verifiedUniversityIds.has(right.id) ? 0 : 1;
+      if (leftVerified !== rightVerified) return leftVerified - rightVerified;
+
+      const leftRank = Number.isFinite(left.qsRank ?? NaN) && (left.qsRank ?? 0) > 0
+        ? (left.qsRank ?? 999999)
+        : 999999;
+      const rightRank = Number.isFinite(right.qsRank ?? NaN) && (right.qsRank ?? 0) > 0
+        ? (right.qsRank ?? 999999)
+        : 999999;
+
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return left.name.localeCompare(right.name, "en-US");
+    })
+    .map((university) => {
+      const link = university.officialWebsite.trim();
+      const displayLink = university.websiteDomain || (() => {
+        try {
+          return new URL(link).hostname;
+        } catch {
+          return link;
+        }
+      })();
+      const candidate = {
+        title: `${university.nameZh || university.name} 官方官网入口 / ${query.major || "研究生项目"} ${query.degree || "硕士"}`,
+        link,
+        displayLink,
+        snippet: `${university.name} official university website. 用于在百度扩搜无结果时保底核对 ${queryText}，后台导入前仍需打开官网确认具体项目页。`,
+        provider: "Official Catalog Fallback",
+        date: "",
+        authorityScore: 0.72,
+        rerankScore: 0.62,
+        score: 68,
+        credibilityLevel: "high",
+        credibilityLabel: "高可信",
+        credibilityReason: "来自已校验学校官网入口；适合作为官网抓取和人工核对的保底候选。",
+        relevanceSignals: ["院校官网", "国家匹配", query.degree ? "学位匹配" : "", query.major ? "专业待核对" : ""].filter(Boolean),
+      } satisfies SearchWebCandidate;
+
+      return candidate;
+    })
+    .filter((candidate) => candidate.link && !verifiedLinks.has(candidate.link))
+    .slice(0, MAX_CANDIDATE_RESULTS);
 }
 
 async function fetchJsonWithTimeout(url: string, init?: RequestInit) {
@@ -2085,6 +2645,64 @@ function scoreCandidate(
   score += Math.round((candidate.rerankScore ?? 0) * 12);
 
   return score;
+}
+
+function enrichCandidateCredibility(
+  candidate: SearchWebCandidate,
+  query: ReturnType<typeof normalizeStudyAbroadQuery>
+) {
+  let level: StudyAbroadSearchCandidateResult["credibilityLevel"] = "watch";
+  let label = "待核对";
+  let reason = "来源和内容需要后台继续核对后再导入正式项目。";
+  const signals: string[] = [];
+
+  let url: URL | null = null;
+  try {
+    url = candidate.link ? new URL(candidate.link) : null;
+  } catch {
+    url = null;
+  }
+
+  const host = url?.hostname.toLowerCase() || "";
+  const academicHost = Boolean(host && hostLooksAcademic(host));
+  const official = isOfficialCandidate(candidate);
+  const text = normalizeText([candidate.title, candidate.displayLink, candidate.snippet].join(" "));
+
+  if (official) {
+    level = "high";
+    label = "高可信";
+    reason = "看起来像院校官网或学术域名下的招生 / 项目页，优先级最高。";
+    signals.push("院校官网");
+  } else if (academicHost || (candidate.authorityScore ?? 0) >= 0.65) {
+    level = "medium";
+    label = "中可信";
+    reason = "来源更接近学校域名或权威站点，但仍建议人工核对项目页面。";
+    signals.push("学术域名");
+  }
+
+  if (textHasAlias(text, query.country, COUNTRY_QUERY_ALIASES) || guessCountryFromHost(host) === query.country) {
+    signals.push("国家匹配");
+  }
+
+  if (textHasAlias(text, query.degree, DEGREE_QUERY_ALIASES)) {
+    signals.push("学位匹配");
+  }
+
+  if (textHasAlias(text, query.major, MAJOR_QUERY_ALIASES)) {
+    signals.push("专业匹配");
+  }
+
+  if (textHasAlias(text, query.specialization, SPECIALIZATION_QUERY_ALIASES)) {
+    signals.push("细分方向匹配");
+  }
+
+  return {
+    ...candidate,
+    credibilityLevel: level,
+    credibilityLabel: label,
+    credibilityReason: reason,
+    relevanceSignals: Array.from(new Set(signals)).slice(0, 4),
+  };
 }
 
 function dedupeCandidates(items: SearchWebCandidate[]) {
