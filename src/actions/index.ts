@@ -725,12 +725,14 @@ contactLead: defineAction({
     input: z.object({
       entryId: z.string().min(1, "缺少候选任务 ID"),
       credibilityMode: z.enum(["high", "high-medium", "all"]),
+      maxCandidates: z.coerce.number().int().min(1).max(10).optional(),
     }),
     handler: async (input, context) => {
       await requireAdmin(context);
       const result = await importStudyAbroadReviewCandidatesByCredibility({
         entryId: input.entryId,
         credibilityMode: input.credibilityMode,
+        maxCandidates: input.maxCandidates,
       });
 
       if (result.ok) {

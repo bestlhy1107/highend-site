@@ -23,6 +23,9 @@ import { slugify } from "./text-fields";
 
 const REVIEW_IMPORT_SOURCE_ID = "review-queue-manual-import";
 const FETCH_TIMEOUT_MS = 8000;
+const DEFAULT_BATCH_IMPORT_LIMIT = 3;
+const MAX_BATCH_IMPORT_LIMIT = 10;
+const BATCH_IMPORT_TIME_BUDGET_MS = 22_000;
 const DISCIPLINE_EXTRA_HINTS: Record<string, string[]> = {
   "建筑 / 城市规划": [
     "architectural",
@@ -576,6 +579,7 @@ export async function importStudyAbroadReviewCandidate(params: {
 export async function importStudyAbroadReviewCandidatesByCredibility(params: {
   entryId: string;
   credibilityMode: "high" | "high-medium" | "all";
+  maxCandidates?: number;
 }) {
   const entryId = String(params.entryId ?? "").trim();
   const credibilityMode =
@@ -584,6 +588,10 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
     params.credibilityMode === "all"
       ? params.credibilityMode
       : "high";
+  const maxCandidates = Math.min(
+    MAX_BATCH_IMPORT_LIMIT,
+    Math.max(1, Math.floor(Number(params.maxCandidates) || DEFAULT_BATCH_IMPORT_LIMIT))
+  );
 
   if (!entryId) {
     return {
@@ -598,9 +606,10 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
     };
   }
 
-  const [queue, blocklist] = await Promise.all([
+  const [queue, blocklist, programs] = await Promise.all([
     readStudyAbroadReviewQueue(),
     readStudyAbroadSearchBlocklist(),
+    readStudyAbroadCatalogPrograms(),
   ]);
   const entry = queue.find((item) => item.id === entryId);
 
@@ -617,11 +626,44 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
     };
   }
 
-  const eligibleCandidates = [...entry.candidates]
+  const importedLinkSet = new Set(
+    programs.flatMap((program) =>
+      [program.overviewUrl, program.admissionsUrl, program.tuitionUrl]
+        .map(normalizeLink)
+        .filter(Boolean)
+    )
+  );
+  const matchingCandidates = [...entry.candidates]
     .filter((candidate) => matchesCredibilityMode(candidate.credibilityLevel, credibilityMode))
     .sort(compareCandidatesForBatchImport);
+  const eligibleCandidates: typeof matchingCandidates = [];
 
-  if (!eligibleCandidates.length) {
+  let alreadyExistsCount = 0;
+  let skippedBlockedCount = 0;
+  let skippedPdfCount = 0;
+
+  for (const candidate of matchingCandidates) {
+    const normalizedCandidateLink = normalizeLink(candidate.link);
+
+    if (isBlockedStudyAbroadCandidate(candidate, blocklist)) {
+      skippedBlockedCount += 1;
+      continue;
+    }
+
+    if (isPdfLink(candidate.link)) {
+      skippedPdfCount += 1;
+      continue;
+    }
+
+    if (importedLinkSet.has(normalizedCandidateLink)) {
+      alreadyExistsCount += 1;
+      continue;
+    }
+
+    eligibleCandidates.push(candidate);
+  }
+
+  if (!matchingCandidates.length) {
     return {
       ok: true,
       processedCount: 0,
@@ -634,27 +676,47 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
     };
   }
 
+  if (!eligibleCandidates.length) {
+    const processedCount = alreadyExistsCount + skippedBlockedCount + skippedPdfCount;
+
+    return {
+      ok: true,
+      processedCount,
+      createdCount: 0,
+      alreadyExistsCount,
+      skippedBlockedCount,
+      skippedPdfCount,
+      failedCount: 0,
+      remainingCount: 0,
+      limitReached: false,
+      message: [
+        `当前没有新的${describeCredibilityMode(credibilityMode)}候选需要导入。`,
+        alreadyExistsCount ? `已在正式库 ${alreadyExistsCount} 条` : "",
+        skippedBlockedCount ? `跳过规避来源 ${skippedBlockedCount} 条` : "",
+        skippedPdfCount ? `跳过 PDF ${skippedPdfCount} 条` : "",
+      ]
+        .filter(Boolean)
+        .join("，"),
+    };
+  }
+
   let createdCount = 0;
-  let alreadyExistsCount = 0;
-  let skippedBlockedCount = 0;
-  let skippedPdfCount = 0;
   let failedCount = 0;
+  let attemptedImportCount = 0;
+  let timeBudgetReached = false;
+  const startedAt = Date.now();
 
-  for (const candidate of eligibleCandidates) {
-    if (isBlockedStudyAbroadCandidate(candidate, blocklist)) {
-      skippedBlockedCount += 1;
-      continue;
-    }
-
-    if (isPdfLink(candidate.link)) {
-      skippedPdfCount += 1;
-      continue;
+  for (const candidate of eligibleCandidates.slice(0, maxCandidates)) {
+    if (Date.now() - startedAt > BATCH_IMPORT_TIME_BUDGET_MS) {
+      timeBudgetReached = true;
+      break;
     }
 
     const result = await importStudyAbroadReviewCandidate({
       entryId,
       candidateLink: candidate.link,
     });
+    attemptedImportCount += 1;
 
     if (result.created) {
       createdCount += 1;
@@ -665,6 +727,7 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
     }
   }
 
+  const remainingCount = Math.max(0, eligibleCandidates.length - attemptedImportCount);
   const processedCount =
     createdCount +
     alreadyExistsCount +
@@ -687,9 +750,15 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
       skippedBlockedCount ? `跳过规避来源 ${skippedBlockedCount} 条` : "",
       skippedPdfCount ? `跳过 PDF ${skippedPdfCount} 条` : "",
       failedCount ? `失败 ${failedCount} 条` : "",
+      remainingCount
+        ? `仍有 ${remainingCount} 条待分批导入，请刷新后继续点击`
+        : "",
+      timeBudgetReached ? "本次已接近服务器超时保护，已自动暂停" : "",
     ]
       .filter(Boolean)
       .join("，"),
+    remainingCount,
+    limitReached: remainingCount > 0 || timeBudgetReached,
   };
 }
 
