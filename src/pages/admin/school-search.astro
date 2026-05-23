@@ -689,11 +689,49 @@ const importedProgramByLink = new Map(
       .map((link) => [link, program] as const)
   )
 );
+const activeAvoidRules = avoidRules.filter((rule) => rule.status === "active");
+const activeRuleByProgramId = new Map(
+  activeAvoidRules
+    .filter((rule) => rule.targetType === "program" && rule.programId)
+    .map((rule) => [rule.programId, rule] as const)
+);
+const activeRuleByLink = new Map(
+  activeAvoidRules
+    .filter((rule) => rule.targetType === "link" && rule.link)
+    .map((rule) => [normalizeReviewLink(rule.link), rule] as const)
+);
+const activeRuleByDomain = new Map(
+  activeAvoidRules
+    .filter((rule) => rule.targetType === "domain" && rule.domain)
+    .map((rule) => [rule.domain, rule] as const)
+);
 const activeAvoidDomainSet = new Set(
-  avoidRules
-    .filter((rule) => rule.status === "active" && rule.targetType === "domain" && rule.domain)
+  activeAvoidRules
+    .filter((rule) => rule.targetType === "domain" && rule.domain)
     .map((rule) => rule.domain)
 );
+
+function findActiveAvoidRuleForLink(link?: string) {
+  const normalizedLink = normalizeReviewLink(link);
+  if (normalizedLink && activeRuleByLink.has(normalizedLink)) {
+    return activeRuleByLink.get(normalizedLink) || null;
+  }
+
+  const domain = extractReviewDomain(normalizedLink || link);
+  if (domain && activeRuleByDomain.has(domain)) {
+    return activeRuleByDomain.get(domain) || null;
+  }
+
+  return null;
+}
+
+function findActiveAvoidRuleForResult(result: StudyAbroadSearchAuditResult) {
+  if (result.programId && activeRuleByProgramId.has(result.programId)) {
+    return activeRuleByProgramId.get(result.programId) || null;
+  }
+
+  return findActiveAvoidRuleForLink(result.link);
+}
 
 const candidateCredibilityFilterRaw = String(
   Astro.url.searchParams.get("candidateCredibility") || "all"
@@ -799,7 +837,6 @@ const zeroYieldAuditEntries = auditEntries
 const highBlockedAuditEntries = auditEntries
   .filter((entry) => Number(entry.blockedResultCount) > 0)
   .slice(0, 8);
-const activeAvoidRules = avoidRules.filter((rule) => rule.status === "active");
 const pendingCandidateCredibilitySummary = pendingItems.reduce(
   (acc, item) => {
     acc.high += item.credibilitySummary.high;
@@ -834,43 +871,6 @@ const runtimeAcceptanceActionableCases = runtimeAcceptanceCases.filter(
     item.pendingQueueEntryId &&
     (item.highCredibilityCount > 0 || item.avoidSuggestionWatchMediumCount > 0)
 );
-const activeRuleByProgramId = new Map(
-  activeAvoidRules
-    .filter((rule) => rule.targetType === "program" && rule.programId)
-    .map((rule) => [rule.programId, rule] as const)
-);
-const activeRuleByLink = new Map(
-  activeAvoidRules
-    .filter((rule) => rule.targetType === "link" && rule.link)
-    .map((rule) => [normalizeReviewLink(rule.link), rule] as const)
-);
-const activeRuleByDomain = new Map(
-  activeAvoidRules
-    .filter((rule) => rule.targetType === "domain" && rule.domain)
-    .map((rule) => [rule.domain, rule] as const)
-);
-
-function findActiveAvoidRuleForLink(link?: string) {
-  const normalizedLink = normalizeReviewLink(link);
-  if (normalizedLink && activeRuleByLink.has(normalizedLink)) {
-    return activeRuleByLink.get(normalizedLink) || null;
-  }
-
-  const domain = extractReviewDomain(normalizedLink || link);
-  if (domain && activeRuleByDomain.has(domain)) {
-    return activeRuleByDomain.get(domain) || null;
-  }
-
-  return null;
-}
-
-function findActiveAvoidRuleForResult(result: StudyAbroadSearchAuditResult) {
-  if (result.programId && activeRuleByProgramId.has(result.programId)) {
-    return activeRuleByProgramId.get(result.programId) || null;
-  }
-
-  return findActiveAvoidRuleForLink(result.link);
-}
 
 const executionPlanRecordById = new Map(
   executionPlanRecords.map((item) => [item.id, item] as const)
