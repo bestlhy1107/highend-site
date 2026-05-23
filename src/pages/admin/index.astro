@@ -9,7 +9,7 @@ import { readTeachers } from "../../lib/teachers-store";
 import { readServices } from "../../lib/services-store";
 import { readExams } from "../../lib/exams-store";
 import { readScores } from "../../lib/scores-store";
-import { readLeads } from "../../lib/leads-store";
+import { readLeads, type LeadRecord } from "../../lib/leads-store";
 import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
 import { readStudyAbroadCatalogSummary } from "../../lib/study-abroad-catalog-store";
 import { readStudyAbroadCatalogSyncState } from "../../lib/study-abroad-catalog-sync";
@@ -36,7 +36,18 @@ const teachers = await readTeachers();
 const services = await readServices();
 const exams = await readExams();
 const scores = await readScores();
-const leads = await readLeads();
+
+let leads: LeadRecord[] = [];
+let leadsError = "";
+
+try {
+  leads = await readLeads();
+} catch (error) {
+  console.error("[admin] Failed to read leads", error);
+  leadsError =
+    "咨询记录数据库连接失败，后台已暂时跳过线索读取。请检查生产环境 ASTRO_DB_APP_TOKEN / ASTRO_DB_REMOTE_URL 是否有效，并重启 PM2 更新环境变量。";
+}
+
 const schoolSearchQueue = await readStudyAbroadReviewQueue();
 const studyAbroadCatalog = await readStudyAbroadCatalogSummary();
 const studyAbroadCatalogSyncState = await readStudyAbroadCatalogSyncState();
@@ -331,6 +342,12 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
         <button class="btn btn-ghost" type="submit">退出登录</button>
       </form>
     </div>
+
+    {leadsError && (
+      <div class="contact-notice mt-4">
+        {leadsError}
+      </div>
+    )}
 
     <div class="cards cards--3 mt-4">
       <a class="card card--hover" href="/admin/settings">
@@ -1214,6 +1231,12 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
       {deleteLeadSuccess && (
         <div class="contact-notice contact-notice--success mt-4">
           {deleteLeadSuccess.message}
+        </div>
+      )}
+
+      {leadsError && (
+        <div class="contact-notice mt-4">
+          当前无法读取咨询记录，表单线索统计已暂时置为 0。修复数据库 token 后刷新本页即可恢复。
         </div>
       )}
 
