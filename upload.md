@@ -3,6 +3,7 @@ git add .
 git commit -m "本次更新说明"
 git push origin main
 
+
 git add 是把改动加入暂存区，git commit 提交已暂存内容，git push origin main 把本地 main 更新发到远程 origin/main。
 
 然后去阿里云服务器，进入项目目录，直接运行你已经建好的脚本：
