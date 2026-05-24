@@ -3193,7 +3193,7 @@ export async function syncStudyAbroadAdmissionsSnapshots(options?: AdmissionsSyn
     };
   }
 
-  const { synced, nextPrograms } = await syncAdmissionsCandidates(programs, candidates);
+  const { synced } = await syncAdmissionsCandidates(programs, candidates);
 
   const okCount = synced.filter((item) => item.extractionStatus === "ok").length;
   const partialCount = synced.filter((item) => item.extractionStatus === "partial").length;

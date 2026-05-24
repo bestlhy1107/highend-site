@@ -232,6 +232,14 @@ const buildUniversityMatches = (programs: StudyAbroadFinderProgram[]) => {
 
 const initialUniversityMatches = buildUniversityMatches(initialResults);
 const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
+const schoolMatchClientConfig = {
+  seedResults,
+  totalPrograms,
+  initialUniversityMatches,
+  initialVisibleSchoolCount: INITIAL_VISIBLE_SCHOOL_COUNT,
+  specializationOptionsByMajor: STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
+  majorExpansionHints: STUDY_ABROAD_MAJOR_EXPANSIONS,
+};
 ---
 
 <section
@@ -859,24 +867,38 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
 
   <script
     is:inline
-    define:vars={{
-      finderId,
-      seedResults,
-      totalPrograms,
-      initialUniversityMatches,
-      initialVisibleSchoolCount: INITIAL_VISIBLE_SCHOOL_COUNT,
-      specializationOptionsByMajor: STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
-      majorExpansionHints: STUDY_ABROAD_MAJOR_EXPANSIONS,
-    }}
-  >
-    const root = document.querySelector(`[data-school-match="${finderId}"]`);
+    type="application/json"
+    data-school-match-config={finderId}
+    set:html={JSON.stringify(schoolMatchClientConfig)}
+  />
 
-    if (root) {
-      const initialResults = Array.isArray(seedResults) ? seedResults : [];
-      const totalProgramCount = Number(totalPrograms) || initialResults.length;
-      const seedUniversityMatches = Array.isArray(initialUniversityMatches)
-        ? initialUniversityMatches
+  <script is:inline>
+    (() => {
+      document.querySelectorAll("[data-school-match]").forEach((root) => {
+        const configId = root.getAttribute("data-school-match") || "";
+        const configNode = document.querySelector(`script[data-school-match-config="${configId}"]`);
+        let config = {};
+
+        try {
+          config = JSON.parse(configNode?.textContent || "{}");
+        } catch {
+          config = {};
+        }
+
+      const initialResults = Array.isArray(config.seedResults) ? config.seedResults : [];
+      const totalProgramCount = Number(config.totalPrograms) || initialResults.length;
+      const seedUniversityMatches = Array.isArray(config.initialUniversityMatches)
+        ? config.initialUniversityMatches
         : [];
+      const initialVisibleSchoolCount = Number(config.initialVisibleSchoolCount) || 24;
+      const specializationOptionsByMajor =
+        config.specializationOptionsByMajor && typeof config.specializationOptionsByMajor === "object"
+          ? config.specializationOptionsByMajor
+          : {};
+      const majorExpansionHints =
+        config.majorExpansionHints && typeof config.majorExpansionHints === "object"
+          ? config.majorExpansionHints
+          : {};
       const countrySelect = root.querySelector('[data-role="country"]');
       const freeTextInput = root.querySelector('[data-role="free-text"]');
       const degreeSelect = root.querySelector('[data-role="degree"]');
@@ -961,7 +983,6 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       const qualityCandidateSummaryNode = root.querySelector('[data-role="quality-candidate-summary"]');
       const qualityNextStepsNode = root.querySelector('[data-role="quality-next-steps"]');
       let activeVerifiedResults = initialResults;
-      let activeUniversityMatches = seedUniversityMatches;
       let activeUniversityCount = seedUniversityMatches.length;
       const initialSchoolBatchSize = Number(initialVisibleSchoolCount) || 24;
       let visibleSchoolCount = initialSchoolBatchSize;
@@ -3528,7 +3549,6 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
         selectedUniversityId = "";
         activeDetailProgramId = "";
         activeVerifiedResults = initialResults;
-        activeUniversityMatches = seedUniversityMatches;
         activeUniversityCount = seedUniversityMatches.length;
         visibleSchoolCount = initialSchoolBatchSize;
         baseVerifiedResults = initialResults;
@@ -3696,7 +3716,6 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
           resetSchoolRefiners();
           applyResolvedQueryToControls(resolvedQuery);
           activeVerifiedResults = nextVerifiedResults;
-          activeUniversityMatches = nextUniversityMatches;
           activeUniversityCount = nextUniversityCount;
           visibleSchoolCount = initialSchoolBatchSize;
           baseVerifiedResults = nextVerifiedResults;
@@ -4159,6 +4178,7 @@ const INITIAL_VISIBLE_SCHOOL_COUNT = compact ? 10 : 24;
       clearFitPreviews();
       loadUtilityState();
       syncUtilityActionStates();
-    }
+      });
+    })();
   </script>
 </section>

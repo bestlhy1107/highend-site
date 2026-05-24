@@ -1643,7 +1643,6 @@ function buildSearchGuidance(params: {
     query,
     displayedVerifiedCount,
     totalVerifiedCount,
-    universityCount,
     candidateCount,
     expansionEnabled,
     expansionAttempted,

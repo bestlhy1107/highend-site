@@ -158,7 +158,7 @@ contactLead: defineAction({
         });
       }
 
-      await context.session?.set("adminUser", {
+      context.session?.set("adminUser", {
         username: input.username,
         loginAt: new Date().toISOString(),
       });
@@ -170,7 +170,7 @@ contactLead: defineAction({
   adminLogout: defineAction({
     accept: "form",
     handler: async (_input, context) => {
-      await context.session?.destroy();
+      context.session?.destroy();
       return { ok: true, message: "已退出登录" };
     },
   }),
