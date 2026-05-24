@@ -1,4 +1,7 @@
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
+  dataFilePath,
   getJsonArrayFileVersion,
   invalidateJsonArrayFileCache,
   readJsonArrayFile,
@@ -113,6 +116,18 @@ export type StudyAbroadAdmissionsCoverageGroup = {
 const SOURCE_FILE = "study-abroad-sources.json";
 const UNIVERSITY_FILE = "study-abroad-universities.json";
 const PROGRAM_FILE = "study-abroad-programs.json";
+const FINDER_INDEX_FILE = "study-abroad-finder-index.json";
+const PROGRAM_LINK_INDEX_FILE = "study-abroad-program-link-index.json";
+
+export type StudyAbroadCatalogProgramLinkIndexItem = {
+  link: string;
+  programId: string;
+  schoolName: string;
+  programName: string;
+  country: string;
+  degree: string;
+  discipline: string;
+};
 
 const derivedCatalogCache = new Map<
   string,
@@ -505,6 +520,196 @@ function compareFinderPrograms(a: StudyAbroadFinderProgram, b: StudyAbroadFinder
   return comparePrograms(a, b);
 }
 
+function normalizeCatalogLink(value?: string) {
+  try {
+    const url = new URL(String(value || "").trim());
+    url.hash = "";
+    url.search = "";
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return `${url.protocol}//${url.host}${pathname}`;
+  } catch {
+    return String(value || "").trim();
+  }
+}
+
+async function readDataFileMtime(fileName: string) {
+  try {
+    return (await stat(dataFilePath(fileName))).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+async function readCompactJsonArray<T>(
+  fileName: string,
+  normalize: (input: Partial<T>) => T,
+  isValid: (item: T) => boolean
+) {
+  try {
+    const raw = await readFile(dataFilePath(fileName), "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+
+    return parsed.map(normalize).filter(isValid);
+  } catch {
+    return null;
+  }
+}
+
+async function writeCompactJsonArray<T>(fileName: string, items: T[]) {
+  const filePath = dataFilePath(fileName);
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify(items), "utf8");
+}
+
+function normalizeFinderIndexProgram(
+  input: Partial<StudyAbroadFinderProgram>
+): StudyAbroadFinderProgram {
+  const rawDegree = String(input.degree ?? "").trim();
+  const degree = rawDegree === "本科" || rawDegree === "博士" ? rawDegree : "硕士";
+
+  return {
+    id: String(input.id ?? "").trim(),
+    universityId: String(input.universityId ?? "").trim(),
+    schoolName: String(input.schoolName ?? "").trim(),
+    schoolNameZh: String(input.schoolNameZh ?? "").trim(),
+    country: String(input.country ?? "").trim(),
+    city: String(input.city ?? "").trim(),
+    stateOrProvince: String(input.stateOrProvince ?? "").trim(),
+    programName: String(input.programName ?? "").trim(),
+    degree: degree as "本科" | "硕士" | "博士",
+    discipline: String(input.discipline ?? "").trim(),
+    summary: String(input.summary ?? "").trim(),
+    duration: String(input.duration ?? "").trim(),
+    intake: String(input.intake ?? "").trim(),
+    tuitionAmount: String(input.tuitionAmount ?? "").trim(),
+    tuitionCurrency: String(input.tuitionCurrency ?? "").trim(),
+    tuitionNotes: String(input.tuitionNotes ?? "").trim(),
+    overviewUrl: String(input.overviewUrl ?? "").trim(),
+    admissionsUrl: String(input.admissionsUrl ?? "").trim(),
+    tuitionUrl: String(input.tuitionUrl ?? "").trim(),
+    keywords: normalizeStringArray(input.keywords),
+    tags: normalizeStringArray(input.tags),
+    sourceIds: normalizeStringArray(input.sourceIds),
+    checkedAt: String(input.checkedAt ?? "").trim(),
+    priority: Number(input.priority ?? 999),
+    admissionsSnapshot: normalizeAdmissionsSnapshot(input.admissionsSnapshot),
+    officialWebsite: String(input.officialWebsite ?? "").trim(),
+    websiteDomain: String(input.websiteDomain ?? "").trim(),
+    qsRank: Number.isFinite(Number(input.qsRank)) ? Number(input.qsRank) : null,
+    qsRankingYear: Number.isFinite(Number(input.qsRankingYear))
+      ? Number(input.qsRankingYear)
+      : null,
+    rankingSource: String(input.rankingSource ?? "").trim(),
+  };
+}
+
+function isValidFinderIndexProgram(item: StudyAbroadFinderProgram) {
+  return Boolean(item.id && item.universityId && item.programName && item.overviewUrl);
+}
+
+function normalizeProgramLinkIndexItem(
+  input: Partial<StudyAbroadCatalogProgramLinkIndexItem>
+): StudyAbroadCatalogProgramLinkIndexItem {
+  return {
+    link: normalizeCatalogLink(input.link),
+    programId: String(input.programId ?? "").trim(),
+    schoolName: String(input.schoolName ?? "").trim(),
+    programName: String(input.programName ?? "").trim(),
+    country: String(input.country ?? "").trim(),
+    degree: String(input.degree ?? "").trim(),
+    discipline: String(input.discipline ?? "").trim(),
+  };
+}
+
+function isValidProgramLinkIndexItem(item: StudyAbroadCatalogProgramLinkIndexItem) {
+  return Boolean(item.link && item.programId);
+}
+
+function buildStudyAbroadFinderProgramsFromCatalog(
+  universities: StudyAbroadCatalogUniversity[],
+  programs: StudyAbroadCatalogProgram[]
+) {
+  const universityMap = new Map(universities.map((item) => [item.id, item]));
+
+  return programs
+    .map((program) => {
+      const university = universityMap.get(program.universityId);
+
+      return {
+        ...program,
+        schoolNameZh: university?.nameZh || program.schoolNameZh || "",
+        officialWebsite: university?.officialWebsite ?? safeOrigin(program.overviewUrl),
+        websiteDomain: university?.websiteDomain ?? safeHost(program.overviewUrl),
+        qsRank: university?.qsRank ?? null,
+        qsRankingYear: university?.qsRankingYear ?? null,
+        rankingSource: university?.rankingSource ?? "",
+      } satisfies StudyAbroadFinderProgram;
+    })
+    .sort(compareFinderPrograms);
+}
+
+function buildStudyAbroadProgramLinkIndex(programs: StudyAbroadCatalogProgram[]) {
+  const linkMap = new Map<string, StudyAbroadCatalogProgramLinkIndexItem>();
+
+  programs.forEach((program) => {
+    [program.overviewUrl, program.admissionsUrl, program.tuitionUrl]
+      .map(normalizeCatalogLink)
+      .filter(Boolean)
+      .forEach((link) => {
+        if (linkMap.has(link)) return;
+
+        linkMap.set(link, {
+          link,
+          programId: program.id,
+          schoolName: program.schoolNameZh || program.schoolName,
+          programName: program.programName,
+          country: program.country,
+          degree: program.degree,
+          discipline: program.discipline,
+        });
+      });
+  });
+
+  return Array.from(linkMap.values()).sort((left, right) =>
+    `${left.schoolName}-${left.programName}-${left.link}`.localeCompare(
+      `${right.schoolName}-${right.programName}-${right.link}`,
+      "zh-CN"
+    )
+  );
+}
+
+async function readFreshFinderIndex(
+  universityVersion: number,
+  programVersion: number
+) {
+  const indexVersion = await readDataFileMtime(FINDER_INDEX_FILE);
+  if (!indexVersion || indexVersion < Math.max(universityVersion, programVersion)) {
+    return null;
+  }
+
+  const indexed = await readCompactJsonArray(
+    FINDER_INDEX_FILE,
+    normalizeFinderIndexProgram,
+    isValidFinderIndexProgram
+  );
+
+  return indexed?.sort(compareFinderPrograms) ?? null;
+}
+
+async function readFreshProgramLinkIndex(programVersion: number) {
+  const indexVersion = await readDataFileMtime(PROGRAM_LINK_INDEX_FILE);
+  if (!indexVersion || indexVersion < programVersion) {
+    return null;
+  }
+
+  return readCompactJsonArray(
+    PROGRAM_LINK_INDEX_FILE,
+    normalizeProgramLinkIndexItem,
+    isValidProgramLinkIndexItem
+  );
+}
+
 function buildFallbackUniversities() {
   const map = new Map<string, StudyAbroadCatalogUniversity>();
 
@@ -633,6 +838,30 @@ export async function writeStudyAbroadCatalogPrograms(programs: StudyAbroadCatal
   });
 }
 
+export async function rebuildStudyAbroadFinderIndexes() {
+  invalidateStudyAbroadCatalogDerivedCache();
+  const [universities, programs] = await Promise.all([
+    readStudyAbroadCatalogUniversities(),
+    readStudyAbroadCatalogPrograms(),
+  ]);
+  const finderPrograms = buildStudyAbroadFinderProgramsFromCatalog(universities, programs);
+  const programLinks = buildStudyAbroadProgramLinkIndex(programs);
+
+  await Promise.all([
+    writeCompactJsonArray(FINDER_INDEX_FILE, finderPrograms),
+    writeCompactJsonArray(PROGRAM_LINK_INDEX_FILE, programLinks),
+  ]);
+
+  invalidateStudyAbroadCatalogDerivedCache();
+
+  return {
+    finderIndexFile: FINDER_INDEX_FILE,
+    programLinkIndexFile: PROGRAM_LINK_INDEX_FILE,
+    programCount: finderPrograms.length,
+    linkCount: programLinks.length,
+  };
+}
+
 export async function readStudyAbroadCatalogSummary() {
   const [sourceVersion, universityVersion, programVersion] = await Promise.all([
     getJsonArrayFileVersion(SOURCE_FILE),
@@ -753,35 +982,47 @@ export async function readStudyAbroadCatalogSummary() {
 }
 
 export async function readStudyAbroadFinderPrograms() {
-  const [universityVersion, programVersion] = await Promise.all([
+  const [universityVersion, programVersion, finderIndexVersion] = await Promise.all([
     getJsonArrayFileVersion(UNIVERSITY_FILE),
     getJsonArrayFileVersion(PROGRAM_FILE),
+    readDataFileMtime(FINDER_INDEX_FILE),
   ]);
-  const version = `${universityVersion}:${programVersion}`;
+  const version = `${universityVersion}:${programVersion}:${finderIndexVersion}`;
 
   return readDerivedCatalogCache("finder:programs", version, async () => {
+    const indexed = await readFreshFinderIndex(
+      Number(universityVersion),
+      Number(programVersion)
+    );
+
+    if (indexed) {
+      return indexed;
+    }
+
     const [universities, programs] = await Promise.all([
       readStudyAbroadCatalogUniversities(),
       readStudyAbroadCatalogPrograms(),
     ]);
 
-    const universityMap = new Map(universities.map((item) => [item.id, item]));
+    return buildStudyAbroadFinderProgramsFromCatalog(universities, programs);
+  });
+}
 
-    return programs
-      .map((program) => {
-        const university = universityMap.get(program.universityId);
+export async function readStudyAbroadCatalogProgramLinkIndex() {
+  const [programVersion, linkIndexVersion] = await Promise.all([
+    getJsonArrayFileVersion(PROGRAM_FILE),
+    readDataFileMtime(PROGRAM_LINK_INDEX_FILE),
+  ]);
+  const version = `${programVersion}:${linkIndexVersion}`;
 
-        return {
-          ...program,
-          schoolNameZh: university?.nameZh || program.schoolNameZh || "",
-          officialWebsite: university?.officialWebsite ?? safeOrigin(program.overviewUrl),
-          websiteDomain: university?.websiteDomain ?? safeHost(program.overviewUrl),
-          qsRank: university?.qsRank ?? null,
-          qsRankingYear: university?.qsRankingYear ?? null,
-          rankingSource: university?.rankingSource ?? "",
-        } satisfies StudyAbroadFinderProgram;
-      })
-      .sort(compareFinderPrograms);
+  return readDerivedCatalogCache("catalog:program-links", version, async () => {
+    const indexed = await readFreshProgramLinkIndex(Number(programVersion));
+    if (indexed) {
+      return indexed;
+    }
+
+    const programs = await readStudyAbroadCatalogPrograms();
+    return buildStudyAbroadProgramLinkIndex(programs);
   });
 }
 

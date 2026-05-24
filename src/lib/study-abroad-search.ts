@@ -600,6 +600,21 @@ function toAuditResultsFromCandidates(
   }));
 }
 
+async function persistStudyAbroadSearchAuditEntry(
+  input: Parameters<typeof upsertStudyAbroadSearchAuditEntry>[0]
+) {
+  const task = upsertStudyAbroadSearchAuditEntry(input);
+
+  if (process.env.STUDY_ABROAD_SEARCH_AUDIT_SYNC === "true") {
+    await task;
+    return;
+  }
+
+  void task.catch((error) => {
+    console.error("[study-abroad-search] Failed to persist search audit entry", error);
+  });
+}
+
 function hasStructuredSnapshot(program: StudyAbroadFinderProgram) {
   const snapshot = program.admissionsSnapshot;
   if (!snapshot?.extractedAt) return false;
@@ -1370,7 +1385,7 @@ export async function searchStudyAbroadPrograms(
       candidateResults,
     });
 
-    await upsertStudyAbroadSearchAuditEntry({
+    await persistStudyAbroadSearchAuditEntry({
       sessionId: searchSessionId,
       query,
       message,
@@ -1440,7 +1455,7 @@ export async function searchStudyAbroadPrograms(
     candidateResults,
   });
 
-  await upsertStudyAbroadSearchAuditEntry({
+  await persistStudyAbroadSearchAuditEntry({
     sessionId: searchSessionId,
     query,
     message,
@@ -1585,7 +1600,7 @@ export async function expandStudyAbroadSearchCandidates(
     candidateResults,
   });
 
-  await upsertStudyAbroadSearchAuditEntry({
+  await persistStudyAbroadSearchAuditEntry({
     sessionId: searchSessionId,
     query,
     message,

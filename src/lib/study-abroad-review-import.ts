@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  readStudyAbroadCatalogProgramLinkIndex,
   readStudyAbroadCatalogPrograms,
   readStudyAbroadCatalogUniversities,
   writeStudyAbroadCatalogPrograms,
@@ -611,10 +612,10 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
     };
   }
 
-  const [queue, blocklist, programs] = await Promise.all([
+  const [queue, blocklist, programLinkIndex] = await Promise.all([
     readStudyAbroadReviewQueue(),
     readStudyAbroadSearchBlocklist(),
-    readStudyAbroadCatalogPrograms(),
+    readStudyAbroadCatalogProgramLinkIndex(),
   ]);
   const entry = queue.find((item) => item.id === entryId);
 
@@ -632,11 +633,7 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
   }
 
   const importedLinkSet = new Set(
-    programs.flatMap((program) =>
-      [program.overviewUrl, program.admissionsUrl, program.tuitionUrl]
-        .map(normalizeLink)
-        .filter(Boolean)
-    )
+    programLinkIndex.map((item) => normalizeLink(item.link)).filter(Boolean)
   );
   const matchingCandidates = [...entry.candidates]
     .filter((candidate) => matchesCredibilityMode(candidate.credibilityLevel, credibilityMode))

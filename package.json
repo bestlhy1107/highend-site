@@ -9,6 +9,7 @@
     "start": "npx @dotenvx/dotenvx run -- node ./dist/server/entry.mjs",
     "study-abroad:campaign": "tsx scripts/run-study-abroad-campaign.ts",
     "study-abroad:catalog-sync": "npx @dotenvx/dotenvx run -- tsx scripts/run-study-abroad-catalog-sync.ts",
+    "study-abroad:build-index": "tsx scripts/build-study-abroad-search-index.ts",
     "study-abroad:eval": "tsx scripts/run-study-abroad-search-eval.ts",
     "study-abroad:python-pipeline": "python3 scripts/study_abroad_python_pipeline.py",
     "study-abroad:runtime-acceptance": "npx @dotenvx/dotenvx run -- tsx scripts/run-study-abroad-search-runtime-acceptance.ts",

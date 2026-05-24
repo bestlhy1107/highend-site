@@ -3,7 +3,7 @@ export const prerender = false;
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { actions } from "astro:actions";
-import { readStudyAbroadCatalogPrograms } from "../../lib/study-abroad-catalog-store";
+import { readStudyAbroadCatalogProgramLinkIndex } from "../../lib/study-abroad-catalog-store";
 import {
   collectStudyAbroadReviewAvoidDomainSuggestions,
   readStudyAbroadReviewQueue,
@@ -662,7 +662,7 @@ const archivedExecutionPlanResult = await autoArchiveCompletedStudyAbroadSearchE
 
 const [
   queue,
-  catalogPrograms,
+  programLinkIndex,
   auditEntries,
   avoidRules,
   evalReport,
@@ -671,7 +671,7 @@ const [
   runtimeAcceptanceReport,
 ] = await Promise.all([
   readStudyAbroadReviewQueue(),
-  readStudyAbroadCatalogPrograms(),
+  readStudyAbroadCatalogProgramLinkIndex(),
   readStudyAbroadSearchAuditEntries(),
   readStudyAbroadSearchAvoidRules(),
   readStudyAbroadSearchEvalReport(),
@@ -682,12 +682,7 @@ const [
 const studyAbroadSearchRuntime = getStudyAbroadSearchRuntimeStatus();
 
 const importedProgramByLink = new Map(
-  catalogPrograms.flatMap((program) =>
-    [program.overviewUrl, program.admissionsUrl, program.tuitionUrl]
-      .map((link) => normalizeReviewLink(link))
-      .filter(Boolean)
-      .map((link) => [link, program] as const)
-  )
+  programLinkIndex.map((item) => [normalizeReviewLink(item.link), item] as const)
 );
 const activeAvoidRules = avoidRules.filter((rule) => rule.status === "active");
 const activeRuleByProgramId = new Map(

@@ -103,12 +103,15 @@ else
   npm install
 fi
 
-log "8. 构建项目"
+log "8. 预生成选校搜索索引"
+npm run study-abroad:build-index
+
+log "9. 构建项目"
 npm run build
 
 [[ -f ./dist/server/entry.mjs ]] || fail "未找到构建产物 ./dist/server/entry.mjs"
 
-log "9. 启动或重启 PM2"
+log "10. 启动或重启 PM2"
 if pm2 describe "$APP_NAME" >/dev/null 2>&1; then
   HOST="$APP_HOST" PORT="$APP_PORT" pm2 restart "$APP_NAME" --update-env
 else
@@ -117,14 +120,18 @@ fi
 
 pm2 save
 
-log "10. 健康检查"
+log "11. 健康检查"
 sleep 2
 for path in "${HEALTH_PATHS[@]}"; do
   curl -fsS -I "http://${APP_HOST}:${APP_PORT}${path}" >/dev/null ||
     fail "应用本地端口健康检查失败：${path}"
 done
 
-log "11. 当前 PM2 状态"
+log "12. 预热选校页面"
+curl -fsS --max-time 25 "http://${APP_HOST}:${APP_PORT}/school-finder" >/dev/null ||
+  fail "选校页面预热失败"
+
+log "13. 当前 PM2 状态"
 pm2 status
 
 log "部署完成"

@@ -21,6 +21,8 @@ pnpm-debug.log*
 data/study-abroad-admissions-cache.json
 data/study-abroad-admissions-warmup-state.json
 data/study-abroad-admissions-campaign-state.json
+data/study-abroad-finder-index.json
+data/study-abroad-program-link-index.json
 
 # macOS-specific files
 .DS_Store
