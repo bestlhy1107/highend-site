@@ -6,7 +6,8 @@ BRANCH="main"
 REMOTE="origin"
 APP_PORT="4321"
 APP_HOST="127.0.0.1"
-RUNTIME_DATA_PATHS=(data public/uploads)
+RUNTIME_BACKUP_PATHS=(data public/uploads)
+RUNTIME_STASH_PATHS=(data)
 RUNTIME_STASH_CREATED=0
 RUNTIME_STASH_NAME=""
 RUNTIME_BACKUP_CREATED=0
@@ -112,28 +113,29 @@ if [[ -z "${ASTRO_DB_REMOTE_URL:-}" || -z "${ASTRO_DB_APP_TOKEN:-}" ]]; then
 fi
 
 log "3. 部署前备份运行时数据"
-backup_output="$(npm run --silent runtime:backup -- --reason=pre-deploy || true)"
+backup_paths="$(IFS=,; echo "${RUNTIME_BACKUP_PATHS[*]}")"
+backup_output="$(npm run --silent runtime:backup -- --reason=pre-deploy --paths="$backup_paths" || true)"
 echo "$backup_output"
 RUNTIME_BACKUP_FILE="$(printf '%s\n' "$backup_output" | sed -n 's/^运行时数据已备份：//p' | tail -1)"
 if [[ -n "$RUNTIME_BACKUP_FILE" ]]; then
   RUNTIME_BACKUP_CREATED=1
 fi
 
-log "4. 自动暂存运行时数据改动"
-if [[ -n "$(git status --porcelain -- "${RUNTIME_DATA_PATHS[@]}")" ]]; then
+log "4. 自动暂存会影响拉代码的运行时数据改动"
+if [[ -n "$(git status --porcelain -- "${RUNTIME_STASH_PATHS[@]}")" ]]; then
   RUNTIME_STASH_NAME="deploy-runtime-data-$(date '+%Y%m%d-%H%M%S')"
-  git stash push --include-untracked -m "$RUNTIME_STASH_NAME" -- "${RUNTIME_DATA_PATHS[@]}"
+  git stash push --include-untracked -m "$RUNTIME_STASH_NAME" -- "${RUNTIME_STASH_PATHS[@]}"
   RUNTIME_STASH_CREATED=1
   log "已临时保存运行时数据改动：$RUNTIME_STASH_NAME"
 else
-  log "没有检测到运行时数据改动"
+  log "没有检测到需要 git stash 的运行时数据改动"
 fi
 
 log "5. 检查代码工作区是否干净"
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "检测到未提交或未跟踪文件："
   git status --short
-  fail "请先处理服务器上的代码改动，再部署。运行时 data/ 和 public/uploads/ 改动会由脚本自动保护。"
+  fail "请先处理服务器上的代码改动，再部署。运行时 data/ 会由 git stash 保护，public/uploads/ 会由部署前备份保护。"
 fi
 
 log "6. 获取最新代码"
