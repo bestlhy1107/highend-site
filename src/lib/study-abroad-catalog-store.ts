@@ -862,21 +862,11 @@ export async function rebuildStudyAbroadFinderIndexes() {
   };
 }
 
-export async function readStudyAbroadCatalogSummary() {
-  const [sourceVersion, universityVersion, programVersion] = await Promise.all([
-    getJsonArrayFileVersion(SOURCE_FILE),
-    getJsonArrayFileVersion(UNIVERSITY_FILE),
-    getJsonArrayFileVersion(PROGRAM_FILE),
-  ]);
-  const version = `${sourceVersion}:${universityVersion}:${programVersion}`;
-
-  return readDerivedCatalogCache("catalog:summary", version, async () => {
-    const [sources, universities, programs] = await Promise.all([
-      readStudyAbroadCatalogSources(),
-      readStudyAbroadCatalogUniversities(),
-      readStudyAbroadCatalogPrograms(),
-    ]);
-
+function buildStudyAbroadCatalogStats(
+  sources: StudyAbroadCatalogSource[],
+  universities: StudyAbroadCatalogUniversity[],
+  programs: Array<StudyAbroadCatalogProgram | StudyAbroadFinderProgram>
+) {
   const countries = new Set(universities.map((item) => item.country));
   const qsCoverage = universities.filter((item) => item.qsRank !== null).length;
   const tuitionCoverage = programs.filter((item) => item.tuitionAmount).length;
@@ -903,7 +893,7 @@ export async function readStudyAbroadCatalogSummary() {
     acc[source.status] = (acc[source.status] ?? 0) + 1;
     return acc;
   }, {});
-  const buildCoverageGroups = (getLabel: (program: StudyAbroadCatalogProgram) => string) => {
+  const buildCoverageGroups = (getLabel: (program: StudyAbroadCatalogProgram | StudyAbroadFinderProgram) => string) => {
     const map = new Map<string, StudyAbroadAdmissionsCoverageGroup>();
 
     programs.forEach((program) => {
@@ -956,28 +946,64 @@ export async function readStudyAbroadCatalogSummary() {
       return left.label.localeCompare(right.label, "zh-CN");
     });
   };
-  const countryAdmissionsCoverage = buildCoverageGroups((program) => program.country);
-  const disciplineAdmissionsCoverage = buildCoverageGroups((program) => program.discipline);
+
+  return {
+    sourceCount: sources.length,
+    universityCount: universities.length,
+    programCount: programs.length,
+    countryCount: countries.size,
+    qsCoverage,
+    tuitionCoverage,
+    admissionsCoverage,
+    structuredAdmissionsCoverage,
+    completeAdmissionsCoverage,
+    sourceStatusCounts,
+    countryAdmissionsCoverage: buildCoverageGroups((program) => program.country),
+    disciplineAdmissionsCoverage: buildCoverageGroups((program) => program.discipline),
+  };
+}
+
+export async function readStudyAbroadCatalogSummary() {
+  const [sourceVersion, universityVersion, programVersion] = await Promise.all([
+    getJsonArrayFileVersion(SOURCE_FILE),
+    getJsonArrayFileVersion(UNIVERSITY_FILE),
+    getJsonArrayFileVersion(PROGRAM_FILE),
+  ]);
+  const version = `${sourceVersion}:${universityVersion}:${programVersion}`;
+
+  return readDerivedCatalogCache("catalog:summary", version, async () => {
+    const [sources, universities, programs] = await Promise.all([
+      readStudyAbroadCatalogSources(),
+      readStudyAbroadCatalogUniversities(),
+      readStudyAbroadCatalogPrograms(),
+    ]);
 
     return {
       sources,
       universities,
       programs,
-      stats: {
-        sourceCount: sources.length,
-        universityCount: universities.length,
-        programCount: programs.length,
-        countryCount: countries.size,
-        qsCoverage,
-        tuitionCoverage,
-        admissionsCoverage,
-        structuredAdmissionsCoverage,
-        completeAdmissionsCoverage,
-        sourceStatusCounts,
-        countryAdmissionsCoverage,
-        disciplineAdmissionsCoverage,
-      },
+      stats: buildStudyAbroadCatalogStats(sources, universities, programs),
     };
+  });
+}
+
+export async function readStudyAbroadCatalogStats() {
+  const [sourceVersion, universityVersion, programVersion, finderIndexVersion] = await Promise.all([
+    getJsonArrayFileVersion(SOURCE_FILE),
+    getJsonArrayFileVersion(UNIVERSITY_FILE),
+    getJsonArrayFileVersion(PROGRAM_FILE),
+    readDataFileMtime(FINDER_INDEX_FILE),
+  ]);
+  const version = `${sourceVersion}:${universityVersion}:${programVersion}:${finderIndexVersion}`;
+
+  return readDerivedCatalogCache("catalog:stats", version, async () => {
+    const [sources, universities, programs] = await Promise.all([
+      readStudyAbroadCatalogSources(),
+      readStudyAbroadCatalogUniversities(),
+      readStudyAbroadFinderPrograms(),
+    ]);
+
+    return buildStudyAbroadCatalogStats(sources, universities, programs);
   });
 }
 

@@ -78,8 +78,14 @@ export type StudyAbroadSearchBlocklist = {
 
 const AUDIT_FILE = "study-abroad-search-audit.json";
 const AVOID_RULE_FILE = "study-abroad-search-avoid-rules.json";
-const MAX_AUDIT_ENTRIES = 240;
-const MAX_RESULTS_PER_AUDIT = 180;
+const MAX_AUDIT_ENTRIES = Math.min(
+  240,
+  Math.max(60, Number(process.env.STUDY_ABROAD_SEARCH_AUDIT_ENTRY_LIMIT) || 180)
+);
+const MAX_RESULTS_PER_AUDIT = Math.min(
+  180,
+  Math.max(20, Number(process.env.STUDY_ABROAD_SEARCH_AUDIT_RESULT_LIMIT) || 80)
+);
 
 function normalizeText(value?: string) {
   return String(value || "").trim();

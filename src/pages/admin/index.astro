@@ -11,7 +11,7 @@ import { readExams } from "../../lib/exams-store";
 import { readScores } from "../../lib/scores-store";
 import { readLeads, type LeadRecord } from "../../lib/leads-store";
 import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
-import { readStudyAbroadCatalogSummary } from "../../lib/study-abroad-catalog-store";
+import { readStudyAbroadCatalogStats } from "../../lib/study-abroad-catalog-store";
 import { readStudyAbroadCatalogSyncState } from "../../lib/study-abroad-catalog-sync";
 import { getStudyAbroadSearchRuntimeStatus } from "../../lib/study-abroad-search";
 import {
@@ -49,7 +49,7 @@ try {
 }
 
 const schoolSearchQueue = await readStudyAbroadReviewQueue();
-const studyAbroadCatalog = await readStudyAbroadCatalogSummary();
+const studyAbroadCatalogStats = await readStudyAbroadCatalogStats();
 const studyAbroadCatalogSyncState = await readStudyAbroadCatalogSyncState();
 const studyAbroadSearchRuntime = getStudyAbroadSearchRuntimeStatus();
 const studyAbroadCampaignOutlook = await readStudyAbroadAdmissionsCampaignOutlook({
@@ -231,10 +231,10 @@ const schoolFinderLeadCount = leads.filter((lead) => normalizeLeadSource(lead.so
 const summaryLeadCount = leads.filter((lead) => isSchoolFinderSummaryLead(lead)).length;
 const latestCatalogSyncRun = studyAbroadCatalogSyncState.runs[0] ?? null;
 const latestCampaignRun = studyAbroadCampaignOutlook.recentRuns[0] ?? null;
-const structuredCoveragePercent = studyAbroadCatalog.stats.programCount
+const structuredCoveragePercent = studyAbroadCatalogStats.programCount
   ? Math.round(
-      (studyAbroadCatalog.stats.structuredAdmissionsCoverage /
-        studyAbroadCatalog.stats.programCount) *
+      (studyAbroadCatalogStats.structuredAdmissionsCoverage /
+        studyAbroadCatalogStats.programCount) *
         100
     )
   : 0;
@@ -431,7 +431,7 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
       <a class="card card--hover" href="/admin/study-abroad-catalog">
         <div class="card-top">
           <div class="h3">留学底库</div>
-          <span class="badge">{studyAbroadCatalog.stats.universityCount}</span>
+          <span class="badge">{studyAbroadCatalogStats.universityCount}</span>
         </div>
         <p class="muted mt-2">查看大学底库、项目底库和可接入的数据源清单，规划大规模选校检索。</p>
         <div class="card-cta">查看底库 →</div>
