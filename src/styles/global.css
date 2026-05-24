@@ -3186,10 +3186,15 @@ button.btn {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+  isolation: isolate;
+  overflow: visible;
 }
 
 .score-browser-card {
   min-width: 0;
+  position: relative;
+  overflow: visible;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
 .score-browser-card.is-hidden {
@@ -3215,6 +3220,12 @@ button.btn {
   border-radius: 8px;
   border: 1px solid rgba(70, 86, 145, 0.08);
   background: #fff;
+  position: relative;
+  transform-origin: center center;
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.28s ease,
+    border-color 0.28s ease;
+  will-change: transform;
 }
 
 .score-card-image {
@@ -3222,6 +3233,48 @@ button.btn {
   width: 100%;
   height: clamp(180px, 22vw, 240px);
   object-fit: cover;
+  transform-origin: center center;
+  transition: transform 0.32s ease, filter 0.32s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .score-browser-card:hover,
+  .score-browser-card:focus-within {
+    z-index: 8;
+    border-color: rgba(0, 113, 227, 0.22);
+    box-shadow: 0 28px 70px rgba(29, 45, 68, 0.18);
+    transform: translateY(-3px);
+  }
+
+  .score-browser-card:hover .score-card-media,
+  .score-browser-card:focus-within .score-card-media {
+    transform: scale(1.16);
+    border-color: rgba(0, 113, 227, 0.28);
+    box-shadow: 0 32px 80px rgba(18, 31, 52, 0.28);
+  }
+
+  .score-browser-card:hover .score-card-image,
+  .score-browser-card:focus-within .score-card-image {
+    transform: scale(1.04);
+    filter: saturate(1.04) contrast(1.03);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .score-browser-card,
+  .score-card-media,
+  .score-card-image {
+    transition: none;
+  }
+
+  .score-browser-card:hover,
+  .score-browser-card:focus-within,
+  .score-browser-card:hover .score-card-media,
+  .score-browser-card:focus-within .score-card-media,
+  .score-browser-card:hover .score-card-image,
+  .score-browser-card:focus-within .score-card-image {
+    transform: none;
+  }
 }
 
 .score-card-tags {
