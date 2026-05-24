@@ -25,7 +25,7 @@ import { slugify } from "./text-fields";
 
 const REVIEW_IMPORT_SOURCE_ID = "review-queue-manual-import";
 const FETCH_TIMEOUT_MS = 8000;
-const DEFAULT_BATCH_IMPORT_LIMIT = 2;
+export const STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT = 2;
 const MAX_BATCH_IMPORT_LIMIT = 10;
 const BATCH_IMPORT_TIME_BUDGET_MS = 22_000;
 const DISCIPLINE_EXTRA_HINTS: Record<string, string[]> = {
@@ -598,7 +598,10 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
       : "high";
   const maxCandidates = Math.min(
     MAX_BATCH_IMPORT_LIMIT,
-    Math.max(1, Math.floor(Number(params.maxCandidates) || DEFAULT_BATCH_IMPORT_LIMIT))
+    Math.max(
+      1,
+      Math.floor(Number(params.maxCandidates) || STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT)
+    )
   );
 
   if (!entryId) {

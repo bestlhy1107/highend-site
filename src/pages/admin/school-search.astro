@@ -28,6 +28,7 @@ import {
   buildStudyAbroadSearchExecutionPlanId,
   readStudyAbroadSearchExecutionPlanRecords,
 } from "../../lib/study-abroad-search-execution-plan";
+import { STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT } from "../../lib/study-abroad-review-import";
 
 function normalizeReviewLink(value?: string) {
   return normalizeStudyAbroadGovernanceLink(value);
@@ -531,9 +532,9 @@ function buildWeeklyExecutionRecommendations(input: {
     recommendations.length < 3
   ) {
     recommendations.push({
-      title: "先批量导入高可信候选",
-      detail: `${input.primaryPlan.label} 当前还有 ${input.primaryPlan.batchImportHighCount} 条高可信候选没进正式库，先导入这批通常最能直接放大正式结果。`,
-      actionLabel: `导入高可信候选（${input.primaryPlan.batchImportHighCount}）`,
+      title: "先分批导入高可信候选",
+      detail: `${input.primaryPlan.label} 当前还有 ${input.primaryPlan.batchImportHighCount} 条高可信候选没进正式库，建议按生产安全上限分批导入，避免后台请求超时。`,
+      actionLabel: `分批导入高可信（${input.primaryPlan.batchImportHighCount}）`,
       actionType: "import-high",
       plan: input.primaryPlan,
       statusLabel: buildWeeklyRecommendationPlanStatus(input.primaryPlan).label,
@@ -737,6 +738,38 @@ const candidateCredibilityFilter =
   candidateCredibilityFilterRaw === "watch"
     ? candidateCredibilityFilterRaw
     : "all";
+const pendingReviewEntryDisplayLimit = readBoundedPositiveInteger(
+  Astro.url.searchParams,
+  "pendingLimit",
+  10,
+  60
+);
+const pendingReviewCandidateDisplayLimit = readBoundedPositiveInteger(
+  Astro.url.searchParams,
+  "candidateLimit",
+  8,
+  30
+);
+const nextPendingReviewEntryDisplayLimit = Math.min(pendingReviewEntryDisplayLimit + 10, 60);
+const nextPendingReviewCandidateDisplayLimit = Math.min(
+  pendingReviewCandidateDisplayLimit + 8,
+  30
+);
+const buildPendingReviewHref = (params: {
+  candidateCredibility?: string;
+  pendingLimit?: number;
+  candidateLimit?: number;
+}) => {
+  const nextParams = new URLSearchParams();
+  nextParams.set("candidateCredibility", params.candidateCredibility || candidateCredibilityFilter);
+  nextParams.set("pendingLimit", String(params.pendingLimit || pendingReviewEntryDisplayLimit));
+  nextParams.set(
+    "candidateLimit",
+    String(params.candidateLimit || pendingReviewCandidateDisplayLimit)
+  );
+
+  return `?${nextParams.toString()}#pending-review-candidates`;
+};
 
 const pendingQueueCount = queue.filter((item) => item.status === "pending").length;
 const archivedExecutionPlanCount = archivedExecutionPlanResult.archivedCount;
@@ -772,6 +805,11 @@ const pendingItems = queue
     return {
       ...item,
       candidates: filteredCandidates,
+      displayCandidates: filteredCandidates.slice(0, pendingReviewCandidateDisplayLimit),
+      hiddenCandidateCount: Math.max(
+        0,
+        filteredCandidates.length - pendingReviewCandidateDisplayLimit
+      ),
       totalCandidateCount: sortedCandidates.length,
       filteredCandidateCount: filteredCandidates.length,
       credibilitySummary,
@@ -817,6 +855,8 @@ const pendingItems = queue
       new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
     );
   });
+const visiblePendingItems = pendingItems.slice(0, pendingReviewEntryDisplayLimit);
+const hiddenPendingItemCount = Math.max(0, pendingItems.length - visiblePendingItems.length);
 const reviewedItems = queue.filter((item) => item.status === "reviewed");
 const discardedItems = queue.filter((item) => item.status === "discarded");
 const recentHandledItems = [...queue]
@@ -1589,6 +1629,18 @@ function normalizeGovernanceQuery(input?: {
   };
 }
 
+function readBoundedPositiveInteger(
+  searchParams: URLSearchParams,
+  key: string,
+  fallback: number,
+  max: number
+) {
+  const value = Number(searchParams.get(key));
+  if (!Number.isFinite(value)) return fallback;
+
+  return Math.min(max, Math.max(1, Math.floor(value)));
+}
+
 function findPendingReviewEntryForBucket(bucket: {
   query: {
     country: string;
@@ -1935,8 +1987,13 @@ const notices = [
                   <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                     <input type="hidden" name="entryId" value={item.pendingQueueEntryId} />
                     <input type="hidden" name="credibilityMode" value="high" />
+                    <input
+                      type="hidden"
+                      name="maxCandidates"
+                      value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}
+                    />
                     <button class="btn" type="submit">
-                      批量导入高可信（{item.highCredibilityCount}）
+                      分批导入高可信（本次最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{item.highCredibilityCount}）
                     </button>
                   </form>
                 ) : null}
@@ -2171,8 +2228,9 @@ const notices = [
                           <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                             <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
                             <input type="hidden" name="credibilityMode" value="high" />
+                            <input type="hidden" name="maxCandidates" value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} />
                             <button class="btn btn-ghost" type="submit">
-                              批量导入高可信（{pendingAvoidSummary.highCount}）
+                              分批导入高可信（最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{pendingAvoidSummary.highCount}）
                             </button>
                           </form>
                         ) : null}
@@ -2263,8 +2321,9 @@ const notices = [
                           <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                             <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
                             <input type="hidden" name="credibilityMode" value="high" />
+                            <input type="hidden" name="maxCandidates" value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} />
                             <button class="btn btn-ghost" type="submit">
-                              批量导入高可信（{pendingAvoidSummary.highCount}）
+                              分批导入高可信（最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{pendingAvoidSummary.highCount}）
                             </button>
                           </form>
                         ) : null}
@@ -2353,8 +2412,9 @@ const notices = [
                           <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                             <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
                             <input type="hidden" name="credibilityMode" value="high" />
+                            <input type="hidden" name="maxCandidates" value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} />
                             <button class="btn btn-ghost" type="submit">
-                              批量导入高可信（{pendingAvoidSummary.highCount}）
+                              分批导入高可信（最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{pendingAvoidSummary.highCount}）
                             </button>
                           </form>
                         ) : null}
@@ -2429,8 +2489,9 @@ const notices = [
                           <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                             <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
                             <input type="hidden" name="credibilityMode" value="high" />
+                            <input type="hidden" name="maxCandidates" value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} />
                             <button class="btn btn-ghost" type="submit">
-                              批量导入高可信（{pendingAvoidSummary.highCount}）
+                              分批导入高可信（最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{pendingAvoidSummary.highCount}）
                             </button>
                           </form>
                         ) : null}
@@ -2534,8 +2595,9 @@ const notices = [
                       <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                         <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
                         <input type="hidden" name="credibilityMode" value="high" />
+                        <input type="hidden" name="maxCandidates" value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} />
                         <button class="btn btn-ghost" type="submit">
-                          批量导入高可信候选（{pendingAvoidSummary.highCount}）
+                          分批导入高可信（最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{pendingAvoidSummary.highCount}）
                         </button>
                       </form>
                     ) : null}
@@ -2662,8 +2724,9 @@ const notices = [
                       <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                         <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
                         <input type="hidden" name="credibilityMode" value="high" />
+                        <input type="hidden" name="maxCandidates" value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} />
                         <button class="btn btn-ghost" type="submit">
-                          批量导入高可信候选（{pendingAvoidSummary.highCount}）
+                          分批导入高可信（最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{pendingAvoidSummary.highCount}）
                         </button>
                       </form>
                     ) : null}
@@ -2981,8 +3044,9 @@ const notices = [
                       <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                         <input type="hidden" name="entryId" value={matchingPendingEntry.id} />
                         <input type="hidden" name="credibilityMode" value="high" />
+                        <input type="hidden" name="maxCandidates" value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} />
                         <button class="btn btn-ghost" type="submit">
-                          批量导入高可信候选（{pendingAvoidSummary.highCount}）
+                          分批导入高可信（最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{pendingAvoidSummary.highCount}）
                         </button>
                       </form>
                     ) : null}
@@ -3130,6 +3194,7 @@ const notices = [
                       <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                         <input type="hidden" name="entryId" value={item.plan.pendingEntryId} />
                         <input type="hidden" name="credibilityMode" value="high" />
+                        <input type="hidden" name="maxCandidates" value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} />
                         <button class="btn" type="submit">{item.actionLabel}</button>
                       </form>
                     ) : null}
@@ -3887,35 +3952,61 @@ const notices = [
           <span class="badge">{pendingCandidateCredibilitySummary.total} 条候选</span>
         </div>
         <div class="detail-actions mt-4">
-          <a class={`btn ${candidateCredibilityFilter === "all" ? "" : "btn-ghost"}`} href="?candidateCredibility=all#pending-review-candidates">
+          <a
+            class={`btn ${candidateCredibilityFilter === "all" ? "" : "btn-ghost"}`}
+            href={buildPendingReviewHref({ candidateCredibility: "all" })}
+          >
             全部 {pendingCandidateCredibilitySummary.total}
           </a>
           <a
             class={`btn ${candidateCredibilityFilter === "high" ? "" : "btn-ghost"}`}
-            href="?candidateCredibility=high#pending-review-candidates"
+            href={buildPendingReviewHref({ candidateCredibility: "high" })}
           >
             高可信 {pendingCandidateCredibilitySummary.high}
           </a>
           <a
             class={`btn ${candidateCredibilityFilter === "medium" ? "" : "btn-ghost"}`}
-            href="?candidateCredibility=medium#pending-review-candidates"
+            href={buildPendingReviewHref({ candidateCredibility: "medium" })}
           >
             中可信 {pendingCandidateCredibilitySummary.medium}
           </a>
           <a
             class={`btn ${candidateCredibilityFilter === "watch" ? "" : "btn-ghost"}`}
-            href="?candidateCredibility=watch#pending-review-candidates"
+            href={buildPendingReviewHref({ candidateCredibility: "watch" })}
           >
             待核对 {pendingCandidateCredibilitySummary.watch}
           </a>
         </div>
         <p class="muted mt-3">
-          系统会优先把高可信来源排在前面。批量导入已改为生产安全模式，单次默认最多导入 2 条，并跳过需要联网识别学校名的慢候选，避免网关超时；若还有剩余，刷新后继续点击即可。
+          系统会优先把高可信来源排在前面。为保护生产环境响应速度，本页默认只展示前 {pendingReviewEntryDisplayLimit} 组、每组前 {pendingReviewCandidateDisplayLimit} 条候选；批量导入单次最多处理 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT} 条，若还有剩余，刷新后继续分批点击即可。
         </p>
+        <div class="detail-actions mt-3">
+          <span class="badge">待处理组 {pendingItems.length}</span>
+          {hiddenPendingItemCount ? (
+            <a
+              class="btn btn-ghost"
+              href={buildPendingReviewHref({
+                pendingLimit: nextPendingReviewEntryDisplayLimit,
+                candidateLimit: pendingReviewCandidateDisplayLimit,
+              })}
+            >
+              多显示 10 组
+            </a>
+          ) : null}
+          <a
+            class="btn btn-ghost"
+            href={buildPendingReviewHref({
+              pendingLimit: pendingReviewEntryDisplayLimit,
+              candidateLimit: nextPendingReviewCandidateDisplayLimit,
+            })}
+          >
+            每组多显示 8 条
+          </a>
+        </div>
       </div>
 
-      {pendingItems.length ? <div class="cards mt-6">
-        {pendingItems.map((item) => (
+      {visiblePendingItems.length ? <div class="cards mt-6">
+        {visiblePendingItems.map((item) => (
           <article class="card" id={`review-entry-${item.id}`}>
             <div class="card-top">
               <div>
@@ -3952,8 +4043,13 @@ const notices = [
                 <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                   <input type="hidden" name="entryId" value={item.id} />
                   <input type="hidden" name="credibilityMode" value="high" />
+                  <input
+                    type="hidden"
+                    name="maxCandidates"
+                    value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}
+                  />
                   <button class="btn" type="submit">
-                    批量导入高可信候选（{item.batchEligibleHighCount}）
+                    分批导入高可信（本次最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{item.batchEligibleHighCount}）
                   </button>
                 </form>
               ) : null}
@@ -3961,8 +4057,13 @@ const notices = [
                 <form method="POST" action={actions.importStudyAbroadReviewCandidatesByCredibility}>
                   <input type="hidden" name="entryId" value={item.id} />
                   <input type="hidden" name="credibilityMode" value="high-medium" />
+                  <input
+                    type="hidden"
+                    name="maxCandidates"
+                    value={STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}
+                  />
                   <button class="btn btn-ghost" type="submit">
-                    批量导入高+中可信（{item.batchEligibleHighMediumCount}）
+                    分批导入高+中可信（本次最多 {STUDY_ABROAD_REVIEW_BATCH_IMPORT_DEFAULT_LIMIT}/{item.batchEligibleHighMediumCount}）
                   </button>
                 </form>
               ) : null}
@@ -4013,7 +4114,7 @@ const notices = [
             ) : null}
 
             <div class="mt-4">
-              {item.candidates.map((candidate) => {
+              {item.displayCandidates.map((candidate) => {
                 const importedProgram = importedProgramByLink.get(
                   normalizeReviewLink(candidate.link)
                 );
@@ -4103,6 +4204,25 @@ const notices = [
                   </div>
                 );
               })}
+              {item.hiddenCandidateCount ? (
+                <div class="faq">
+                  <div class="h3">已隐藏 {item.hiddenCandidateCount} 条候选</div>
+                  <p class="muted mt-2">
+                    为避免后台页面过重，本组当前只显示前 {pendingReviewCandidateDisplayLimit} 条。需要继续审核时，可以临时提高每组显示数量。
+                  </p>
+                  <div class="detail-actions mt-3">
+                    <a
+                      class="btn btn-ghost"
+                      href={buildPendingReviewHref({
+                        pendingLimit: pendingReviewEntryDisplayLimit,
+                        candidateLimit: nextPendingReviewCandidateDisplayLimit,
+                      })}
+                    >
+                      每组多显示 8 条
+                    </a>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div class="card mt-4">
