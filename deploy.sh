@@ -9,6 +9,7 @@ APP_HOST="127.0.0.1"
 RUNTIME_DATA_PATHS=(data)
 RUNTIME_STASH_CREATED=0
 RUNTIME_STASH_NAME=""
+HEALTH_PATHS=("/" "/admin/login" "/school-finder")
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -42,8 +43,12 @@ require_cmd() {
 log "1. 检查依赖命令"
 require_cmd git
 require_cmd npm
+require_cmd node
 require_cmd pm2
 require_cmd curl
+
+log "Node 版本：$(node --version)"
+[[ -f package.json ]] || fail "当前目录不是项目根目录，未找到 package.json"
 
 log "2. 自动暂存运行时数据改动"
 if [[ -n "$(git status --porcelain -- "${RUNTIME_DATA_PATHS[@]}")" ]]; then
@@ -84,6 +89,13 @@ else
   log "未发现 .env，继续使用当前系统环境变量"
 fi
 
+[[ -n "${ADMIN_USERNAME:-}" ]] || fail "缺少 ADMIN_USERNAME，管理员登录将不可用"
+[[ -n "${ADMIN_PASSWORD:-}" ]] || fail "缺少 ADMIN_PASSWORD，管理员登录将不可用"
+
+if [[ -z "${ASTRO_DB_REMOTE_URL:-}" || -z "${ASTRO_DB_APP_TOKEN:-}" ]]; then
+  log "提醒：未检测到完整 Astro DB 远程配置，咨询线索等数据库功能可能不可用"
+fi
+
 log "7. 安装依赖"
 if [[ -f package-lock.json ]]; then
   npm ci
@@ -107,7 +119,10 @@ pm2 save
 
 log "10. 健康检查"
 sleep 2
-curl -fsS -I "http://${APP_HOST}:${APP_PORT}" >/dev/null || fail "应用本地端口健康检查失败"
+for path in "${HEALTH_PATHS[@]}"; do
+  curl -fsS -I "http://${APP_HOST}:${APP_PORT}${path}" >/dev/null ||
+    fail "应用本地端口健康检查失败：${path}"
+done
 
 log "11. 当前 PM2 状态"
 pm2 status

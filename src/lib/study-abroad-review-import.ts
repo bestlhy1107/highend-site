@@ -23,7 +23,7 @@ import { slugify } from "./text-fields";
 
 const REVIEW_IMPORT_SOURCE_ID = "review-queue-manual-import";
 const FETCH_TIMEOUT_MS = 8000;
-const DEFAULT_BATCH_IMPORT_LIMIT = 3;
+const DEFAULT_BATCH_IMPORT_LIMIT = 2;
 const MAX_BATCH_IMPORT_LIMIT = 10;
 const BATCH_IMPORT_TIME_BUDGET_MS = 22_000;
 const DISCIPLINE_EXTRA_HINTS: Record<string, string[]> = {
@@ -372,9 +372,11 @@ function buildProgramId(programs: StudyAbroadCatalogProgram[], params: {
 export async function importStudyAbroadReviewCandidate(params: {
   entryId: string;
   candidateLink: string;
+  allowMetadataFetch?: boolean;
 }) {
   const entryId = String(params.entryId ?? "").trim();
   const candidateLink = normalizeLink(params.candidateLink);
+  const allowMetadataFetch = params.allowMetadataFetch !== false;
 
   if (!entryId || !candidateLink) {
     return {
@@ -442,7 +444,8 @@ export async function importStudyAbroadReviewCandidate(params: {
   }
 
   const matchedUniversity = inferUniversityByHost(universities, candidateLink);
-  const metadata = matchedUniversity ? null : await readCandidatePageMetadata(candidateLink);
+  const metadata =
+    matchedUniversity || !allowMetadataFetch ? null : await readCandidatePageMetadata(candidateLink);
   const inferredSchoolName =
     matchedUniversity?.name ||
     metadata?.siteName ||
@@ -454,7 +457,9 @@ export async function importStudyAbroadReviewCandidate(params: {
       created: false,
       alreadyExists: false,
       program: null,
-      message: "暂时无法从候选链接稳定识别学校名称，建议先人工核对后再入库。",
+      message: allowMetadataFetch
+        ? "暂时无法从候选链接稳定识别学校名称，建议先人工核对后再入库。"
+        : "批量导入已跳过需要联网识别学校名称的候选，建议打开官网核对后单条导入。",
     };
   }
 
@@ -715,6 +720,7 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
     const result = await importStudyAbroadReviewCandidate({
       entryId,
       candidateLink: candidate.link,
+      allowMetadataFetch: false,
     });
     attemptedImportCount += 1;
 
