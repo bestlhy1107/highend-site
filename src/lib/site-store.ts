@@ -41,43 +41,75 @@ const DEFAULT_SITE: RuntimeSiteSettings = {
     "您也可以直接联系我们的微信或者电话，免费获取 1v1 留学规划指导。微信：{{wechat}} 电话：{{phone}}",
 };
 
+const CMS_SITE_DOCUMENT_KEY = "site-settings";
+
 function getSiteFilePath() {
   return join(process.cwd(), "data", "site.json");
 }
 
+function normalizeSiteSettings(input: Partial<RuntimeSiteSettings>): RuntimeSiteSettings {
+  return {
+    companyName: input.companyName ?? DEFAULT_SITE.companyName,
+    slogan: input.slogan ?? DEFAULT_SITE.slogan,
+    phone: input.phone ?? DEFAULT_SITE.phone,
+    email: input.email ?? DEFAULT_SITE.email,
+    wechat: input.wechat ?? DEFAULT_SITE.wechat,
+    consultTeacherName:
+      input.consultTeacherName ?? DEFAULT_SITE.consultTeacherName,
+    consultTeacherAvatar:
+      input.consultTeacherAvatar ?? DEFAULT_SITE.consultTeacherAvatar,
+    consultStatusText:
+      input.consultStatusText ?? DEFAULT_SITE.consultStatusText,
+    consultWelcomeMessage:
+      input.consultWelcomeMessage ?? DEFAULT_SITE.consultWelcomeMessage,
+    consultCountryPrompt:
+      input.consultCountryPrompt ?? DEFAULT_SITE.consultCountryPrompt,
+    consultCountryOptions:
+      input.consultCountryOptions ?? DEFAULT_SITE.consultCountryOptions,
+    consultStagePrompt:
+      input.consultStagePrompt ?? DEFAULT_SITE.consultStagePrompt,
+    consultStageOptions:
+      input.consultStageOptions ?? DEFAULT_SITE.consultStageOptions,
+    consultContactMessage:
+      input.consultContactMessage ?? DEFAULT_SITE.consultContactMessage,
+    consultIdleMessage:
+      input.consultIdleMessage ?? DEFAULT_SITE.consultIdleMessage,
+  };
+}
+
+async function readCmsSiteSettings() {
+  try {
+    const { readCmsJsonDocument } = await import("./cms-document-store");
+    const payload = await readCmsJsonDocument<Partial<RuntimeSiteSettings>>(
+      CMS_SITE_DOCUMENT_KEY
+    );
+
+    return payload ? normalizeSiteSettings(payload) : null;
+  } catch (error) {
+    console.warn("CMS DB 读取失败，已回退到 site.json", error);
+    return null;
+  }
+}
+
+async function writeCmsSiteSettings(value: RuntimeSiteSettings) {
+  try {
+    const { writeCmsJsonDocument } = await import("./cms-document-store");
+    await writeCmsJsonDocument(CMS_SITE_DOCUMENT_KEY, value);
+  } catch (error) {
+    console.warn("CMS DB 写入失败，site.json 已保留", error);
+  }
+}
+
 export async function readSiteSettings(): Promise<RuntimeSiteSettings> {
+  const cmsSite = await readCmsSiteSettings();
+  if (cmsSite) return cmsSite;
+
   try {
     const filePath = getSiteFilePath();
     const raw = await readFile(filePath, "utf8");
     const parsed = JSON.parse(raw);
 
-    return {
-      companyName: parsed.companyName ?? DEFAULT_SITE.companyName,
-      slogan: parsed.slogan ?? DEFAULT_SITE.slogan,
-      phone: parsed.phone ?? DEFAULT_SITE.phone,
-      email: parsed.email ?? DEFAULT_SITE.email,
-      wechat: parsed.wechat ?? DEFAULT_SITE.wechat,
-      consultTeacherName:
-        parsed.consultTeacherName ?? DEFAULT_SITE.consultTeacherName,
-      consultTeacherAvatar:
-        parsed.consultTeacherAvatar ?? DEFAULT_SITE.consultTeacherAvatar,
-      consultStatusText:
-        parsed.consultStatusText ?? DEFAULT_SITE.consultStatusText,
-      consultWelcomeMessage:
-        parsed.consultWelcomeMessage ?? DEFAULT_SITE.consultWelcomeMessage,
-      consultCountryPrompt:
-        parsed.consultCountryPrompt ?? DEFAULT_SITE.consultCountryPrompt,
-      consultCountryOptions:
-        parsed.consultCountryOptions ?? DEFAULT_SITE.consultCountryOptions,
-      consultStagePrompt:
-        parsed.consultStagePrompt ?? DEFAULT_SITE.consultStagePrompt,
-      consultStageOptions:
-        parsed.consultStageOptions ?? DEFAULT_SITE.consultStageOptions,
-      consultContactMessage:
-        parsed.consultContactMessage ?? DEFAULT_SITE.consultContactMessage,
-      consultIdleMessage:
-        parsed.consultIdleMessage ?? DEFAULT_SITE.consultIdleMessage,
-    };
+    return normalizeSiteSettings(parsed);
   } catch {
     return DEFAULT_SITE;
   }
@@ -120,5 +152,6 @@ export async function writeSiteSettings(input: Partial<RuntimeSiteSettings>) {
   };
 
   await writeFile(filePath, JSON.stringify(next, null, 2), "utf8");
+  await writeCmsSiteSettings(next);
   return next;
 }

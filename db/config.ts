@@ -24,6 +24,15 @@ const Lead = defineTable({
   indexes: [{ on: ["status"] }, { on: ["createdAt"] }],
 });
 
+const CmsDocument = defineTable({
+  columns: {
+    key: column.text({ primaryKey: true }),
+    value: column.text(),
+    updatedAt: column.date(),
+  },
+  indexes: [{ on: ["updatedAt"] }],
+});
+
 export default defineDb({
-  tables: { Lead },
+  tables: { Lead, CmsDocument },
 });

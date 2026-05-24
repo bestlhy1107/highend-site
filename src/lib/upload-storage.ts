@@ -4,7 +4,10 @@ import { isAbsolute, relative, resolve } from "node:path";
 const DEFAULT_UPLOAD_ROOT = resolve(process.cwd(), "public", "uploads");
 
 export const UPLOAD_ROOT =
-  process.env.RAILWAY_VOLUME_MOUNT_PATH || DEFAULT_UPLOAD_ROOT;
+  process.env.UPLOAD_ROOT ||
+  process.env.WANHE_UPLOAD_ROOT ||
+  process.env.RAILWAY_VOLUME_MOUNT_PATH ||
+  DEFAULT_UPLOAD_ROOT;
 
 export function safeUploadPath(...parts: string[]) {
   const root = resolve(UPLOAD_ROOT);

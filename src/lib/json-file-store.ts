@@ -2,6 +2,12 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const DATA_DIR = join(process.cwd(), "data");
+const CMS_DB_ARRAY_FILES = new Set([
+  "exams.json",
+  "scores.json",
+  "services.json",
+  "teachers.json",
+]);
 type JsonArrayFileCacheEntry = {
   mtimeMs: number;
   promise: Promise<unknown[]>;
@@ -11,6 +17,35 @@ const arrayFileCache = new Map<string, JsonArrayFileCacheEntry>();
 
 export function dataFilePath(fileName: string) {
   return join(DATA_DIR, fileName);
+}
+
+function cmsDocumentKey(fileName: string) {
+  return `json-array:${fileName}`;
+}
+
+async function readCmsArrayFile<T>(fileName: string): Promise<T[] | null> {
+  if (!CMS_DB_ARRAY_FILES.has(fileName)) return null;
+
+  try {
+    const { readCmsJsonDocument } = await import("./cms-document-store");
+    const payload = await readCmsJsonDocument<unknown[]>(cmsDocumentKey(fileName));
+
+    return Array.isArray(payload) ? (payload as T[]) : null;
+  } catch (error) {
+    console.warn(`CMS DB 读取失败，已回退到 JSON 文件：${fileName}`, error);
+    return null;
+  }
+}
+
+async function writeCmsArrayFile<T>(fileName: string, value: T[]) {
+  if (!CMS_DB_ARRAY_FILES.has(fileName)) return;
+
+  try {
+    const { writeCmsJsonDocument } = await import("./cms-document-store");
+    await writeCmsJsonDocument(cmsDocumentKey(fileName), value);
+  } catch (error) {
+    console.warn(`CMS DB 写入失败，JSON 文件已保留：${fileName}`, error);
+  }
 }
 
 type JsonArrayOptions<T> = {
@@ -28,6 +63,12 @@ export async function readJsonArrayFile<T>({
   isValid,
   compare,
 }: JsonArrayOptions<T>): Promise<T[]> {
+  const cmsItems = await readCmsArrayFile<Partial<T>>(fileName);
+  if (cmsItems) {
+    const items = cmsItems.map(normalize).filter(isValid);
+    return compare ? items.sort(compare) : items;
+  }
+
   const filePath = dataFilePath(fileName);
 
   try {
@@ -74,6 +115,7 @@ export async function writeJsonArrayFile<T>(
   const filePath = dataFilePath(fileName);
 
   await writeFile(filePath, JSON.stringify(sorted, null, 2), "utf8");
+  await writeCmsArrayFile(fileName, sorted);
   const fileStat = await stat(filePath);
   arrayFileCache.set(fileName, {
     mtimeMs: fileStat.mtimeMs,

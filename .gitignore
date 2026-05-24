@@ -27,6 +27,9 @@ data/study-abroad-program-link-index.json
 # runtime uploads created from the admin panel
 public/uploads/
 
+# runtime deployment backups
+.runtime-backups/
+
 # macOS-specific files
 .DS_Store
 
