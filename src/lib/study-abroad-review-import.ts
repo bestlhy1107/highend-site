@@ -3,6 +3,7 @@ import {
   readStudyAbroadCatalogProgramLinkIndex,
   readStudyAbroadCatalogPrograms,
   readStudyAbroadCatalogUniversities,
+  writeStudyAbroadFinderIndexesFromCatalog,
   writeStudyAbroadCatalogPrograms,
   writeStudyAbroadCatalogUniversities,
   type StudyAbroadCatalogProgram,
@@ -572,6 +573,7 @@ export async function importStudyAbroadReviewCandidate(params: {
       : writeStudyAbroadCatalogUniversities(nextUniversities),
     writeStudyAbroadCatalogPrograms(nextPrograms),
   ]);
+  await writeStudyAbroadFinderIndexesFromCatalog(nextUniversities, nextPrograms);
 
   return {
     ok: true,
@@ -707,6 +709,19 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
   let attemptedImportCount = 0;
   let timeBudgetReached = false;
   const startedAt = Date.now();
+  const [universities, programs] = await Promise.all([
+    readStudyAbroadCatalogUniversities(),
+    readStudyAbroadCatalogPrograms(),
+  ]);
+  const nextUniversities = [...universities];
+  const nextPrograms = [...programs];
+  const nextImportedLinkSet = new Set(
+    nextPrograms.flatMap((program) =>
+      [program.overviewUrl, program.admissionsUrl, program.tuitionUrl]
+        .map(normalizeLink)
+        .filter(Boolean)
+    )
+  );
 
   for (const candidate of eligibleCandidates.slice(0, maxCandidates)) {
     if (Date.now() - startedAt > BATCH_IMPORT_TIME_BUDGET_MS) {
@@ -714,20 +729,103 @@ export async function importStudyAbroadReviewCandidatesByCredibility(params: {
       break;
     }
 
-    const result = await importStudyAbroadReviewCandidate({
-      entryId,
-      candidateLink: candidate.link,
-      allowMetadataFetch: false,
-    });
     attemptedImportCount += 1;
+    const candidateLink = normalizeLink(candidate.link);
 
-    if (result.created) {
-      createdCount += 1;
-    } else if (result.alreadyExists) {
+    if (nextImportedLinkSet.has(candidateLink)) {
       alreadyExistsCount += 1;
-    } else {
-      failedCount += 1;
+      continue;
     }
+
+    const matchedUniversity = inferUniversityByHost(nextUniversities, candidateLink);
+    if (!matchedUniversity) {
+      failedCount += 1;
+      continue;
+    }
+
+    const programName = extractProgramName(candidate.title);
+    const degree = normalizeDegree(entry.degree, programName);
+    const discipline = inferDiscipline({
+      major: entry.major,
+      specialization: entry.specialization,
+      title: candidate.title,
+      snippet: candidate.snippet,
+      link: candidateLink,
+    });
+    const existingByName = nextPrograms.find(
+      (program) =>
+        program.universityId === matchedUniversity.id &&
+        program.degree === degree &&
+        normalizeText(program.programName) === normalizeText(programName)
+    );
+
+    if (existingByName) {
+      alreadyExistsCount += 1;
+      [existingByName.overviewUrl, existingByName.admissionsUrl, existingByName.tuitionUrl]
+        .map(normalizeLink)
+        .filter(Boolean)
+        .forEach((link) => nextImportedLinkSet.add(link));
+      continue;
+    }
+
+    const nextProgram = {
+      id: buildProgramId(nextPrograms, {
+        schoolName: matchedUniversity.name,
+        programName,
+        degree,
+      }),
+      universityId: matchedUniversity.id,
+      schoolName: matchedUniversity.name,
+      schoolNameZh:
+        matchedUniversity.nameZh || getStudyAbroadUniversityNameZh(matchedUniversity.name),
+      country: matchedUniversity.country || entry.country || "",
+      city: matchedUniversity.city || "",
+      stateOrProvince: matchedUniversity.stateOrProvince || "",
+      programName,
+      degree: degree as "本科" | "硕士" | "博士",
+      discipline,
+      summary: buildProgramSummary({
+        schoolName: matchedUniversity.name,
+        snippet: candidate.snippet,
+      }),
+      duration: "",
+      intake: "",
+      tuitionAmount: "",
+      tuitionCurrency: "",
+      tuitionNotes: "",
+      overviewUrl: candidateLink,
+      admissionsUrl: candidateLink,
+      tuitionUrl: "",
+      keywords: uniqueStrings([
+        entry.major,
+        entry.specialization,
+        discipline,
+        programName,
+        candidate.title,
+      ]),
+      tags: uniqueStrings([
+        matchedUniversity.country || entry.country,
+        discipline,
+        degree,
+        "候选导入",
+      ]),
+      sourceIds: [REVIEW_IMPORT_SOURCE_ID],
+      checkedAt: new Date().toISOString().slice(0, 10),
+      priority: 72,
+      admissionsSnapshot: null,
+    } satisfies StudyAbroadCatalogProgram;
+
+    nextPrograms.push(nextProgram);
+    [nextProgram.overviewUrl, nextProgram.admissionsUrl, nextProgram.tuitionUrl]
+      .map(normalizeLink)
+      .filter(Boolean)
+      .forEach((link) => nextImportedLinkSet.add(link));
+    createdCount += 1;
+  }
+
+  if (createdCount > 0) {
+    await writeStudyAbroadCatalogPrograms(nextPrograms);
+    await writeStudyAbroadFinderIndexesFromCatalog(nextUniversities, nextPrograms);
   }
 
   const remainingCount = Math.max(0, eligibleCandidates.length - attemptedImportCount);

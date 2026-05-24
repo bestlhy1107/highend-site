@@ -844,6 +844,14 @@ export async function rebuildStudyAbroadFinderIndexes() {
     readStudyAbroadCatalogUniversities(),
     readStudyAbroadCatalogPrograms(),
   ]);
+
+  return writeStudyAbroadFinderIndexesFromCatalog(universities, programs);
+}
+
+export async function writeStudyAbroadFinderIndexesFromCatalog(
+  universities: StudyAbroadCatalogUniversity[],
+  programs: StudyAbroadCatalogProgram[]
+) {
   const finderPrograms = buildStudyAbroadFinderProgramsFromCatalog(universities, programs);
   const programLinks = buildStudyAbroadProgramLinkIndex(programs);
 
