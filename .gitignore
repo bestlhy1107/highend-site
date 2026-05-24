@@ -24,6 +24,9 @@ data/study-abroad-admissions-campaign-state.json
 data/study-abroad-finder-index.json
 data/study-abroad-program-link-index.json
 
+# runtime uploads created from the admin panel
+public/uploads/
+
 # macOS-specific files
 .DS_Store
 

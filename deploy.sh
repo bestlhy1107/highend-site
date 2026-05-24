@@ -6,7 +6,7 @@ BRANCH="main"
 REMOTE="origin"
 APP_PORT="4321"
 APP_HOST="127.0.0.1"
-RUNTIME_DATA_PATHS=(data)
+RUNTIME_DATA_PATHS=(data public/uploads)
 RUNTIME_STASH_CREATED=0
 RUNTIME_STASH_NAME=""
 HEALTH_PATHS=("/" "/admin/login" "/school-finder")
@@ -64,7 +64,7 @@ log "3. 检查代码工作区是否干净"
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "检测到未提交或未跟踪文件："
   git status --short
-  fail "请先处理服务器上的代码改动，再部署。运行时 data/ 改动会由脚本自动保护。"
+  fail "请先处理服务器上的代码改动，再部署。运行时 data/ 和 public/uploads/ 改动会由脚本自动保护。"
 fi
 
 log "4. 获取最新代码"
