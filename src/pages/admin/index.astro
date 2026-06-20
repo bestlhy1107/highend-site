@@ -9,6 +9,7 @@ import { readTeachers } from "../../lib/teachers-store";
 import { readServices } from "../../lib/services-store";
 import { readExams } from "../../lib/exams-store";
 import { readScores } from "../../lib/scores-store";
+import { readOffers } from "../../lib/offers-store";
 import { readLeads, type LeadRecord } from "../../lib/leads-store";
 import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
 import { readStudyAbroadCatalogStats } from "../../lib/study-abroad-catalog-store";
@@ -36,6 +37,7 @@ const teachers = await readTeachers();
 const services = await readServices();
 const exams = await readExams();
 const scores = await readScores();
+const offers = await readOffers();
 
 let leads: LeadRecord[] = [];
 let leadsError = "";
@@ -130,6 +132,8 @@ const APPOINTMENT_LABELS: Record<string, string> = {
 const SOURCE_LABELS: Record<string, string> = {
   homepage: "官网首页",
   "school-finder": "选校页带入",
+  "consult-widget": "咨询浮窗",
+  "mini-program": "小程序咨询",
 };
 
 function normalizeLeadSource(value: string | null | undefined) {
@@ -154,6 +158,10 @@ function getLeadInsightTags(lead: { source?: string; need?: string }) {
 
   if (source === "school-finder") {
     tags.push("来自选校页");
+  }
+
+  if (source === "mini-program") {
+    tags.push("来自小程序");
   }
 
   if (isSchoolFinderSummaryLead(lead)) {
@@ -392,6 +400,15 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
           <span class="badge">{scores.length}</span>
         </div>
         <p class="muted mt-2">新增、修改、删除出分展示，并上传案例图片。</p>
+        <div class="card-cta">进入管理 →</div>
+      </a>
+
+      <a class="card card--hover" href="/admin/offers">
+        <div class="card-top">
+          <div class="h3">Offer 管理</div>
+          <span class="badge">{offers.length}</span>
+        </div>
+        <p class="muted mt-2">新增、修改、删除 Offer 案例，并按国家筛选维护。</p>
         <div class="card-cta">进入管理 →</div>
       </a>
 

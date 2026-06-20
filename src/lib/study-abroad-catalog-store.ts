@@ -17,8 +17,10 @@ import {
   STUDY_ABROAD_MAJOR_SPECIALIZATIONS,
   STUDY_ABROAD_PROGRAMS,
   STUDY_ABROAD_DATA_UPDATED_AT,
+  type StudyAbroadDegree,
   type StudyAbroadProgram,
 } from "./study-abroad-programs";
+import { getStudyAbroadQsRanking } from "./study-abroad-qs-rankings";
 import { getStudyAbroadUniversityNameZh } from "./study-abroad-university-names";
 import { slugify } from "./text-fields";
 
@@ -63,7 +65,7 @@ export type StudyAbroadCatalogProgram = {
   city: string;
   stateOrProvince: string;
   programName: string;
-  degree: "本科" | "硕士" | "博士";
+  degree: StudyAbroadDegree;
   discipline: string;
   summary: string;
   duration?: string;
@@ -118,6 +120,12 @@ const UNIVERSITY_FILE = "study-abroad-universities.json";
 const PROGRAM_FILE = "study-abroad-programs.json";
 const FINDER_INDEX_FILE = "study-abroad-finder-index.json";
 const PROGRAM_LINK_INDEX_FILE = "study-abroad-program-link-index.json";
+const STUDY_ABROAD_DEGREE_VALUES = new Set<StudyAbroadDegree>([
+  "高中",
+  "本科",
+  "硕士",
+  "博士",
+]);
 
 export type StudyAbroadCatalogProgramLinkIndexItem = {
   link: string;
@@ -409,9 +417,24 @@ function safeHost(url: string) {
 function normalizeUniversity(
   input: Partial<StudyAbroadCatalogUniversity>
 ): StudyAbroadCatalogUniversity {
+  const name = String(input.name ?? "").trim();
+  const websiteDomain = String(input.websiteDomain ?? "").trim();
+  const existingRank = Number(input.qsRank);
+  const existingYear = Number(input.qsRankingYear);
+  const hasExistingRank = Number.isFinite(existingRank) && existingRank > 0;
+  const qsRanking =
+    hasExistingRank ? null : getStudyAbroadQsRanking({ name, websiteDomain });
+  const qsRank =
+    hasExistingRank ? existingRank : qsRanking?.rank ?? null;
+  const qsRankingYear =
+    hasExistingRank && Number.isFinite(existingYear) && existingYear > 0
+      ? existingYear
+      : qsRanking?.year ?? (qsRank ? 2027 : null);
+  const rankingSource = String(input.rankingSource ?? "").trim();
+
   return {
     id: String(input.id ?? "").trim(),
-    name: String(input.name ?? "").trim(),
+    name,
     nameZh: String(
       input.nameZh ?? getStudyAbroadUniversityNameZh(String(input.name ?? ""))
     ).trim(),
@@ -419,12 +442,14 @@ function normalizeUniversity(
     city: String(input.city ?? "").trim(),
     stateOrProvince: String(input.stateOrProvince ?? "").trim(),
     officialWebsite: String(input.officialWebsite ?? "").trim(),
-    websiteDomain: String(input.websiteDomain ?? "").trim(),
-    qsRank: Number.isFinite(Number(input.qsRank)) ? Number(input.qsRank) : null,
-    qsRankingYear: Number.isFinite(Number(input.qsRankingYear))
-      ? Number(input.qsRankingYear)
-      : null,
-    rankingSource: String(input.rankingSource ?? "").trim(),
+    websiteDomain,
+    qsRank,
+    qsRankingYear,
+    rankingSource: qsRank
+      ? rankingSource && rankingSource !== "待接入"
+        ? rankingSource
+        : qsRanking?.source ?? "QS World University Rankings 2027"
+      : rankingSource,
     sourceIds: normalizeStringArray(input.sourceIds),
     updatedAt: String(input.updatedAt ?? STUDY_ABROAD_DATA_UPDATED_AT).trim(),
   };
@@ -434,8 +459,9 @@ function normalizeProgram(
   input: Partial<StudyAbroadCatalogProgram>
 ): StudyAbroadCatalogProgram {
   const rawDegree = String(input.degree ?? "").trim();
-  const normalizedDegree =
-    rawDegree === "本科" || rawDegree === "博士" ? rawDegree : "硕士";
+  const normalizedDegree = STUDY_ABROAD_DEGREE_VALUES.has(rawDegree as StudyAbroadDegree)
+    ? (rawDegree as StudyAbroadDegree)
+    : "硕士";
   const programName = String(input.programName ?? "").trim();
   const normalizedDiscipline =
     rawDegree === "MBA" || /(^|\s)MBA(\s|$)/i.test(programName)
@@ -459,7 +485,7 @@ function normalizeProgram(
     city: String(input.city ?? "").trim(),
     stateOrProvince: String(input.stateOrProvince ?? "").trim(),
     programName: String(input.programName ?? "").trim(),
-    degree: normalizedDegree as "本科" | "硕士" | "博士",
+    degree: normalizedDegree,
     discipline: normalizedDiscipline,
     summary: String(input.summary ?? "").trim(),
     duration: String(input.duration ?? "").trim(),
@@ -506,15 +532,15 @@ function comparePrograms(a: StudyAbroadCatalogProgram, b: StudyAbroadCatalogProg
 }
 
 function compareFinderPrograms(a: StudyAbroadFinderProgram, b: StudyAbroadFinderProgram) {
-  if (a.priority !== b.priority) {
-    return b.priority - a.priority;
-  }
-
   const leftRank = Number.isFinite(a.qsRank ?? NaN) ? (a.qsRank ?? 999999) : 999999;
   const rightRank = Number.isFinite(b.qsRank ?? NaN) ? (b.qsRank ?? 999999) : 999999;
 
   if (leftRank !== rightRank) {
     return leftRank - rightRank;
+  }
+
+  if (a.priority !== b.priority) {
+    return b.priority - a.priority;
   }
 
   return comparePrograms(a, b);
@@ -566,7 +592,9 @@ function normalizeFinderIndexProgram(
   input: Partial<StudyAbroadFinderProgram>
 ): StudyAbroadFinderProgram {
   const rawDegree = String(input.degree ?? "").trim();
-  const degree = rawDegree === "本科" || rawDegree === "博士" ? rawDegree : "硕士";
+  const degree = STUDY_ABROAD_DEGREE_VALUES.has(rawDegree as StudyAbroadDegree)
+    ? (rawDegree as StudyAbroadDegree)
+    : "硕士";
 
   return {
     id: String(input.id ?? "").trim(),
@@ -577,7 +605,7 @@ function normalizeFinderIndexProgram(
     city: String(input.city ?? "").trim(),
     stateOrProvince: String(input.stateOrProvince ?? "").trim(),
     programName: String(input.programName ?? "").trim(),
-    degree: degree as "本科" | "硕士" | "博士",
+    degree,
     discipline: String(input.discipline ?? "").trim(),
     summary: String(input.summary ?? "").trim(),
     duration: String(input.duration ?? "").trim(),
@@ -626,7 +654,7 @@ function isValidProgramLinkIndexItem(item: StudyAbroadCatalogProgramLinkIndexIte
   return Boolean(item.link && item.programId);
 }
 
-function buildStudyAbroadFinderProgramsFromCatalog(
+export function buildStudyAbroadFinderProgramsFromCatalog(
   universities: StudyAbroadCatalogUniversity[],
   programs: StudyAbroadCatalogProgram[]
 ) {

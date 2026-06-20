@@ -4,6 +4,7 @@ import {
   readStudyAbroadCachedAdmissionsInsights,
 } from "./study-abroad-admissions";
 import { readStudyAbroadFinderPrograms } from "./study-abroad-catalog-store";
+import { readStudyAbroadFinderProgramsByIdsFromDb } from "./study-abroad-search-db";
 
 export type StudyAbroadFitInput = {
   gpaProfile?: string;
@@ -213,7 +214,8 @@ export async function buildStudyAbroadFitPreviews(
     return [];
   }
 
-  const finderPrograms = await readStudyAbroadFinderPrograms();
+  const dbPrograms = await readStudyAbroadFinderProgramsByIdsFromDb(ids);
+  const finderPrograms = dbPrograms ?? (await readStudyAbroadFinderPrograms());
   const programMap = new Map(
     finderPrograms
       .filter((program) => ids.includes(program.id))

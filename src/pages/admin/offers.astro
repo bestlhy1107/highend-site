@@ -1,0 +1,292 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { actions, isInputError } from "astro:actions";
+import { listOfferCountries, readOffers } from "../../lib/offers-store";
+
+const adminUser = await Astro.session?.get("adminUser");
+if (!adminUser) {
+  return Astro.redirect("/admin/login");
+}
+
+const offers = await readOffers();
+const countries = listOfferCountries(offers);
+const activeCountry = String(Astro.url.searchParams.get("country") ?? "").trim();
+const visibleOffers = activeCountry
+  ? offers.filter((offer) => offer.country === activeCountry)
+  : offers;
+
+const saveResult = Astro.getActionResult(actions.saveOffer);
+const removeResult = Astro.getActionResult(actions.removeOffer);
+
+const inputErrors = isInputError(saveResult?.error) ? saveResult.error.fields : {};
+const saveSuccess = saveResult && !saveResult.error ? saveResult.data : null;
+const removeSuccess = removeResult && !removeResult.error ? removeResult.data : null;
+---
+
+<BaseLayout title="管理员后台 - Offer" description="管理 Offer 展示">
+  <main class="container page">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Admin</div>
+        <h1 class="section-title">Offer 案例后台编辑</h1>
+        <p class="section-desc">新增、修改、删除录取案例，小程序会通过接口读取最新结果。</p>
+      </div>
+
+      <a class="btn btn-ghost" href="/admin">返回后台</a>
+    </div>
+
+    {saveSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {saveSuccess.message}
+      </div>
+    )}
+
+    {removeSuccess && (
+      <div class="contact-notice contact-notice--success mt-4">
+        {removeSuccess.message}
+      </div>
+    )}
+
+    <div class="cards cards--2 mt-4">
+      <div class="card">
+        <div class="card-top">
+          <div class="h3">国家 / 地区筛选</div>
+          <div class="badge">{countries.length}</div>
+        </div>
+
+        <div class="card-tags mt-3">
+          <a href="/admin/offers" class:list={[!activeCountry && "is-active"]}>全部 · {offers.length}</a>
+          {countries.map((country) => (
+            <a
+              href={`/admin/offers?country=${encodeURIComponent(country)}`}
+              class:list={[activeCountry === country && "is-active"]}
+            >
+              {country} · {offers.filter((offer) => offer.country === country).length}
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top">
+          <div class="h3">小程序同步状态</div>
+          <div class="badge">{visibleOffers.length}</div>
+        </div>
+        <p class="muted mt-2">
+          保存后会写入 <code>data/offers.json</code>，接口 <code>/api/mini-program/offers</code> 会立即读取。
+        </p>
+      </div>
+    </div>
+
+    <div class="contact-shell mt-4">
+      <div class="h3">新增 Offer 案例</div>
+
+      <form method="POST" action={actions.saveOffer} class="mt-4">
+        <div class="form-grid">
+          <div class="form-item">
+            <label class="form-label">国家 / 地区</label>
+            <input class="input" name="country" type="text" list="offer-country-options" placeholder="英国" required />
+            {inputErrors.country && <p class="form-error">{inputErrors.country.join("，")}</p>}
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">排序</label>
+            <input class="input" name="order" type="number" value="999" required />
+            {inputErrors.order && <p class="form-error">{inputErrors.order.join("，")}</p>}
+          </div>
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label">中文校名</label>
+            <input class="input" name="universityZh" type="text" placeholder="伦敦大学学院" required />
+            {inputErrors.universityZh && <p class="form-error">{inputErrors.universityZh.join("，")}</p>}
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">英文校名</label>
+            <input class="input" name="university" type="text" placeholder="University College London" required />
+            {inputErrors.university && <p class="form-error">{inputErrors.university.join("，")}</p>}
+          </div>
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">录取项目</label>
+          <input class="input" name="program" type="text" placeholder="MSc Banking and Digital Finance" required />
+          {inputErrors.program && <p class="form-error">{inputErrors.program.join("，")}</p>}
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label">学位</label>
+            <input class="input" name="degree" type="text" placeholder="硕士" />
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">录取结果</label>
+            <input class="input" name="result" type="text" placeholder="2026 Fall Offer" required />
+            {inputErrors.result && <p class="form-error">{inputErrors.result.join("，")}</p>}
+          </div>
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label">日期</label>
+            <input class="input" name="date" type="text" placeholder="2026-03" />
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">标签（逗号分隔）</label>
+            <input class="input" name="tags" type="text" placeholder="英国, 金融科技, UCL" />
+          </div>
+        </div>
+
+        <div class="form-item mt-4">
+          <label class="form-label">学生背景</label>
+          <input class="input" name="studentProfile" type="text" placeholder="双非院校 · 金融背景 · IELTS 7.0" />
+        </div>
+
+        <div class="form-grid mt-4">
+          <div class="form-item">
+            <label class="form-label">申请节奏（逗号分隔）</label>
+            <textarea class="input" name="timeline" rows="4" placeholder="9 月定校, 10 月递交, 次年 4 月收获 Offer"></textarea>
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">录取亮点（逗号分隔）</label>
+            <textarea class="input" name="highlights" rows="4" placeholder="实习主线清晰, 文书突出项目经历"></textarea>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button class="btn" type="submit">新增 Offer 案例</button>
+        </div>
+      </form>
+    </div>
+
+    <datalist id="offer-country-options">
+      {countries.map((country) => (
+        <option value={country} />
+      ))}
+    </datalist>
+
+    <section class="mt-8">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker">Cases</div>
+          <h2 class="section-title">{activeCountry || "全部 Offer 案例"}</h2>
+          <p class="section-desc">当前显示 {visibleOffers.length} 条案例。</p>
+        </div>
+      </div>
+
+      <div class="cards mt-4">
+        {visibleOffers.map((offer) => (
+          <div class="card">
+            <div class="card-top">
+              <div>
+                <div class="h3">{offer.universityZh}</div>
+                <div class="muted mt-1">{offer.university}</div>
+              </div>
+              <div class="badge">#{offer.order}</div>
+            </div>
+
+            <p class="mt-3"><strong>{offer.program}</strong></p>
+            <p class="muted mt-2">{offer.result}{offer.date ? ` · ${offer.date}` : ""}</p>
+
+            <form method="POST" action={actions.saveOffer} class="mt-4">
+              <input type="hidden" name="id" value={offer.id} />
+
+              <div class="form-grid">
+                <div class="form-item">
+                  <label class="form-label">国家 / 地区</label>
+                  <input class="input" name="country" type="text" list="offer-country-options" value={offer.country} required />
+                </div>
+
+                <div class="form-item">
+                  <label class="form-label">排序</label>
+                  <input class="input" name="order" type="number" value={offer.order} required />
+                </div>
+              </div>
+
+              <div class="form-grid mt-4">
+                <div class="form-item">
+                  <label class="form-label">中文校名</label>
+                  <input class="input" name="universityZh" type="text" value={offer.universityZh} required />
+                </div>
+
+                <div class="form-item">
+                  <label class="form-label">英文校名</label>
+                  <input class="input" name="university" type="text" value={offer.university} required />
+                </div>
+              </div>
+
+              <div class="form-item mt-4">
+                <label class="form-label">录取项目</label>
+                <input class="input" name="program" type="text" value={offer.program} required />
+              </div>
+
+              <div class="form-grid mt-4">
+                <div class="form-item">
+                  <label class="form-label">学位</label>
+                  <input class="input" name="degree" type="text" value={offer.degree} />
+                </div>
+
+                <div class="form-item">
+                  <label class="form-label">录取结果</label>
+                  <input class="input" name="result" type="text" value={offer.result} required />
+                </div>
+              </div>
+
+              <div class="form-grid mt-4">
+                <div class="form-item">
+                  <label class="form-label">日期</label>
+                  <input class="input" name="date" type="text" value={offer.date} />
+                </div>
+
+                <div class="form-item">
+                  <label class="form-label">标签（逗号分隔）</label>
+                  <input class="input" name="tags" type="text" value={offer.tags.join(", ")} />
+                </div>
+              </div>
+
+              <div class="form-item mt-4">
+                <label class="form-label">学生背景</label>
+                <input class="input" name="studentProfile" type="text" value={offer.studentProfile} />
+              </div>
+
+              <div class="form-grid mt-4">
+                <div class="form-item">
+                  <label class="form-label">申请节奏（逗号分隔）</label>
+                  <textarea class="input" name="timeline" rows="4">{offer.timeline.join(", ")}</textarea>
+                </div>
+
+                <div class="form-item">
+                  <label class="form-label">录取亮点（逗号分隔）</label>
+                  <textarea class="input" name="highlights" rows="4">{offer.highlights.join(", ")}</textarea>
+                </div>
+              </div>
+
+              <div class="mt-4">
+                <button class="btn" type="submit">保存修改</button>
+              </div>
+            </form>
+
+            <form method="POST" action={actions.removeOffer} class="mt-3">
+              <input type="hidden" name="id" value={offer.id} />
+              <button class="btn btn-ghost" type="submit">删除 Offer 案例</button>
+            </form>
+          </div>
+        ))}
+      </div>
+
+      {!visibleOffers.length && (
+        <div class="card mt-4">
+          <div class="h3">暂无 Offer 案例</div>
+          <p class="muted mt-2">可以先在上方新增一条案例。</p>
+        </div>
+      )}
+    </section>
+  </main>
+</BaseLayout>

@@ -5,6 +5,7 @@ import {
   readStudyAbroadFinderProgramById,
   type StudyAbroadFinderProgram,
 } from "./study-abroad-catalog-store";
+import { readStudyAbroadFinderProgramsByIdsFromDb } from "./study-abroad-search-db";
 
 const FETCH_TIMEOUT_MS = 12000;
 const INSIGHT_TIMEOUT_MS = 20000;
@@ -1195,7 +1196,8 @@ export async function readStudyAbroadAdmissionsInsight(programId: string) {
     return cached;
   }
 
-  const program = await readStudyAbroadFinderProgramById(programId);
+  const dbPrograms = await readStudyAbroadFinderProgramsByIdsFromDb([programId]);
+  const program = dbPrograms?.[0] ?? (await readStudyAbroadFinderProgramById(programId));
 
   if (!program) {
     return null;

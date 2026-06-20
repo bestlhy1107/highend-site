@@ -29,6 +29,10 @@ import {
   buildStudyAbroadFitPreviewFromInsight,
   type StudyAbroadFitPreview,
 } from "./study-abroad-fit";
+import {
+  searchStudyAbroadProgramsFromDb,
+  type StudyAbroadSearchDbResult,
+} from "./study-abroad-search-db";
 
 export type StudyAbroadSearchInput = {
   searchSessionId?: string;
@@ -44,6 +48,10 @@ export type StudyAbroadSearchInput = {
   fitMode?: string;
   snapshotQuality?: string;
   universityId?: string;
+  page?: number;
+  pageSize?: number;
+  universityPage?: number;
+  universityPageSize?: number;
 };
 
 export type StudyAbroadResolvedQuery = {
@@ -89,6 +97,11 @@ export type StudyAbroadSearchResult = {
   displayedVerifiedCount: number;
   universityMatches: StudyAbroadUniversityMatch[];
   totalUniversityCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasMore: boolean;
+  searchBackend: "sqlite" | "json";
   candidateResults: StudyAbroadReviewCandidate[];
   expansionEnabled: boolean;
   expansionAttempted: boolean;
@@ -277,6 +290,18 @@ const LOW_QUALITY_TEXT_HINTS = [
 ];
 
 const DEGREE_CONFLICT_HINTS: Record<string, string[]> = {
+  高中: [
+    "bachelor",
+    "undergraduate",
+    "master",
+    "masters",
+    "graduate",
+    "msc",
+    "mba",
+    "phd",
+    "doctor",
+    "doctoral",
+  ],
   本科: [
     "master",
     "masters",
@@ -317,6 +342,8 @@ const FREE_TEXT_STOPWORDS = new Set([
   "方向",
   "官网",
   "官方",
+  "高中",
+  "中学",
   "硕士",
   "本科",
   "博士",
@@ -359,6 +386,7 @@ const EXTRA_SPECIALIZATION_ALIASES: Record<string, string[]> = {
 };
 
 const EXTRA_DEGREE_ALIASES: Record<string, string[]> = {
+  高中: ["secondary", "secondary school", "boarding", "boarding school", "highschool"],
   硕士: ["one year master", "one-year master", "taught master", "graduate taught"],
   本科: ["undergrad", "undergraduate"],
   博士: ["phd", "doctorate", "doctoral"],
@@ -376,6 +404,28 @@ function fitStatusWeight(status: StudyAbroadFitPreview["status"]) {
   if (status === "match") return 3;
   if (status === "review") return 2;
   return 1;
+}
+
+function readableQsRank(value: unknown) {
+  const rank = Number(value);
+  return Number.isFinite(rank) && rank > 0 ? rank : 999999;
+}
+
+function compareProgramsByQsRank(
+  left: Pick<StudyAbroadFinderProgram, "qsRank">,
+  right: Pick<StudyAbroadFinderProgram, "qsRank">
+) {
+  return readableQsRank(left.qsRank) - readableQsRank(right.qsRank);
+}
+
+function compareProgramNames(
+  left: Pick<StudyAbroadFinderProgram, "schoolName" | "programName">,
+  right: Pick<StudyAbroadFinderProgram, "schoolName" | "programName">
+) {
+  const schoolOrder = left.schoolName.localeCompare(right.schoolName, "en-US");
+  if (schoolOrder !== 0) return schoolOrder;
+
+  return left.programName.localeCompare(right.programName, "en-US");
 }
 
 async function prioritizeVerifiedResultsByCachedFit(
@@ -476,6 +526,9 @@ async function prioritizeVerifiedResultsByCachedFit(
   });
 
   const reordered = [...results].sort((left, right) => {
+    const rankOrder = compareProgramsByQsRank(left, right);
+    if (rankOrder !== 0) return rankOrder;
+
     const leftPreview = previewMap.get(left.id);
     const rightPreview = previewMap.get(right.id);
     const leftWeight = leftPreview ? fitStatusWeight(leftPreview.status) : 0;
@@ -489,7 +542,7 @@ async function prioritizeVerifiedResultsByCachedFit(
       return fitStatusWeight(rightPreview.status) - fitStatusWeight(leftPreview.status);
     }
 
-    return 0;
+    return compareProgramNames(left, right);
   });
 
   const fitFiltered = reordered.filter((program) => {
@@ -560,6 +613,31 @@ export function normalizeStudyAbroadQuery(input: StudyAbroadSearchInput): StudyA
 
 function createSearchSessionId(input: StudyAbroadSearchInput) {
   return String(input.searchSessionId ?? "").trim() || randomUUID();
+}
+
+function clampSearchPositiveInt(value: unknown, fallback: number, max: number) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(max, parsed);
+}
+
+function normalizeSearchPagination(input: StudyAbroadSearchInput) {
+  const page = clampSearchPositiveInt(input.page, 1, 10000);
+  const pageSize = clampSearchPositiveInt(input.pageSize, MAX_VERIFIED_RESULTS, 200);
+  const universityPage = clampSearchPositiveInt(input.universityPage, 1, 10000);
+  const universityPageSize = clampSearchPositiveInt(input.universityPageSize, 240, 300);
+
+  return {
+    page,
+    pageSize,
+    offset: (page - 1) * pageSize,
+    universityPage,
+    universityPageSize,
+  };
+}
+
+function totalPagesFor(totalCount: number, pageSize: number) {
+  return Math.max(1, Math.ceil(Math.max(0, totalCount) / Math.max(1, pageSize)));
 }
 
 function toAuditResultsFromVerifiedPrograms(
@@ -1156,7 +1234,12 @@ export async function searchVerifiedStudyAbroadPrograms(
     return { program, score };
   })
     .filter((item): item is { program: StudyAbroadFinderProgram; score: number } => Boolean(item))
-    .sort((left, right) => right.score - left.score)
+    .sort((left, right) => {
+      const rankOrder = compareProgramsByQsRank(left.program, right.program);
+      if (rankOrder !== 0) return rankOrder;
+      if (left.score !== right.score) return right.score - left.score;
+      return compareProgramNames(left.program, right.program);
+    })
     .map((item) => item.program);
 }
 
@@ -1256,6 +1339,120 @@ async function buildCountryCatalogUniversityMatches(
     .sort(compareUniversityMatches);
 }
 
+async function buildStudyAbroadSearchResultFromDb(input: {
+  searchSessionId: string;
+  query: StudyAbroadResolvedQuery;
+  dbResult: StudyAbroadSearchDbResult;
+  blocklist: Awaited<ReturnType<typeof readStudyAbroadSearchBlocklist>>;
+}) {
+  const { searchSessionId, query, dbResult, blocklist } = input;
+  const blockedVerifiedHits: Array<{ ruleId: string; label: string; sessionId: string }> = [];
+  const pagePrograms: StudyAbroadFinderProgram[] = [];
+
+  dbResult.programs.forEach((program) => {
+    const blockedRuleIds = collectBlockedStudyAbroadFinderProgramRuleIds(program, blocklist);
+    if (blockedRuleIds.length) {
+      const label = `${program.schoolName} / ${program.programName}`.trim();
+      blockedRuleIds.forEach((ruleId) => {
+        blockedVerifiedHits.push({
+          ruleId,
+          label,
+          sessionId: searchSessionId,
+        });
+      });
+      return;
+    }
+
+    pagePrograms.push(program);
+  });
+
+  const {
+    results: verifiedResults,
+    cachedFitCount,
+    fitMode,
+    filteredByFitModeCount,
+    fitSummary,
+  } = await prioritizeVerifiedResultsByCachedFit(pagePrograms, query);
+  const blockedResultCount = blockedVerifiedHits.length;
+
+  if (blockedResultCount > 0) {
+    await recordStudyAbroadSearchAvoidRuleHits({
+      hits: blockedVerifiedHits,
+    });
+  }
+
+  const expansionEnabled = canUseExternalSearch();
+  const expansionAttempted = false;
+  const pendingReviewCount = 0;
+  const candidateResults: SearchWebCandidate[] = [];
+  const totalVerifiedCount = dbResult.totalCount;
+  const displayedVerifiedCount = verifiedResults.length;
+  const totalUniversityCount = dbResult.totalUniversityCount;
+  const message = buildSearchMessage({
+    query,
+    displayedVerifiedCount,
+    totalVerifiedCount,
+    universityCount: totalUniversityCount,
+    candidateCount: candidateResults.length,
+    expansionEnabled,
+    expansionAttempted,
+    pendingReviewCount,
+    cachedFitCount,
+    fitMode,
+    filteredByFitModeCount,
+    fitSummary,
+    blockedResultCount,
+  });
+  const searchGuidance = buildSearchGuidance({
+    query,
+    displayedVerifiedCount,
+    totalVerifiedCount,
+    universityCount: totalUniversityCount,
+    candidateCount: candidateResults.length,
+    expansionEnabled,
+    expansionAttempted,
+    fitMode,
+    filteredByFitModeCount,
+    blockedResultCount,
+    candidateResults,
+  });
+
+  await persistStudyAbroadSearchAuditEntry({
+    sessionId: searchSessionId,
+    query,
+    message,
+    totalVerifiedCount,
+    displayedVerifiedCount,
+    totalUniversityCount,
+    candidateCount: candidateResults.length,
+    pendingReviewCount,
+    blockedResultCount,
+    results: toAuditResultsFromVerifiedPrograms(verifiedResults),
+  });
+
+  return {
+    searchSessionId,
+    resolvedQuery: query,
+    verifiedResults,
+    totalVerifiedCount,
+    displayedVerifiedCount,
+    universityMatches: dbResult.universityMatches,
+    totalUniversityCount,
+    page: dbResult.page,
+    pageSize: dbResult.pageSize,
+    totalPages: dbResult.totalPages,
+    hasMore: dbResult.hasMore,
+    searchBackend: "sqlite",
+    candidateResults,
+    expansionEnabled,
+    expansionAttempted,
+    pendingReviewCount,
+    blockedResultCount,
+    message,
+    searchGuidance,
+  } satisfies StudyAbroadSearchResult;
+}
+
 export async function searchStudyAbroadPrograms(
   input: StudyAbroadSearchInput,
   options?: {
@@ -1264,10 +1461,28 @@ export async function searchStudyAbroadPrograms(
 ): Promise<StudyAbroadSearchResult> {
   const searchSessionId = createSearchSessionId(input);
   const query = normalizeStudyAbroadQuery(input);
-  const [sourcePrograms, blocklist] = await Promise.all([
-    readStudyAbroadFinderPrograms(),
-    readStudyAbroadSearchBlocklist(),
-  ]);
+  const pagination = normalizeSearchPagination(input);
+  const includeExternalCandidates = options?.includeExternalCandidates === true;
+  const blocklist = await readStudyAbroadSearchBlocklist();
+  const dbResult = includeExternalCandidates
+    ? null
+    : await searchStudyAbroadProgramsFromDb(query, {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        universityPage: pagination.universityPage,
+        universityPageSize: pagination.universityPageSize,
+      });
+
+  if (dbResult) {
+    return buildStudyAbroadSearchResultFromDb({
+      searchSessionId,
+      query,
+      dbResult,
+      blocklist,
+    });
+  }
+
+  const sourcePrograms = await readStudyAbroadFinderPrograms();
   const blockedVerifiedHits: Array<{ ruleId: string; label: string; sessionId: string }> = [];
   const filteredSourcePrograms: StudyAbroadFinderProgram[] = [];
 
@@ -1299,9 +1514,11 @@ export async function searchStudyAbroadPrograms(
     filteredByFitModeCount,
     fitSummary,
   } = await prioritizeVerifiedResultsByCachedFit(searchedVerifiedResults, query);
-  const verifiedResults = query.universityId
-    ? allVerifiedResults
-    : allVerifiedResults.slice(0, MAX_VERIFIED_RESULTS);
+  const totalPages = totalPagesFor(allVerifiedResults.length, pagination.pageSize);
+  const verifiedResults = allVerifiedResults.slice(
+    pagination.offset,
+    pagination.offset + pagination.pageSize
+  );
   const allUniversityMatches =
     query.country &&
     !query.major &&
@@ -1314,7 +1531,6 @@ export async function searchStudyAbroadPrograms(
       : buildUniversityMatches(allVerifiedResults);
   const universityMatches = allUniversityMatches;
   const expansionEnabled = canUseExternalSearch();
-  const includeExternalCandidates = options?.includeExternalCandidates === true;
   const shouldExpand =
     includeExternalCandidates &&
     shouldRunExternalSearch(query, verifiedResults) &&
@@ -1409,6 +1625,11 @@ export async function searchStudyAbroadPrograms(
       displayedVerifiedCount: verifiedResults.length,
       universityMatches,
       totalUniversityCount: allUniversityMatches.length,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalPages,
+      hasMore: pagination.page < totalPages,
+      searchBackend: "json",
       candidateResults,
       expansionEnabled,
       expansionAttempted,
@@ -1479,6 +1700,11 @@ export async function searchStudyAbroadPrograms(
     displayedVerifiedCount: verifiedResults.length,
     universityMatches,
     totalUniversityCount: allUniversityMatches.length,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalPages,
+    hasMore: pagination.page < totalPages,
+    searchBackend: "json",
     candidateResults,
     expansionEnabled,
     expansionAttempted,
@@ -1932,9 +2158,9 @@ function buildSearchMessage(params: {
   }
 
   if (!expansionEnabled) {
-    if (query.degree === "本科" || query.degree === "博士") {
+    if (query.degree === "高中" || query.degree === "本科" || query.degree === "博士") {
       return withGovernanceNote(
-        `当前学校底库已经支持按国家先筛学校，但 ${query.degree} 项目层还在持续补充，建议先切到硕士查看已核验项目，或先浏览学校池。`
+        `当前学校底库已经支持按国家先筛学校，但 ${query.degree} 项目层还在持续补充，建议先浏览学校池，或放宽国家和方向条件。`
       );
     }
 
@@ -1944,7 +2170,7 @@ function buildSearchMessage(params: {
   }
 
   if (candidateCount) {
-    if (query.degree === "本科" || query.degree === "博士") {
+    if (query.degree === "高中" || query.degree === "本科" || query.degree === "博士") {
       const lead = `当前学校底库已经支持按国家先筛学校，但 ${query.degree} 项目层还在持续补充。`;
 
       if (pendingReviewCount) {
@@ -1975,9 +2201,9 @@ function buildSearchMessage(params: {
     );
   }
 
-  if (query.degree === "本科" || query.degree === "博士") {
+  if (query.degree === "高中" || query.degree === "本科" || query.degree === "博士") {
     return withGovernanceNote(
-      `当前学校底库已经支持按国家先筛学校，但 ${query.degree} 项目层还在持续补充。可以先浏览学校池，或切到硕士查看已核验项目。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim()
+      `当前学校底库已经支持按国家先筛学校，但 ${query.degree} 项目层还在持续补充。可以先浏览学校池，或放宽国家和方向条件。${hardFilterNote}${snapshotNote}${fitModeNote}${fitCacheNote}${advisoryNote}`.trim()
     );
   }
 

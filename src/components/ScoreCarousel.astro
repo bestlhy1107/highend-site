@@ -2,8 +2,8 @@
 import { normalizeImageUrl } from "../lib/image-url";
 import type { RuntimeScore } from "../lib/scores-store";
 
-type Props = { scores: RuntimeScore[] };
-const { scores } = Astro.props as Props;
+type Props = { scores: RuntimeScore[]; totalCount?: number };
+const { scores, totalCount = scores.length } = Astro.props as Props;
 const examTypes = Array.from(
   new Set(
     scores
@@ -99,7 +99,7 @@ const examTypes = Array.from(
 
     <div class="score-browser-footer">
       <div class="muted text-sm" data-score-status>
-        {scores.length ? `共 ${scores.length} 条案例` : "暂无出分案例"}
+        {scores.length ? `共 ${totalCount} 条案例` : "暂无出分案例"}
       </div>
     </div>
   </div>

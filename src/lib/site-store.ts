@@ -20,7 +20,7 @@ export type RuntimeSiteSettings = {
 };
 
 const DEFAULT_SITE: RuntimeSiteSettings = {
-  companyName: "Wanhe Education",
+  companyName: "万禾留学",
   slogan: "高分出分 · 名师指导 · 留学申请一站式",
   phone: "待填写",
   email: "待填写",

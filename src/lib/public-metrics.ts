@@ -1,0 +1,2 @@
+export const PUBLIC_SCORE_CASE_COUNT = 261;
+export const PUBLIC_OFFER_CASE_COUNT = 317;

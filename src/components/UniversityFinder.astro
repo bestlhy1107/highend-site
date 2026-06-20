@@ -318,6 +318,7 @@ const schoolMatchClientConfig = {
           <span>学位类型</span>
           <select data-role="degree">
             <option value="">全部</option>
+            <option value="高中">高中</option>
             <option value="本科">本科</option>
             <option value="硕士">硕士</option>
             <option value="博士">博士</option>
@@ -716,6 +717,13 @@ const schoolMatchClientConfig = {
         ))}
       </div>
 
+      <div class="school-pool-toolbar" data-role="programs-toolbar" hidden>
+        <button class="btn btn-ghost" type="button" data-role="programs-more" hidden>
+          加载更多项目
+        </button>
+        <span class="muted text-sm" data-role="programs-page-note"></span>
+      </div>
+
       <div class="school-match-detail" data-role="detail-panel" hidden>
         <div class="school-match-detail-head">
           <div>
@@ -933,6 +941,9 @@ const schoolMatchClientConfig = {
       const candidateSection = root.querySelector('[data-role="candidate-section"]');
       const candidateResultsNode = root.querySelector('[data-role="candidate-results"]');
       const candidateCountNode = root.querySelector('[data-role="candidate-count"]');
+      const programsToolbar = root.querySelector('[data-role="programs-toolbar"]');
+      const programsMoreButton = root.querySelector('[data-role="programs-more"]');
+      const programsPageNote = root.querySelector('[data-role="programs-page-note"]');
       const statusVerifiedNode = root.querySelector('[data-role="status-verified"]');
       const statusCandidateNode = root.querySelector('[data-role="status-candidate"]');
       const statusCandidateNoteNode = root.querySelector('[data-role="status-candidate-note"]');
@@ -1017,6 +1028,10 @@ const schoolMatchClientConfig = {
         ...lastBasePayload,
       };
       let activeSearchSessionId = "";
+      let activeResultPage = 1;
+      let activeResultPageSize = 160;
+      let activeResultTotalPages = 1;
+      let activeResultHasMore = false;
       let selectedUniversityId = "";
       let lastEmptyText =
         "可以先放宽国家条件，或者改选更宽的专业方向，比如从“商业分析 / 数据”切到“商科 / 管理”。";
@@ -3007,6 +3022,39 @@ const schoolMatchClientConfig = {
         syncUtilityActionStates();
       };
 
+      const updateProgramPaginationControls = () => {
+        if (
+          !(programsToolbar instanceof HTMLElement) ||
+          !(programsMoreButton instanceof HTMLButtonElement)
+        ) {
+          return;
+        }
+
+        const shouldShow = Boolean(
+          activeResultHasMore && baseVerifiedResults.length && !selectedUniversityId
+        );
+        programsToolbar.hidden = !shouldShow;
+        programsMoreButton.hidden = !shouldShow;
+        programsMoreButton.disabled = false;
+        programsMoreButton.textContent = activeResultHasMore
+          ? `加载更多项目（第 ${activeResultPage + 1} / ${activeResultTotalPages} 页）`
+          : "已加载全部项目";
+
+        if (programsPageNote instanceof HTMLElement) {
+          programsPageNote.textContent = shouldShow
+            ? `已展示 ${baseVerifiedResults.length} 条，可继续按页加载。`
+            : "";
+        }
+      };
+
+      const applyProgramPagination = (data) => {
+        activeResultPage = Number(data?.page) || 1;
+        activeResultPageSize = Number(data?.pageSize) || activeResultPageSize || 160;
+        activeResultTotalPages = Number(data?.totalPages) || activeResultPage;
+        activeResultHasMore = Boolean(data?.hasMore);
+        updateProgramPaginationControls();
+      };
+
       const renderCandidateResults = (items) => {
         if (!(candidateSection instanceof HTMLElement) || !candidateResultsNode) {
           return;
@@ -3555,6 +3603,10 @@ const schoolMatchClientConfig = {
         baseUniversityMatches = seedUniversityMatches;
         baseUniversityCount = seedUniversityMatches.length;
         baseCandidateResults = [];
+        activeResultPage = 1;
+        activeResultPageSize = 160;
+        activeResultTotalPages = 1;
+        activeResultHasMore = false;
         baseStatusText =
           `当前底库共有 ${totalProgramCount} 个项目，当前展示 ${initialResults.length} 个优先样例。先选学位类型、专业方向、细分方向和学生背景，再点击“开始搜索”获取已核验结果。`;
         lastBasePayload = {
@@ -3588,6 +3640,7 @@ const schoolMatchClientConfig = {
         hideExpansionSuggestion();
         hideIntentExplanation();
         hideSearchQuality();
+        updateProgramPaginationControls();
         fitPreviewToken += 1;
         clearFitPreviews();
         hideDetailPanel();
@@ -3683,6 +3736,8 @@ const schoolMatchClientConfig = {
             });
             selectedUniversityId = String(payload.universityId || "");
             activeVerifiedResults = nextVerifiedResults;
+            baseVerifiedResults = nextVerifiedResults;
+            applyProgramPagination(data);
             const selectedSchool =
               baseUniversityMatches.find((item) => item.universityId === selectedUniversityId) || null;
             setStatus(
@@ -3722,6 +3777,7 @@ const schoolMatchClientConfig = {
           baseUniversityMatches = nextUniversityMatches;
           baseUniversityCount = nextUniversityCount;
           baseCandidateResults = nextCandidateResults;
+          applyProgramPagination(data);
           baseStatusText = nextStatus;
           lastBasePayload = {
             freeText: resolvedQuery.freeText || "",
@@ -3792,6 +3848,70 @@ const schoolMatchClientConfig = {
           hideSchoolSummary();
         } finally {
           setBusy(false);
+        }
+      };
+
+      const loadMorePrograms = async () => {
+        if (!activeResultHasMore || selectedUniversityId) {
+          return;
+        }
+
+        if (!(programsMoreButton instanceof HTMLButtonElement)) {
+          return;
+        }
+
+        const nextPage = activeResultPage + 1;
+        programsMoreButton.disabled = true;
+        programsMoreButton.textContent = "正在加载下一页...";
+
+        try {
+          const payload = {
+            ...lastBasePayload,
+            searchSessionId: activeSearchSessionId,
+            page: nextPage,
+            pageSize: activeResultPageSize,
+          };
+          const response = await fetch("/api/study-abroad/search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data?.ok) {
+            throw new Error(data?.message || "加载失败");
+          }
+
+          const incoming = Array.isArray(data.verifiedResults) ? data.verifiedResults : [];
+          const existingIds = new Set(baseVerifiedResults.map((item) => String(item?.id || "")));
+          const merged = [
+            ...baseVerifiedResults,
+            ...incoming.filter((item) => !existingIds.has(String(item?.id || ""))),
+          ];
+
+          baseVerifiedResults = merged;
+          activeVerifiedResults = merged;
+          applyProgramPagination(data);
+          renderVerifiedResults(baseVerifiedResults, lastEmptyText);
+          hydrateFitPreviews(incoming, lastBasePayload);
+          setStatus(
+            data.hasMore
+              ? `已追加第 ${data.page || nextPage} 页项目，当前展示 ${baseVerifiedResults.length} 条。`
+              : `已加载全部可展示项目，当前展示 ${baseVerifiedResults.length} 条。`
+          );
+          setStatusSummary({
+            verifiedCount: baseVerifiedResults.length,
+            universityCount: baseUniversityCount,
+            candidateCount: baseCandidateResults.length,
+            blockedCount: activeSearchStats.blockedCount,
+            expansionEnabled: activeSearchStats.expansionEnabled,
+            expansionAttempted: activeSearchStats.expansionAttempted,
+          });
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : "加载更多项目失败，请稍后再试。");
+          updateProgramPaginationControls();
         }
       };
 
@@ -4053,6 +4173,10 @@ const schoolMatchClientConfig = {
           visibleSchoolCount += initialSchoolBatchSize;
           renderUniversityMatches(baseUniversityMatches, baseUniversityCount, selectedUniversityId);
         });
+      }
+
+      if (programsMoreButton instanceof HTMLButtonElement) {
+        programsMoreButton.addEventListener("click", loadMorePrograms);
       }
 
       if (detailCloseButton instanceof HTMLButtonElement) {

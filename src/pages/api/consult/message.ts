@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { createLead } from "../../../lib/leads-store";
 import { sendBusinessMail } from "../../../lib/mail";
 
 function json(data: unknown, status = 200) {
@@ -54,6 +55,11 @@ export const POST: APIRoute = async ({ request, url }) => {
     const sessionId = normalizeString(body?.sessionId) || crypto.randomUUID();
     const currentPath = normalizeString(body?.currentPath) || "/";
     const pageHref = normalizeString(body?.pageHref) || url.origin;
+    const source =
+      normalizeString(body?.source) ||
+      (currentPath.includes("mini") || pageHref.includes("mini-program")
+        ? "mini-program"
+        : "consult-widget");
     const transcript = normalizeTranscript(body?.transcript).slice(-12);
     const emailFromMessage = firstMatched(
       /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
@@ -89,10 +95,46 @@ export const POST: APIRoute = async ({ request, url }) => {
           .join("\n")
       : "暂无上下文";
 
+    let leadId = "";
+    let leadSaved = false;
+    let leadSaveError = "";
+
+    try {
+      const contact =
+        summaryParts.join(" | ") ||
+        customerWechat ||
+        customerPhone ||
+        customerEmail ||
+        `未留联系方式 · 会话 ${sessionId}`;
+      const savedLead = await createLead({
+        name: customerWechat || customerPhone || customerEmail || "在线咨询客户",
+        contact,
+        appointmentType: "consultation",
+        examType: "留学咨询",
+        preferredTime: "尽快联系",
+        need: [
+          `客户最新消息：${message}`,
+          selectedContextLine("页面", currentPath),
+          selectedContextLine("完整地址", pageHref),
+          transcript.length ? `最近聊天记录：\n${transcriptText}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        source,
+      });
+
+      leadId = savedLead.id;
+      leadSaved = true;
+    } catch (error) {
+      leadSaveError = error instanceof Error ? error.message : "线索保存失败";
+      console.warn("[consult] Failed to save lead", error);
+    }
+
     const emailSent = await sendBusinessMail({
       subject: `【咨询浮窗】${summaryParts[0] || sessionId} - ${message.slice(0, 28)}`,
       text: [
         `会话 ID：${sessionId}`,
+        leadId ? `线索 ID：${leadId}` : "",
         `页面：${currentPath}`,
         `完整地址：${pageHref}`,
         summaryParts.join(" | ") || "未识别到联系方式",
@@ -101,10 +143,13 @@ export const POST: APIRoute = async ({ request, url }) => {
         "",
         "最近聊天记录：",
         transcriptText,
-      ].join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n"),
       html: `
         <h2>收到新的咨询浮窗消息</h2>
         <p><strong>会话 ID：</strong>${escapeHtml(sessionId)}</p>
+        ${leadId ? `<p><strong>线索 ID：</strong>${escapeHtml(leadId)}</p>` : ""}
         <p><strong>页面：</strong>${escapeHtml(currentPath)}</p>
         <p><strong>完整地址：</strong>${escapeHtml(pageHref)}</p>
         <p><strong>联系方式：</strong>${escapeHtml(summaryParts.join(" | ") || "未识别到联系方式")}</p>
@@ -118,6 +163,9 @@ export const POST: APIRoute = async ({ request, url }) => {
     return json({
       ok: true,
       emailSent,
+      leadSaved,
+      leadId,
+      leadSaveError,
       sessionId,
     });
   } catch (error) {
@@ -130,3 +178,7 @@ export const POST: APIRoute = async ({ request, url }) => {
     );
   }
 };
+
+function selectedContextLine(label: string, value: string) {
+  return value ? `${label}：${value}` : "";
+}

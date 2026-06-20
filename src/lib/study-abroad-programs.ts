@@ -1,10 +1,12 @@
+export type StudyAbroadDegree = "高中" | "本科" | "硕士" | "博士";
+
 export type StudyAbroadProgram = {
   id: string;
   country: string;
   city: string;
   schoolName: string;
   programName: string;
-  degree: "本科" | "硕士" | "博士";
+  degree: StudyAbroadDegree;
   discipline: string;
   summary: string;
   duration?: string;
@@ -392,6 +394,7 @@ export const COUNTRY_QUERY_ALIASES: Record<string, string[]> = {
 };
 
 export const DEGREE_QUERY_ALIASES: Record<string, string[]> = {
+  高中: ["高中", "中学", "high school", "secondary school", "boarding school"],
   本科: ["本科", "bachelor", "undergraduate", "ba", "bs", "bsc", "beng"],
   硕士: [
     "硕士",

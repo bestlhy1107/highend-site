@@ -9,6 +9,7 @@ import {
   deleteScore,
   renameScoreExamType,
 } from "../lib/scores-store";
+import { upsertOffer, deleteOffer } from "../lib/offers-store";
 import {
   createLead,
   updateLeadById,
@@ -373,6 +374,48 @@ contactLead: defineAction({
     },
   }),
 
+  saveOffer: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().optional(),
+      country: z.string().min(1, "请输入国家 / 地区"),
+      university: z.string().min(2, "请输入英文校名"),
+      universityZh: z.string().min(2, "请输入中文校名"),
+      program: z.string().min(2, "请输入录取项目"),
+      degree: z.string().optional(),
+      result: z.string().min(2, "请输入录取结果"),
+      date: z.string().optional(),
+      studentProfile: z.string().optional(),
+      timeline: z.string().optional(),
+      highlights: z.string().optional(),
+      tags: z.string().optional(),
+      order: z.coerce.number().min(0, "请输入正确排序"),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      await upsertOffer(input);
+      return {
+        ok: true,
+        message: "Offer 案例已保存",
+      };
+    },
+  }),
+
+  removeOffer: defineAction({
+    accept: "form",
+    input: z.object({
+      id: z.string().min(1, "缺少 Offer 案例 ID"),
+    }),
+    handler: async (input, context) => {
+      await requireAdmin(context);
+      await deleteOffer(input.id);
+      return {
+        ok: true,
+        message: "Offer 案例已删除",
+      };
+    },
+  }),
+
   updateLead: defineAction({
     accept: "form",
     input: z.object({
@@ -475,7 +518,7 @@ contactLead: defineAction({
       maxPrograms: z.coerce.number().min(1).max(40).optional(),
       mode: z.enum(["missing-first", "refresh-all"]).optional(),
       country: z.string().optional(),
-      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      degree: z.enum(["高中", "本科", "硕士", "博士"]).optional().or(z.literal("")),
       major: z.string().optional(),
       specialization: z.string().optional(),
       recordHistory: z.coerce.boolean().optional(),
@@ -552,7 +595,7 @@ contactLead: defineAction({
     accept: "form",
     input: z.object({
       country: z.string().optional(),
-      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      degree: z.enum(["高中", "本科", "硕士", "博士"]).optional().or(z.literal("")),
       major: z.string().optional(),
       specialization: z.string().optional(),
       maxCountries: z.coerce.number().min(1).max(6).optional(),
@@ -596,7 +639,7 @@ contactLead: defineAction({
   executeStudyAbroadAdmissionsCoverageSprint: defineAction({
     accept: "form",
     input: z.object({
-      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      degree: z.enum(["高中", "本科", "硕士", "博士"]).optional().or(z.literal("")),
       maxCountries: z.coerce.number().min(1).max(4).optional(),
       maxFocusPerCountry: z.coerce.number().min(1).max(3).optional(),
       maxRecommendations: z.coerce.number().min(1).max(6).optional(),
@@ -615,7 +658,7 @@ contactLead: defineAction({
   executeStudyAbroadAdmissionsCoverageRoadmap: defineAction({
     accept: "form",
     input: z.object({
-      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      degree: z.enum(["高中", "本科", "硕士", "博士"]).optional().or(z.literal("")),
       rounds: z.coerce.number().min(1).max(5).optional(),
       maxCountries: z.coerce.number().min(1).max(4).optional(),
       maxFocusPerCountry: z.coerce.number().min(1).max(3).optional(),
@@ -636,7 +679,7 @@ contactLead: defineAction({
   executeStudyAbroadAdmissionsCampaignCadence: defineAction({
     accept: "form",
     input: z.object({
-      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      degree: z.enum(["高中", "本科", "硕士", "博士"]).optional().or(z.literal("")),
     }),
     handler: async (input, context) => {
       await requireAdmin(context);
@@ -900,7 +943,7 @@ contactLead: defineAction({
       label: z.string().optional(),
       status: z.enum(["pending", "in_progress", "completed"]),
       country: z.string().optional(),
-      degree: z.enum(["本科", "硕士", "博士"]).optional().or(z.literal("")),
+      degree: z.enum(["高中", "本科", "硕士", "博士"]).optional().or(z.literal("")),
       major: z.string().optional(),
       specialization: z.string().optional(),
       actionSummary: z.string().optional(),

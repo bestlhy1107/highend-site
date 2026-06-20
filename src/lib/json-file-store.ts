@@ -4,6 +4,7 @@ import { join } from "node:path";
 const DATA_DIR = join(process.cwd(), "data");
 const CMS_DB_ARRAY_FILES = new Set([
   "exams.json",
+  "offers.json",
   "scores.json",
   "services.json",
   "teachers.json",

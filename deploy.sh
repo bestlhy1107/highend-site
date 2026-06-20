@@ -13,6 +13,7 @@ RUNTIME_STASH_NAME=""
 RUNTIME_BACKUP_CREATED=0
 RUNTIME_BACKUP_FILE=""
 HEALTH_PATHS=("/" "/admin/login" "/school-finder")
+PREWARM_PATHS=("/" "/school-finder" "/admin/login" "/api/news?tag=all&limit=6")
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -112,6 +113,10 @@ if [[ -z "${ASTRO_DB_REMOTE_URL:-}" || -z "${ASTRO_DB_APP_TOKEN:-}" ]]; then
   log "提醒：未检测到完整 Astro DB 远程配置，咨询线索等数据库功能可能不可用"
 fi
 
+UPLOAD_RUNTIME_ROOT="${UPLOAD_ROOT:-${WANHE_UPLOAD_ROOT:-${RAILWAY_VOLUME_MOUNT_PATH:-${SCRIPT_DIR}/public/uploads}}}"
+mkdir -p "$UPLOAD_RUNTIME_ROOT"
+log "上传图片目录：$UPLOAD_RUNTIME_ROOT"
+
 log "3. 部署前备份运行时数据"
 backup_paths="$(IFS=,; echo "${RUNTIME_BACKUP_PATHS[*]}")"
 backup_output="$(npm run --silent runtime:backup -- --reason=pre-deploy --paths="$backup_paths" || true)"
@@ -180,9 +185,11 @@ for path in "${HEALTH_PATHS[@]}"; do
     fail "应用本地端口健康检查失败：${path}"
 done
 
-log "13. 预热选校页面"
-curl -fsS --max-time 25 "http://${APP_HOST}:${APP_PORT}/school-finder" >/dev/null ||
-  fail "选校页面预热失败"
+log "13. 预热关键页面"
+for path in "${PREWARM_PATHS[@]}"; do
+  curl -fsS --max-time 25 "http://${APP_HOST}:${APP_PORT}${path}" >/dev/null ||
+    fail "关键页面预热失败：${path}"
+done
 
 log "14. 当前 PM2 状态"
 pm2 status

@@ -14,6 +14,7 @@ import TeacherShowcase from "../components/TeacherShowcase.astro";
 import NewsFeed from "../components/NewsFeed.astro";
 import ContactSection from "../components/ContactSection.astro";
 import { readExams } from "../lib/exams-store";
+import { PUBLIC_OFFER_CASE_COUNT, PUBLIC_SCORE_CASE_COUNT } from "../lib/public-metrics";
 import { STUDY_ABROAD_PROGRAMS } from "../lib/study-abroad-programs";
 import { getStudyAbroadUniversityNameZh } from "../lib/study-abroad-university-names";
 const site = await readSiteSettings();
@@ -48,8 +49,12 @@ const heroMetrics = [
     label: "项目底库",
   },
   {
-    value: `${teachers.length || 3}+`,
-    label: "顾问 / 老师",
+    value: `${PUBLIC_SCORE_CASE_COUNT}+`,
+    label: "出分案例",
+  },
+  {
+    value: `${PUBLIC_OFFER_CASE_COUNT}+`,
+    label: "Offer 案例",
   },
 ];
 const heroDeliverables = [
@@ -83,14 +88,14 @@ const heroContactItems = [
 ---
 
 <BaseLayout
-  title={site.companyName ?? "Wanhe Education"}
+  title={site.companyName ?? "万禾留学"}
   description={site.slogan ?? ""}
 >
   <main>
     <section class="hero-section hero-section--immersive">
       <div class="container hero-stack">
         <div class="hero-copy hero-copy--centered">
-          <div class="hero-kicker hero-kicker--soft">2026 Intake · Wanhe Education</div>
+          <div class="hero-kicker hero-kicker--soft">2026 Intake · 万禾留学</div>
           <h1 class="hero-title">让留学<br>更加简单<br>让语言<br>没有阻碍</h1>
           <p class="hero-subtitle">
             {site.slogan ??
@@ -220,7 +225,7 @@ const heroContactItems = [
     ) : null}
 
     <section class="section-block compact-top">
-      <ScoreCarousel scores={scores} />
+      <ScoreCarousel scores={scores} totalCount={PUBLIC_SCORE_CASE_COUNT} />
     </section>
 
     <section class="section-block compact-top">
