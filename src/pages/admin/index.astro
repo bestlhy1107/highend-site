@@ -12,19 +12,8 @@ import { readScores } from "../../lib/scores-store";
 import { readOffers } from "../../lib/offers-store";
 import { readLeads, type LeadRecord } from "../../lib/leads-store";
 import { readStudyAbroadReviewQueue } from "../../lib/study-abroad-review-queue";
-import { readStudyAbroadCatalogStats } from "../../lib/study-abroad-catalog-store";
 import { readStudyAbroadCatalogSyncState } from "../../lib/study-abroad-catalog-sync";
 import { getStudyAbroadSearchRuntimeStatus } from "../../lib/study-abroad-search";
-import {
-  readStudyAbroadAdmissionsCampaignCadence,
-  readStudyAbroadAdmissionsCampaignCountryFocusTrend,
-  readStudyAbroadAdmissionsCountryTargetPlans,
-  readStudyAbroadAdmissionsCountryRecentActivity,
-  readStudyAbroadAdmissionsCampaignCountryTrend,
-  readStudyAbroadAdmissionsCampaignOutlook,
-  readStudyAbroadAdmissionsCampaignSchedule,
-  readStudyAbroadAdmissionsCampaignTrend,
-} from "../../lib/study-abroad-admissions-sync";
 
 const adminUser = await Astro.session?.get("adminUser");
 
@@ -51,49 +40,79 @@ try {
 }
 
 const schoolSearchQueue = await readStudyAbroadReviewQueue();
-const studyAbroadCatalogStats = await readStudyAbroadCatalogStats();
 const studyAbroadCatalogSyncState = await readStudyAbroadCatalogSyncState();
 const studyAbroadSearchRuntime = getStudyAbroadSearchRuntimeStatus();
-const studyAbroadCampaignOutlook = await readStudyAbroadAdmissionsCampaignOutlook({
-  degree: "硕士",
-});
-const studyAbroadCampaignCadence = await readStudyAbroadAdmissionsCampaignCadence({
-  degree: "硕士",
-});
-const studyAbroadCampaignSchedule = await readStudyAbroadAdmissionsCampaignSchedule({
-  degree: "硕士",
-});
-const studyAbroadCampaignTrend = await readStudyAbroadAdmissionsCampaignTrend({
-  degree: "硕士",
-  days: 7,
-});
-const studyAbroadCampaignCountryTrend = await readStudyAbroadAdmissionsCampaignCountryTrend({
-  degree: "硕士",
-  days: 7,
-});
-const studyAbroadCampaignCountryFocusTrend =
-  await readStudyAbroadAdmissionsCampaignCountryFocusTrend({
-    degree: "硕士",
-    days: 7,
-    countryLimit: 3,
-    focusLimit: 3,
-  });
-const studyAbroadCampaignCountryNames = Array.from(
-  new Set([
-    ...studyAbroadCampaignCountryTrend.countries.map((item) => item.country),
-    ...studyAbroadCampaignCountryFocusTrend.countries.map((item) => item.country),
-  ])
-).filter(Boolean);
-const studyAbroadCountryTargetPlans = await readStudyAbroadAdmissionsCountryTargetPlans({
-  degree: "硕士",
-  countries: studyAbroadCampaignCountryNames,
-  limit: Math.max(studyAbroadCampaignCountryNames.length, 1),
-  focusLimit: 6,
-});
-const studyAbroadCountryRecentActivity = await readStudyAbroadAdmissionsCountryRecentActivity({
-  countries: studyAbroadCampaignCountryNames,
-  limit: Math.max(studyAbroadCampaignCountryNames.length, 1),
-});
+
+const latestCatalogSyncRun = studyAbroadCatalogSyncState.runs[0] ?? null;
+const lightweightCatalogSnapshot = latestCatalogSyncRun?.after ?? {
+  universityCount: 0,
+  programCount: 0,
+  countryCount: 0,
+  tuitionCoverage: 0,
+  admissionsCoverage: 0,
+  structuredAdmissionsCoverage: 0,
+};
+const studyAbroadCatalogStats = {
+  ...lightweightCatalogSnapshot,
+  sourceCount: 0,
+  qsCoverage: 0,
+  completeAdmissionsCoverage: 0,
+  sourceStatusCounts: {} as Record<string, number>,
+  countryAdmissionsCoverage: [] as Array<unknown>,
+  disciplineAdmissionsCoverage: [] as Array<unknown>,
+};
+const studyAbroadCampaignOutlook = {
+  goal: {
+    targetCoveragePercent: 70,
+    remainingStructuredPrograms: 0,
+  },
+  estimatedRunsToTarget: null as number | null,
+  summary: "为保证后台首页稳定，留学大底库和补齐趋势已移到留学底库页按需加载。",
+  recentRuns: [] as Array<{
+    mode: string;
+    runAt: string;
+    rounds: number;
+    syncedCount: number;
+    structuredDelta: number;
+    completeDelta: number;
+    countries: string[];
+  }>,
+};
+const studyAbroadCampaignCadence = {
+  rhythm: "steady",
+  suggestedRunsPerWeek: 0,
+  rounds: 0,
+};
+const studyAbroadCampaignSchedule = {
+  nextRunLabel: "进入底库页查看",
+  frequencyLabel: "后台首页不再实时计算重型任务",
+  command: "npm run study-abroad:campaign -- --mode=cadence",
+};
+const studyAbroadCampaignTrend = {
+  hasActivity: false,
+  totals: {
+    structuredDelta: 0,
+    runCount: 0,
+    syncedCount: 0,
+    completeDelta: 0,
+  },
+  days: [] as Array<{
+    label: string;
+    runCount: number;
+    structuredDelta: number;
+    completeDelta: number;
+    syncedCount: number;
+  }>,
+};
+const studyAbroadCampaignCountryTrend = {
+  hasActivity: false,
+  countries: [] as Array<any>,
+};
+const studyAbroadCampaignCountryFocusTrend = {
+  countries: [] as Array<any>,
+};
+const studyAbroadCountryTargetPlans = [] as Array<any>;
+const studyAbroadCountryRecentActivity = [] as Array<any>;
 
 const updateLeadResult = Astro.getActionResult(actions.updateLead);
 const deleteLeadResult = Astro.getActionResult(actions.deleteLead);
@@ -237,7 +256,6 @@ const examStats = Object.entries(examStatsMap)
 const latestLeads = leads.slice(0, 10);
 const schoolFinderLeadCount = leads.filter((lead) => normalizeLeadSource(lead.source) === "school-finder").length;
 const summaryLeadCount = leads.filter((lead) => isSchoolFinderSummaryLead(lead)).length;
-const latestCatalogSyncRun = studyAbroadCatalogSyncState.runs[0] ?? null;
 const latestCampaignRun = studyAbroadCampaignOutlook.recentRuns[0] ?? null;
 const structuredCoveragePercent = studyAbroadCatalogStats.programCount
   ? Math.round(
@@ -319,7 +337,7 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
   const displayFocusRecommendations = targetPlan?.focusRecommendations?.length
     ? (() => {
         const freshDeferrals = targetPlan.focusRecommendations.filter(
-          (focus) => focus.coolingDown
+          (focus: any) => focus.coolingDown
         );
         return {
           items: targetPlan.focusRecommendations.slice(0, 6),
@@ -806,7 +824,7 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
                     </div>
                     {country.focusTrend?.focuses.length ? (
                       <div class="campaign-focus-list">
-                        {country.focusTrend.focuses.map((focus) => (
+                        {country.focusTrend.focuses.map((focus: any) => (
                           <div class="campaign-focus-item">
                             <div class="campaign-focus-label">
                               <strong>{focus.specialization || focus.major}</strong>
@@ -878,7 +896,7 @@ const campaignCountryDrilldowns = studyAbroadCampaignCountryTrend.countries.map(
                             综合推荐会把缺口、优先级和冷却一起算进去，适合日常默认判断。
                           </div>
                         </div>
-                        {country.displayFocusRecommendations.items.map((focus) => (
+                        {country.displayFocusRecommendations.items.map((focus: any) => (
                           <div
                             class="campaign-recommendation-item"
                             data-sort-item
