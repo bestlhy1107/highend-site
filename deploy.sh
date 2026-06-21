@@ -7,9 +7,10 @@ REMOTE="origin"
 APP_PORT="4321"
 APP_HOST="127.0.0.1"
 RUNTIME_BACKUP_PATHS=(data public/uploads)
-RUNTIME_STASH_PATHS=(data)
-RUNTIME_STASH_CREATED=0
-RUNTIME_STASH_NAME=""
+RUNTIME_PRESERVE_PATHS=(data)
+RUNTIME_PRESERVE_CREATED=0
+RUNTIME_PRESERVE_DIR=""
+RUNTIME_PRESERVE_TAR=""
 RUNTIME_BACKUP_CREATED=0
 RUNTIME_BACKUP_FILE=""
 HEALTH_PATHS=("/" "/admin/login" "/school-finder")
@@ -29,49 +30,28 @@ fail() {
   exit 1
 }
 
-find_runtime_stash_ref() {
-  if [[ -z "$RUNTIME_STASH_NAME" ]]; then
+restore_runtime_preserve_if_needed() {
+  if [[ "${RUNTIME_PRESERVE_CREATED}" != "1" || -z "${RUNTIME_PRESERVE_TAR}" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "${RUNTIME_PRESERVE_TAR}" ]]; then
+    echo "[WARN] 未找到运行时数据保护包：${RUNTIME_PRESERVE_TAR}" >&2
     return 1
   fi
 
-  git stash list --format='%gd %s' | awk -v name="$RUNTIME_STASH_NAME" 'index($0, name) { print $1; exit }'
-}
-
-restore_runtime_stash_if_needed() {
-  if [[ "${RUNTIME_STASH_CREATED}" != "1" ]]; then
-    return 0
-  fi
-
-  local stash_ref
-  stash_ref="$(find_runtime_stash_ref || true)"
-
-  if [[ -z "$stash_ref" ]]; then
-    echo "[WARN] 未找到运行时数据 stash：${RUNTIME_STASH_NAME}" >&2
-    return 1
-  fi
-
-  echo "[INFO] 正在恢复运行时数据 stash：${stash_ref}" >&2
-  if git stash pop --index "$stash_ref"; then
-    RUNTIME_STASH_CREATED=0
-    return 0
-  fi
-
-  echo "[WARN] 带索引恢复失败，尝试普通恢复：${stash_ref}" >&2
-  if git stash pop "$stash_ref"; then
-    RUNTIME_STASH_CREATED=0
-    return 0
-  fi
-
-  echo "[ERROR] 自动恢复运行时数据失败，请手动执行 git stash list 并恢复：${RUNTIME_STASH_NAME}" >&2
-  return 1
+  echo "[INFO] 正在恢复运行时数据保护包：${RUNTIME_PRESERVE_TAR}" >&2
+  tar -xf "${RUNTIME_PRESERVE_TAR}" -C "$SCRIPT_DIR"
+  RUNTIME_PRESERVE_CREATED=0
+  return 0
 }
 
 on_error() {
   local exit_code=$?
   echo
   echo "[ERROR] 命令执行失败，行号: $1，退出码: ${exit_code}" >&2
-  if [[ "${RUNTIME_STASH_CREATED}" == "1" ]]; then
-    restore_runtime_stash_if_needed || true
+  if [[ "${RUNTIME_PRESERVE_CREATED}" == "1" ]]; then
+    restore_runtime_preserve_if_needed || true
   fi
   if [[ "${RUNTIME_BACKUP_CREATED}" == "1" && -n "${RUNTIME_BACKUP_FILE}" ]]; then
     echo "[INFO] 本次部署前备份文件：${RUNTIME_BACKUP_FILE}" >&2
@@ -126,30 +106,44 @@ if [[ -n "$RUNTIME_BACKUP_FILE" ]]; then
   RUNTIME_BACKUP_CREATED=1
 fi
 
-log "4. 自动暂存会影响拉代码的运行时数据改动"
-if [[ -n "$(git status --porcelain -- "${RUNTIME_STASH_PATHS[@]}")" ]]; then
-  RUNTIME_STASH_NAME="deploy-runtime-data-$(date '+%Y%m%d-%H%M%S')"
-  git stash push --include-untracked -m "$RUNTIME_STASH_NAME" -- "${RUNTIME_STASH_PATHS[@]}"
-  RUNTIME_STASH_CREATED=1
-  log "已临时保存运行时数据改动：$RUNTIME_STASH_NAME"
+log "4. 文件系统级保护会影响拉代码的运行时数据"
+if [[ -n "$(git status --porcelain -- "${RUNTIME_PRESERVE_PATHS[@]}")" ]]; then
+  RUNTIME_PRESERVE_DIR="${SCRIPT_DIR}/.runtime-backups/deploy-preserve-$(date '+%Y%m%d-%H%M%S')"
+  RUNTIME_PRESERVE_TAR="${RUNTIME_PRESERVE_DIR}/runtime-data.tar"
+  mkdir -p "$RUNTIME_PRESERVE_DIR"
+  tar -cf "$RUNTIME_PRESERVE_TAR" "${RUNTIME_PRESERVE_PATHS[@]}"
+  RUNTIME_PRESERVE_CREATED=1
+
+  untracked_runtime_file="${RUNTIME_PRESERVE_DIR}/untracked-runtime-files.txt"
+  git ls-files --others --exclude-standard -- "${RUNTIME_PRESERVE_PATHS[@]}" > "$untracked_runtime_file"
+
+  git restore --staged --worktree -- "${RUNTIME_PRESERVE_PATHS[@]}"
+
+  if [[ -s "$untracked_runtime_file" ]]; then
+    while IFS= read -r path; do
+      [[ -n "$path" ]] && rm -f -- "$path"
+    done < "$untracked_runtime_file"
+  fi
+
+  log "已用文件系统保护运行时数据：$RUNTIME_PRESERVE_TAR"
 else
-  log "没有检测到需要 git stash 的运行时数据改动"
+  log "没有检测到需要保护的运行时数据改动"
 fi
 
 log "5. 检查代码工作区是否干净"
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "检测到未提交或未跟踪文件："
   git status --short
-  fail "请先处理服务器上的代码改动，再部署。运行时 data/ 会由 git stash 保护，public/uploads/ 会由部署前备份保护。"
+  fail "请先处理服务器上的代码改动，再部署。运行时 data/ 会由文件系统保护包恢复，public/uploads/ 会由部署前备份保护。"
 fi
 
 log "6. 获取最新代码"
 git fetch "$REMOTE" "$BRANCH"
 git pull --ff-only "$REMOTE" "$BRANCH"
 
-if [[ "$RUNTIME_STASH_CREATED" == "1" ]]; then
+if [[ "$RUNTIME_PRESERVE_CREATED" == "1" ]]; then
   log "7. 恢复运行时数据改动"
-  restore_runtime_stash_if_needed
+  restore_runtime_preserve_if_needed
 else
   log "7. 无需恢复运行时数据"
 fi
