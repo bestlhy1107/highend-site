@@ -4,6 +4,7 @@ import {
   DEGREE_QUERY_ALIASES,
   MAJOR_QUERY_ALIASES,
   MAJOR_FAMILIES,
+  normalizeStudyAbroadMajor,
   SPECIALIZATION_QUERY_ALIASES,
   SPECIALIZATION_TO_MAJOR,
 } from "./study-abroad-programs";
@@ -586,12 +587,13 @@ export function normalizeStudyAbroadQuery(input: StudyAbroadSearchInput): StudyA
   const specialization = specializationOverride.suppressed
     ? ""
     : specializationOverride.value || inferred.specialization || "";
-  const major = majorOverride.suppressed
+  const rawMajor = majorOverride.suppressed
     ? ""
     : majorOverride.value ||
       (specialization ? SPECIALIZATION_TO_MAJOR[specialization] || "" : "") ||
       inferred.major ||
       "";
+  const major = normalizeStudyAbroadMajor(rawMajor);
 
   return {
     freeText,

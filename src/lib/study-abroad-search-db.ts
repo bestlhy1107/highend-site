@@ -4,6 +4,7 @@ import { dataFilePath, getJsonArrayFileVersion } from "./json-file-store";
 import {
   MAJOR_FAMILIES,
   MAJOR_QUERY_ALIASES,
+  normalizeStudyAbroadMajor,
   SPECIALIZATION_QUERY_ALIASES,
   SPECIALIZATION_TO_MAJOR,
 } from "./study-abroad-programs";
@@ -600,7 +601,9 @@ function majorTerms(query: StudyAbroadResolvedQuery) {
 }
 
 function expectedDisciplineForQuery(query: StudyAbroadResolvedQuery) {
-  return query.major || (query.specialization ? SPECIALIZATION_TO_MAJOR[query.specialization] || "" : "");
+  return normalizeStudyAbroadMajor(
+    query.major || (query.specialization ? SPECIALIZATION_TO_MAJOR[query.specialization] || "" : "")
+  );
 }
 
 function addLikeAnyFilter(where: string[], params: unknown[], column: string, terms: string[]) {

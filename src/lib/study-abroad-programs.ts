@@ -164,6 +164,8 @@ export const SPECIALIZATION_TO_MAJOR = Object.fromEntries(
 export const CANONICAL_DISCIPLINE_OVERRIDES: Record<string, string> = {
   "计算机科学": "计算机 / AI",
   "人工智能": "计算机 / AI",
+  "软件工程": "计算机 / AI",
+  "网络安全": "计算机 / AI",
   "信息技术": "计算机 / AI",
   "信息技术 / AI": "计算机 / AI",
   "金融 / 金融工程": "金融",
@@ -174,10 +176,41 @@ export const CANONICAL_DISCIPLINE_OVERRIDES: Record<string, string> = {
   "数据科学": "商业分析 / 数据",
   "数据分析": "商业分析 / 数据",
   "信息系统": "商业分析 / 数据",
+  "供应链": "商科 / 管理",
+  "供应链管理": "商科 / 管理",
   "信息 / UX / 数据": "商业分析 / 数据",
   "市场营销": "市场营销 / 传媒",
+  "传媒": "市场营销 / 传媒",
+  "数字媒体": "市场营销 / 传媒",
   "商科 / 金融 / 管理": "商科 / 管理",
+  "管理学": "商科 / 管理",
+  "国际商务": "商科 / 管理",
+  "公共政策": "公共政策 / 国际关系",
+  "国际关系": "公共政策 / 国际关系",
+  "社会学": "社会学 / 社工",
+  "社会工作": "社会学 / 社工",
+  "交互设计": "设计 / 艺术",
+  "视觉传达": "设计 / 艺术",
+  "时尚管理": "设计 / 艺术",
+  "建筑": "建筑 / 城市规划",
+  "建筑学": "建筑 / 城市规划",
+  "城市规划": "建筑 / 城市规划",
+  "电子工程": "机械 / 电子 / 工程",
+  "电子电气工程": "机械 / 电子 / 工程",
+  "机械工程": "机械 / 电子 / 工程",
+  "土木工程": "机械 / 电子 / 工程",
+  "生物医学": "生物 / 生物医学",
+  "生物学": "生物 / 生物医学",
 };
+
+export function normalizeStudyAbroadMajor(value: string) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return "";
+  if (STUDY_ABROAD_MAJOR_OPTIONS.includes(normalized as (typeof STUDY_ABROAD_MAJOR_OPTIONS)[number])) {
+    return normalized;
+  }
+  return CANONICAL_DISCIPLINE_OVERRIDES[normalized] || SPECIALIZATION_TO_MAJOR[normalized] || normalized;
+}
 
 export const POPULAR_MAJOR_HINTS = STUDY_ABROAD_MAJOR_OPTIONS;
 
