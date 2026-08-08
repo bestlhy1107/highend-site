@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dedupeStudyAbroadPrograms } from "./study-abroad-dedupe";
 import {
   COUNTRY_QUERY_ALIASES,
   DEGREE_QUERY_ALIASES,
@@ -60,6 +61,7 @@ export type StudyAbroadResolvedQuery = {
   country: string;
   major: string;
   specialization: string;
+  specializationInferredFromFreeText?: boolean;
   degree: string;
   budgetTier: string;
   intake: string;
@@ -587,6 +589,9 @@ export function normalizeStudyAbroadQuery(input: StudyAbroadSearchInput): StudyA
   const specialization = specializationOverride.suppressed
     ? ""
     : specializationOverride.value || inferred.specialization || "";
+  const specializationInferredFromFreeText = Boolean(
+    specialization && !specializationOverride.value && inferred.specialization === specialization
+  );
   const rawMajor = majorOverride.suppressed
     ? ""
     : majorOverride.value ||
@@ -602,6 +607,7 @@ export function normalizeStudyAbroadQuery(input: StudyAbroadSearchInput): StudyA
       : countryOverride.value || inferred.country || "",
     major,
     specialization,
+    specializationInferredFromFreeText,
     degree: degreeOverride.suppressed ? "" : degreeOverride.value || inferred.degree || "",
     budgetTier: String(input.budgetTier ?? "").trim() || inferred.budgetTier || "",
     intake: String(input.intake ?? "").trim() || inferred.intake || "",
@@ -818,10 +824,10 @@ function matchesIntake(intakeText?: string, intakeFilter?: string) {
   if (!normalized) return false;
 
   const intakeHints: Record<string, string[]> = {
-    spring: ["春", "spring", "january", "jan", "february", "feb"],
-    summer: ["夏", "summer", "may", "june", "jun", "july", "jul"],
-    fall: ["秋", "fall", "autumn", "september", "sep", "august", "aug"],
-    winter: ["冬", "winter", "december", "dec", "november", "nov"],
+    spring: ["春", "春季", "spring", "january", "jan", "february", "feb", "march", "mar", "1 月", "1月", "2 月", "2月", "3 月", "3月"],
+    summer: ["夏", "夏季", "summer", "may", "june", "jun", "july", "jul", "5 月", "5月", "6 月", "6月", "7 月", "7月"],
+    fall: ["秋", "秋季", "fall", "autumn", "august", "aug", "september", "sep", "october", "oct", "8 月", "8月", "9 月", "9月", "10 月", "10月"],
+    winter: ["冬", "冬季", "winter", "november", "nov", "december", "dec", "11 月", "11月", "12 月", "12月"],
     rolling: ["滚动", "rolling"],
   };
 
@@ -1509,13 +1515,14 @@ export async function searchStudyAbroadPrograms(
     query,
     filteredSourcePrograms
   );
+  const dedupedVerifiedResults = dedupeStudyAbroadPrograms(searchedVerifiedResults);
   const {
     results: allVerifiedResults,
     cachedFitCount,
     fitMode,
     filteredByFitModeCount,
     fitSummary,
-  } = await prioritizeVerifiedResultsByCachedFit(searchedVerifiedResults, query);
+  } = await prioritizeVerifiedResultsByCachedFit(dedupedVerifiedResults, query);
   const totalPages = totalPagesFor(allVerifiedResults.length, pagination.pageSize);
   const verifiedResults = allVerifiedResults.slice(
     pagination.offset,

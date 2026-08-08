@@ -284,6 +284,302 @@ const UK_SEED_PROGRAMS: UkSeedProgram[] = [
     admissionsUrl: "https://www.bristol.ac.uk/study/postgraduate/taught/msc-data-science-for-business/",
     priority: 87,
   },
+  {
+    id: "ucl-business-analytics-msc",
+    schoolName: "University College London",
+    city: "London",
+    programName: "Business Analytics MSc",
+    discipline: "商业分析 / 数据",
+    summary:
+      "UCL 官网显示，该项目关注 data and analytics 在 strategy、marketing 与 operations 中的应用，训练学生处理数据、提取价值、可视化并清晰沟通商业问题解决方案。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "商业分析",
+      "business analytics",
+      "data analytics",
+      "strategy",
+      "marketing analytics",
+      "operations analytics",
+    ],
+    tags: ["英国", "商业分析", "数据", "官方课程页"],
+    overviewUrl:
+      "https://www.ucl.ac.uk/prospective-students/graduate/taught-degrees/business-analytics-msc",
+    admissionsUrl:
+      "https://www.ucl.ac.uk/prospective-students/graduate/taught-degrees/business-analytics-msc",
+    priority: 91,
+  },
+  {
+    id: "leeds-business-analytics-decision-sciences-msc",
+    schoolName: "University of Leeds",
+    city: "Leeds",
+    programName: "Business Analytics and Decision Sciences MSc",
+    discipline: "商业分析 / 数据",
+    summary:
+      "利兹大学官网显示，该项目强调 business analytics、decision sciences、数据建模与决策优化，适合希望在商业数据、运营分析与咨询方向发展的申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "商业分析",
+      "business analytics",
+      "decision sciences",
+      "data modelling",
+      "optimization",
+      "operations analytics",
+    ],
+    tags: ["英国", "商业分析", "决策科学", "官方课程页"],
+    overviewUrl:
+      "https://courses.leeds.ac.uk/i954/business-analytics-and-decision-sciences-msc",
+    admissionsUrl:
+      "https://courses.leeds.ac.uk/i954/business-analytics-and-decision-sciences-msc",
+    priority: 86,
+  },
+  {
+    id: "lse-media-communications-msc",
+    schoolName: "London School of Economics and Political Science",
+    city: "London",
+    programName: "MSc Media and Communications",
+    discipline: "市场营销 / 传媒",
+    summary:
+      "LSE 官网显示，该项目提供对 technology、media、representation 与社会权力分配的批判性理解，适合希望进入媒体、传播、公共事务或数字平台研究方向的申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "传媒",
+      "media",
+      "communications",
+      "digital media",
+      "technology",
+      "representation",
+    ],
+    tags: ["英国", "传媒", "传播", "官方课程页"],
+    overviewUrl: "https://www.lse.ac.uk/study-at-lse/graduate/msc-media-and-communications",
+    admissionsUrl: "https://www.lse.ac.uk/study-at-lse/graduate/msc-media-and-communications",
+    priority: 89,
+  },
+  {
+    id: "ucl-human-computer-interaction-msc",
+    schoolName: "University College London",
+    city: "London",
+    programName: "Human-Computer Interaction MSc",
+    discipline: "设计 / 艺术",
+    summary:
+      "UCL 官网显示，HCI 项目位于 engineering、behavioural sciences 与 design 交叉点，聚焦人与系统之间的界面设计与技术使用体验，兼具学术严谨性和实践技能训练。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "交互设计",
+      "human-computer interaction",
+      "hci",
+      "ux",
+      "user experience",
+      "interface design",
+    ],
+    tags: ["英国", "交互设计", "UX", "官方课程页"],
+    overviewUrl:
+      "https://www.ucl.ac.uk/prospective-students/graduate/taught-degrees/human-computer-interaction-msc",
+    admissionsUrl:
+      "https://www.ucl.ac.uk/prospective-students/graduate/taught-degrees/human-computer-interaction-msc",
+    priority: 90,
+  },
+  {
+    id: "ucl-disability-design-innovation-msc",
+    schoolName: "University College London",
+    city: "London",
+    programName: "Disability, Design and Innovation MSc",
+    discipline: "设计 / 艺术",
+    summary:
+      "UCL 官网显示，该项目融合 research、engineering、design skills 与 disability inclusion 语境，适合关注包容性设计、服务创新与社会影响力方向的申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "包容性设计",
+      "inclusive design",
+      "disability innovation",
+      "design innovation",
+      "service design",
+      "social impact",
+    ],
+    tags: ["英国", "设计", "创新", "官方课程页"],
+    overviewUrl:
+      "https://www.ucl.ac.uk/prospective-students/graduate/taught-degrees/disability-design-and-innovation-msc",
+    admissionsUrl:
+      "https://www.ucl.ac.uk/prospective-students/graduate/taught-degrees/disability-design-and-innovation-msc",
+    priority: 86,
+  },
+  {
+    id: "edinburgh-design-informatics-msc",
+    schoolName: "University of Edinburgh",
+    city: "Edinburgh",
+    programName: "Design Informatics MSc",
+    discipline: "设计 / 艺术",
+    summary:
+      "爱丁堡大学官网显示，Design Informatics 结合 design、data、AI 与 interaction，关注数字技术如何塑造产品、服务和社会体验，适合交互、服务与数字产品设计方向申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "design informatics",
+      "设计信息学",
+      "interaction design",
+      "service design",
+      "data",
+      "digital product",
+    ],
+    tags: ["英国", "设计", "交互", "官方课程页"],
+    overviewUrl:
+      "https://www.ed.ac.uk/studying/postgraduate/degrees/index.php?r=site/view&id=845",
+    admissionsUrl:
+      "https://www.ed.ac.uk/studying/postgraduate/degrees/index.php?r=site/view&id=845",
+    priority: 88,
+  },
+  {
+    id: "loughborough-user-experience-design-msc",
+    schoolName: "Loughborough University",
+    city: "Loughborough",
+    programName: "User Experience and Service Design MA",
+    discipline: "设计 / 艺术",
+    summary:
+      "拉夫堡大学官网显示，该项目聚焦 user experience、service design 与设计研究方法，适合希望进入 UX、服务创新、用户研究与数字产品设计方向的申请者。",
+    duration: "1 年",
+    intake: "10 月",
+    keywords: [
+      "user experience",
+      "ux",
+      "service design",
+      "用户体验",
+      "user research",
+      "digital product",
+    ],
+    tags: ["英国", "UX", "服务设计", "官方课程页"],
+    overviewUrl:
+      "https://www.lboro.ac.uk/study/postgraduate/masters-degrees/a-z/user-experience-service-design/",
+    admissionsUrl:
+      "https://www.lboro.ac.uk/study/postgraduate/masters-degrees/a-z/user-experience-service-design/",
+    priority: 87,
+  },
+  {
+    id: "glasgow-design-innovation-service-design-msc",
+    schoolName: "University of Glasgow",
+    city: "Glasgow",
+    programName: "Design Innovation and Service Design MSc",
+    discipline: "设计 / 艺术",
+    summary:
+      "格拉斯哥大学官网显示，该项目聚焦 service design、innovation methods 与跨学科协作，适合希望将设计用于公共服务、商业服务与体验创新方向的申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "service design",
+      "服务设计",
+      "design innovation",
+      "experience design",
+      "design strategy",
+      "innovation",
+    ],
+    tags: ["英国", "服务设计", "创新", "官方课程页"],
+    overviewUrl:
+      "https://www.gla.ac.uk/postgraduate/taught/designinnovationandservicedesign/",
+    admissionsUrl:
+      "https://www.gla.ac.uk/postgraduate/taught/designinnovationandservicedesign/",
+    priority: 86,
+  },
+  {
+    id: "oxford-advanced-computer-science-msc",
+    schoolName: "University of Oxford",
+    city: "Oxford",
+    programName: "MSc in Advanced Computer Science",
+    discipline: "计算机 / AI",
+    summary:
+      "牛津大学官网显示，该项目覆盖 machine learning、computer security、quantum information 与 formal verification 等高级主题，强调理论与实践结合以及坚实的数学基础。",
+    duration: "12 个月",
+    intake: "10 月",
+    keywords: [
+      "计算机",
+      "advanced computer science",
+      "machine learning",
+      "computer security",
+      "formal verification",
+      "quantum information",
+    ],
+    tags: ["英国", "计算机", "牛津", "官方课程页"],
+    overviewUrl: "https://www.ox.ac.uk/admissions/graduate/courses/msc-advanced-computer-science",
+    admissionsUrl: "https://www.ox.ac.uk/admissions/graduate/courses/msc-advanced-computer-science",
+    priority: 94,
+  },
+  {
+    id: "edinburgh-artificial-intelligence-msc",
+    schoolName: "University of Edinburgh",
+    city: "Edinburgh",
+    programName: "MSc Artificial Intelligence",
+    discipline: "计算机 / AI",
+    summary:
+      "爱丁堡大学信息学院页面显示，MSc Artificial Intelligence 属于 Informatics 授课型研究生项目，面向希望系统训练 AI、机器学习与智能系统能力的申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "人工智能",
+      "artificial intelligence",
+      "machine learning",
+      "informatics",
+      "intelligent systems",
+      "ai",
+    ],
+    tags: ["英国", "人工智能", "机器学习", "官方课程页"],
+    overviewUrl:
+      "https://www.ed.ac.uk/studying/postgraduate/degrees/index.php?r=site/view&id=107",
+    admissionsUrl:
+      "https://science-engineering.ed.ac.uk/studying/postgraduate/taught-postgraduate/application-and-selection-deadlines/informatics",
+    priority: 92,
+  },
+  {
+    id: "manchester-advanced-computer-science-msc",
+    schoolName: "University of Manchester",
+    city: "Manchester",
+    programName: "MSc Advanced Computer Science",
+    discipline: "计算机 / AI",
+    summary:
+      "曼彻斯特大学官网显示，该项目可衔接 research level 学习，也面向工业与学术研究职业路径，适合希望在 AI、软件、数据科学等方向进阶的申请者。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "计算机",
+      "advanced computer science",
+      "artificial intelligence",
+      "software",
+      "data science",
+      "research",
+    ],
+    tags: ["英国", "计算机", "AI", "官方课程页"],
+    overviewUrl:
+      "https://www.manchester.ac.uk/study/masters/courses/list/21573/msc-advanced-computer-science/",
+    admissionsUrl:
+      "https://www.manchester.ac.uk/study/masters/courses/list/21573/msc-advanced-computer-science/",
+    priority: 90,
+  },
+  {
+    id: "bristol-computer-science-conversion-msc",
+    schoolName: "University of Bristol",
+    city: "Bristol",
+    programName: "MSc Computer Science (Conversion)",
+    discipline: "计算机 / AI",
+    summary:
+      "布里斯托大学官网显示，该 conversion 项目面向非计算机本科背景申请者，帮助学生系统建立计算机科学基础并转向软件、技术与计算相关职业。",
+    duration: "1 年",
+    intake: "9 月",
+    keywords: [
+      "计算机转专业",
+      "computer science conversion",
+      "software",
+      "programming",
+      "computer science",
+      "technology",
+    ],
+    tags: ["英国", "计算机", "转专业", "官方课程页"],
+    overviewUrl:
+      "https://www.bristol.ac.uk/study/postgraduate/taught/msc-computer-science-conversion/",
+    admissionsUrl:
+      "https://www.bristol.ac.uk/study/postgraduate/taught/msc-computer-science-conversion/",
+    priority: 86,
+  },
 ];
 
 function websiteHost(url: string) {
@@ -387,6 +683,7 @@ function mergeUkPrograms(
   const universityByName = new Map(
     universities.map((item) => [normalizeText(item.name), item])
   );
+  const existingProgramById = new Map(existingPrograms.map((item) => [item.id, item]));
 
   const preservedPrograms = existingPrograms.filter(
     (item) => !item.sourceIds.includes(UK_SOURCE_ID)
@@ -402,7 +699,7 @@ function mergeUkPrograms(
     if (!university) {
       return;
     }
-    const current = nextPrograms.get(program.id);
+    const current = existingProgramById.get(program.id) || nextPrograms.get(program.id);
 
     nextPrograms.set(program.id, {
       ...current,
@@ -419,17 +716,18 @@ function mergeUkPrograms(
       summary: program.summary,
       duration: program.duration,
       intake: program.intake,
-      tuitionAmount: "",
-      tuitionCurrency: "",
-      tuitionNotes: "",
+      tuitionAmount: current?.tuitionAmount ?? "",
+      tuitionCurrency: current?.tuitionCurrency ?? "",
+      tuitionNotes: current?.tuitionNotes ?? "",
       overviewUrl: program.overviewUrl,
       admissionsUrl: program.admissionsUrl || program.overviewUrl,
-      tuitionUrl: program.overviewUrl,
+      tuitionUrl: current?.tuitionUrl ?? program.overviewUrl,
       keywords: program.keywords,
       tags: program.tags,
       sourceIds: mergeSourceIds(current?.sourceIds ?? [], [UK_SOURCE_ID]),
       checkedAt: UK_SEED_CHECKED_AT,
       priority: program.priority,
+      admissionsSnapshot: current?.admissionsSnapshot ?? null,
     });
   });
 

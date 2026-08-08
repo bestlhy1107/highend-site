@@ -32,6 +32,14 @@ const DEFAULT_QS_SOURCE = "QS World University Rankings 2027";
 const DEFAULT_QS_SOURCE_URL = "https://www.topuniversities.com/world-university-rankings";
 
 const MANUAL_NAME_ALIASES: Record<string, string[]> = {
+  "nanyang technological university": [
+    "nanyang technological university singapore",
+    "ntu singapore",
+  ],
+  "nanyang technological university singapore": [
+    "nanyang technological university",
+    "ntu singapore",
+  ],
   "university college london": ["ucl"],
   "university college london university of london": ["ucl"],
   "london school of economics and political science university of london": [
@@ -65,6 +73,12 @@ const MANUAL_NAME_ALIASES: Record<string, string[]> = {
 };
 
 const DOMAIN_NAME_ALIASES: Record<string, string> = {
+  "ntu.edu.sg": "nanyang technological university",
+  "www.ntu.edu.sg": "nanyang technological university",
+  "nus.edu.sg": "national university of singapore",
+  "www.nus.edu.sg": "national university of singapore",
+  "smu.edu.sg": "singapore management university",
+  "www.smu.edu.sg": "singapore management university",
   "imperial.ac.uk": "imperial college london",
   "www.imperial.ac.uk": "imperial college london",
   "ucl.ac.uk": "ucl",
@@ -114,12 +128,16 @@ function candidateKeysForName(value: string) {
 
   add(value);
   add(normalized);
+  for (const parenthetical of String(value).matchAll(/\(([^)]+)\)/g)) {
+    add(parenthetical[1] ?? "");
+  }
   add(normalized.replace(/\buniversity of london$/, ""));
   add(normalized.replace(/\bmain campus$/, ""));
   add(normalized.replace(/\bcampus immersion$/, ""));
   add(normalized.replace(/\bseattle campus$/, ""));
   add(normalized.replace(/\bcollege station$/, ""));
   add(normalized.replace(/\bann arbor$/, ""));
+  add(normalized.replace(/\bsingapore$/, ""));
 
   for (const candidate of Array.from(candidates)) {
     for (const alias of MANUAL_NAME_ALIASES[candidate] ?? []) {

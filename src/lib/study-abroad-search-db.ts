@@ -2,6 +2,10 @@ import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { dataFilePath, getJsonArrayFileVersion } from "./json-file-store";
 import {
+  getStudyAbroadProgramDedupeKey,
+  getStudyAbroadUniversityDedupeKey,
+} from "./study-abroad-dedupe";
+import {
   MAJOR_FAMILIES,
   MAJOR_QUERY_ALIASES,
   normalizeStudyAbroadMajor,
@@ -118,7 +122,7 @@ function uniqueItems(values: string[]) {
 
 function numericValue(value: unknown) {
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function escapeLike(value: string) {
@@ -400,6 +404,8 @@ export async function rebuildStudyAbroadSearchDatabase() {
       CREATE TABLE programs (
         id TEXT PRIMARY KEY,
         university_id TEXT NOT NULL,
+        university_dedupe_key TEXT NOT NULL,
+        program_dedupe_key TEXT NOT NULL,
         school_name TEXT NOT NULL,
         country TEXT NOT NULL,
         degree TEXT NOT NULL,
@@ -419,6 +425,7 @@ export async function rebuildStudyAbroadSearchDatabase() {
       );
       CREATE TABLE universities (
         university_id TEXT PRIMARY KEY,
+        university_dedupe_key TEXT NOT NULL,
         school_name TEXT NOT NULL,
         country TEXT NOT NULL,
         city TEXT NOT NULL,
@@ -434,10 +441,13 @@ export async function rebuildStudyAbroadSearchDatabase() {
       );
       CREATE INDEX idx_programs_country_degree ON programs(country, degree);
       CREATE INDEX idx_programs_university ON programs(university_id);
+      CREATE INDEX idx_programs_university_dedupe ON programs(university_dedupe_key);
+      CREATE INDEX idx_programs_dedupe ON programs(program_dedupe_key);
       CREATE INDEX idx_programs_discipline ON programs(discipline);
       CREATE INDEX idx_programs_tuition ON programs(tuition_amount);
       CREATE INDEX idx_programs_priority ON programs(priority);
       CREATE INDEX idx_universities_country ON universities(country);
+      CREATE INDEX idx_universities_dedupe ON universities(university_dedupe_key);
       CREATE INDEX idx_universities_program_count ON universities(program_count);
     `);
 
@@ -446,6 +456,8 @@ export async function rebuildStudyAbroadSearchDatabase() {
       INSERT INTO programs (
         id,
         university_id,
+        university_dedupe_key,
+        program_dedupe_key,
         school_name,
         country,
         degree,
@@ -462,11 +474,12 @@ export async function rebuildStudyAbroadSearchDatabase() {
         intake,
         search_text,
         detail_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insertUniversity = db.prepare(`
       INSERT INTO universities (
         university_id,
+        university_dedupe_key,
         school_name,
         country,
         city,
@@ -479,7 +492,7 @@ export async function rebuildStudyAbroadSearchDatabase() {
         tuition_max,
         search_text,
         detail_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     db.exec("BEGIN");
@@ -491,6 +504,8 @@ export async function rebuildStudyAbroadSearchDatabase() {
       insertProgram.run(
         program.id,
         program.universityId,
+        getStudyAbroadUniversityDedupeKey(program),
+        getStudyAbroadProgramDedupeKey(program),
         program.schoolName,
         program.country,
         program.degree,
@@ -514,6 +529,7 @@ export async function rebuildStudyAbroadSearchDatabase() {
       const university = universityById.get(match.universityId);
       insertUniversity.run(
         match.universityId,
+        getStudyAbroadUniversityDedupeKey(match),
         match.schoolName,
         match.country,
         match.city,
@@ -562,6 +578,39 @@ function getMeaningfulTokens(...values: string[]) {
   ).slice(0, 8);
 }
 
+function hasResolvedFreeTextIntent(query: StudyAbroadResolvedQuery) {
+  return Boolean(
+    query.country ||
+      query.degree ||
+      query.major ||
+      query.specialization ||
+      query.budgetTier ||
+      query.intake ||
+      query.gpaProfile ||
+      query.languageProfile
+  );
+}
+
+function hardFreeTextTokens(query: StudyAbroadResolvedQuery) {
+  if (!query.freeText || hasResolvedFreeTextIntent(query)) {
+    return [];
+  }
+
+  return getMeaningfulTokens(query.freeText).filter(
+    (token) => token !== normalizeSearchText(query.country) && token !== normalizeSearchText(query.degree)
+  );
+}
+
+function softFreeTextTerms(query: StudyAbroadResolvedQuery) {
+  const terms = [
+    ...getMeaningfulTokens(query.freeText),
+    ...majorTerms(query),
+    ...expandAliases(query.specialization, SPECIALIZATION_QUERY_ALIASES, [query.specialization]),
+  ];
+
+  return uniqueItems(terms).slice(0, 18);
+}
+
 function expandAliases(
   rawValue: string,
   aliasGroups: Record<string, string[]>,
@@ -604,6 +653,104 @@ function expectedDisciplineForQuery(query: StudyAbroadResolvedQuery) {
   return normalizeStudyAbroadMajor(
     query.major || (query.specialization ? SPECIALIZATION_TO_MAJOR[query.specialization] || "" : "")
   );
+}
+
+function disciplineTermsForQuery(query: StudyAbroadResolvedQuery) {
+  const expected = expectedDisciplineForQuery(query);
+  if (!expected) return [];
+
+  if (expected === "商科 / 管理" && !query.specialization) {
+    return [
+      "商科 / 管理",
+      "金融",
+      "商业分析 / 数据",
+      "会计",
+      "MBA",
+      "经济学",
+      "市场营销 / 传媒",
+    ];
+  }
+
+  return [expected];
+}
+
+const INTAKE_QUERY_ALIASES: Record<string, string[]> = {
+  spring: [
+    "春",
+    "春季",
+    "spring",
+    "january",
+    "jan",
+    "february",
+    "feb",
+    "march",
+    "mar",
+    "1 月",
+    "1月",
+    "2 月",
+    "2月",
+    "3 月",
+    "3月",
+  ],
+  summer: [
+    "夏",
+    "夏季",
+    "summer",
+    "may",
+    "june",
+    "jun",
+    "july",
+    "jul",
+    "5 月",
+    "5月",
+    "6 月",
+    "6月",
+    "7 月",
+    "7月",
+  ],
+  fall: [
+    "秋",
+    "秋季",
+    "fall",
+    "autumn",
+    "august",
+    "aug",
+    "september",
+    "sep",
+    "october",
+    "oct",
+    "8 月",
+    "8月",
+    "9 月",
+    "9月",
+    "10 月",
+    "10月",
+  ],
+  winter: [
+    "冬",
+    "冬季",
+    "winter",
+    "november",
+    "nov",
+    "december",
+    "dec",
+    "11 月",
+    "11月",
+    "12 月",
+    "12月",
+  ],
+  rolling: ["滚动", "滚动录取", "rolling"],
+};
+
+function intakeTermsForQuery(intake: string) {
+  const normalized = normalizeSearchText(intake);
+  if (!normalized) return [];
+
+  return uniqueItems([
+    intake,
+    normalized,
+    ...(INTAKE_QUERY_ALIASES[normalized] ?? []),
+  ]);
 }
 
 function addLikeAnyFilter(where: string[], params: unknown[], column: string, terms: string[]) {
@@ -654,6 +801,7 @@ function buildProgramWhere(query: StudyAbroadResolvedQuery, columnPrefix = ""): 
 
   if (query.budgetTier) {
     where.push(`${column("tuition_amount")} IS NOT NULL`);
+    where.push(`${column("tuition_amount")} > 0`);
     if (query.budgetTier === "under-30000") where.push(`${column("tuition_amount")} <= 30000`);
     if (query.budgetTier === "under-50000") where.push(`${column("tuition_amount")} <= 50000`);
     if (query.budgetTier === "under-70000") where.push(`${column("tuition_amount")} <= 70000`);
@@ -661,15 +809,15 @@ function buildProgramWhere(query: StudyAbroadResolvedQuery, columnPrefix = ""): 
   }
 
   if (query.intake) {
-    addLikeAnyFilter(where, params, column("search_text"), [query.intake]);
+    addLikeAnyFilter(where, params, column("intake"), intakeTermsForQuery(query.intake));
   }
 
-  const expectedDiscipline = expectedDisciplineForQuery(query);
-  if (expectedDiscipline) {
-    where.push(`${column("discipline")} = ?`);
-    params.push(expectedDiscipline);
+  const disciplineTerms = disciplineTermsForQuery(query);
+  if (disciplineTerms.length) {
+    where.push(`${column("discipline")} IN (${disciplineTerms.map(() => "?").join(", ")})`);
+    params.push(...disciplineTerms);
 
-    if (query.specialization) {
+    if (query.specialization && !query.specializationInferredFromFreeText) {
       addLikeAnyFilter(
         where,
         params,
@@ -681,10 +829,7 @@ function buildProgramWhere(query: StudyAbroadResolvedQuery, columnPrefix = ""): 
     addLikeAnyFilter(where, params, column("search_text"), majorTerms(query));
   }
 
-  const freeTextTokens = getMeaningfulTokens(query.freeText).filter(
-    (token) => token !== normalizeSearchText(query.country) && token !== normalizeSearchText(query.degree)
-  );
-  addLikeAllFilter(where, params, column("search_text"), freeTextTokens);
+  addLikeAllFilter(where, params, column("search_text"), hardFreeTextTokens(query));
 
   return {
     sql: where.join(" AND "),
@@ -703,6 +848,13 @@ function buildScoreExpression(query: StudyAbroadResolvedQuery) {
   if (expectedDiscipline) {
     parts.push("CASE WHEN discipline = ? THEN 18 ELSE 0 END");
     params.push(expectedDiscipline);
+
+    disciplineTermsForQuery(query)
+      .filter((discipline) => discipline !== expectedDiscipline)
+      .forEach((discipline) => {
+        parts.push("CASE WHEN discipline = ? THEN 9 ELSE 0 END");
+        params.push(discipline);
+      });
   }
 
   majorTerms(query).slice(0, 10).forEach((term) => {
@@ -711,7 +863,7 @@ function buildScoreExpression(query: StudyAbroadResolvedQuery) {
     params.push(condition.param);
   });
 
-  getMeaningfulTokens(query.freeText).slice(0, 6).forEach((term) => {
+  softFreeTextTerms(query).slice(0, 8).forEach((term) => {
     const condition = likeCondition("search_text", term);
     parts.push(`CASE WHEN ${condition.sql} THEN 3 ELSE 0 END`);
     params.push(condition.param);
@@ -803,6 +955,29 @@ function hasOnlyCountrySchoolPoolFilter(query: StudyAbroadResolvedQuery) {
   );
 }
 
+function programDedupeWinnerOrder(columnPrefix = "") {
+  const column = (name: string) => `${columnPrefix}${name}`;
+  return `
+    CASE WHEN ${column("qs_rank")} IS NULL OR ${column("qs_rank")} <= 0 THEN 999999 ELSE ${column("qs_rank")} END ASC,
+    ${column("has_structured_snapshot")} DESC,
+    ${column("has_snapshot")} DESC,
+    ${column("priority")} DESC,
+    ${column("has_admissions_url")} DESC,
+    ${column("id")} COLLATE NOCASE ASC
+  `;
+}
+
+function universityDedupeWinnerOrder(columnPrefix = "") {
+  const column = (name: string) => `${columnPrefix}${name}`;
+  return `
+    CASE WHEN ${column("qs_rank")} IS NULL OR ${column("qs_rank")} <= 0 THEN 999999 ELSE ${column("qs_rank")} END ASC,
+    ${column("featured_score")} DESC,
+    ${column("program_count")} DESC,
+    ${column("school_name")} COLLATE NOCASE ASC,
+    ${column("university_id")} COLLATE NOCASE ASC
+  `;
+}
+
 function readProgramRows(
   db: SqliteDatabase,
   query: StudyAbroadResolvedQuery,
@@ -810,19 +985,62 @@ function readProgramRows(
 ) {
   const where = buildProgramWhere(query);
   const score = buildScoreExpression(query);
-  const total = readTotal(
-    db.prepare(`SELECT COUNT(*) AS total FROM programs WHERE ${where.sql}`).get(...where.params)
-  );
-  const rows = db
-    .prepare(`
-      SELECT detail_json, (${score.sql}) AS score
-      FROM programs
-      WHERE ${where.sql}
-      ORDER BY
+  const orderBy = query.freeText && !hasResolvedFreeTextIntent(query)
+    ? `
+        score DESC,
+        CASE WHEN qs_rank IS NULL OR qs_rank <= 0 THEN 999999 ELSE qs_rank END ASC,
+        priority DESC,
+        school_name COLLATE NOCASE ASC
+      `
+    : `
         CASE WHEN qs_rank IS NULL OR qs_rank <= 0 THEN 999999 ELSE qs_rank END ASC,
         score DESC,
         priority DESC,
         school_name COLLATE NOCASE ASC
+      `;
+  const total = readTotal(
+    db
+      .prepare(
+        `
+          WITH matched AS (
+            SELECT
+              id,
+              program_dedupe_key,
+              ROW_NUMBER() OVER (
+                PARTITION BY program_dedupe_key
+                ORDER BY ${programDedupeWinnerOrder()}
+              ) AS dedupe_rank
+            FROM programs
+            WHERE ${where.sql}
+          )
+          SELECT COUNT(*) AS total
+          FROM matched
+          WHERE dedupe_rank = 1
+        `
+      )
+      .get(...where.params)
+  );
+  const rows = db
+    .prepare(`
+      WITH matched AS (
+        SELECT
+          programs.*,
+          (${score.sql}) AS score,
+          ROW_NUMBER() OVER (
+            PARTITION BY program_dedupe_key
+            ORDER BY ${programDedupeWinnerOrder()}
+          ) AS dedupe_rank
+        FROM programs
+        WHERE ${where.sql}
+      ),
+      deduped AS (
+        SELECT *
+        FROM matched
+        WHERE dedupe_rank = 1
+      )
+      SELECT detail_json, score
+      FROM deduped
+      ORDER BY ${orderBy}
       LIMIT ? OFFSET ?
     `)
     .all(...score.params, ...where.params, pagination.pageSize, pagination.offset);
@@ -841,18 +1059,54 @@ function readUniversityRows(
   if (hasOnlyCountrySchoolPoolFilter(query)) {
     const params = [query.country];
     const total = readTotal(
-      db.prepare("SELECT COUNT(*) AS total FROM universities WHERE country = ?").get(...params)
+      db
+        .prepare(
+          "SELECT COUNT(DISTINCT university_dedupe_key) AS total FROM universities WHERE country = ?"
+        )
+        .get(...params)
     );
     const rows = db
       .prepare(`
-        SELECT detail_json, program_count, featured_score, tuition_project_count, tuition_min, tuition_max
-        FROM universities
-        WHERE country = ?
+        WITH matched AS (
+          SELECT *
+          FROM universities
+          WHERE country = ?
+        ),
+        ranked AS (
+          SELECT
+            *,
+            ROW_NUMBER() OVER (
+              PARTITION BY university_dedupe_key
+              ORDER BY ${universityDedupeWinnerOrder()}
+            ) AS dedupe_rank
+          FROM matched
+        ),
+        stats AS (
+          SELECT
+            university_dedupe_key,
+            MAX(program_count) AS program_count,
+            MAX(featured_score) AS featured_score,
+            MAX(tuition_project_count) AS tuition_project_count,
+            MIN(CASE WHEN tuition_min IS NOT NULL AND tuition_min > 0 THEN tuition_min ELSE NULL END) AS tuition_min,
+            MAX(CASE WHEN tuition_max IS NOT NULL AND tuition_max > 0 THEN tuition_max ELSE NULL END) AS tuition_max
+          FROM matched
+          GROUP BY university_dedupe_key
+        )
+        SELECT
+          ranked.detail_json,
+          stats.program_count,
+          stats.featured_score,
+          stats.tuition_project_count,
+          stats.tuition_min,
+          stats.tuition_max
+        FROM ranked
+        JOIN stats ON stats.university_dedupe_key = ranked.university_dedupe_key
+        WHERE ranked.dedupe_rank = 1
         ORDER BY
-          CASE WHEN qs_rank IS NULL OR qs_rank <= 0 THEN 999999 ELSE qs_rank END ASC,
-          featured_score DESC,
-          program_count DESC,
-          school_name COLLATE NOCASE ASC
+          CASE WHEN ranked.qs_rank IS NULL OR ranked.qs_rank <= 0 THEN 999999 ELSE ranked.qs_rank END ASC,
+          stats.featured_score DESC,
+          stats.program_count DESC,
+          ranked.school_name COLLATE NOCASE ASC
         LIMIT ? OFFSET ?
       `)
       .all(...params, pagination.universityPageSize, pagination.universityOffset);
@@ -864,27 +1118,76 @@ function readUniversityRows(
   const total = readTotal(
     db
       .prepare(
-        `SELECT COUNT(*) AS total FROM (SELECT p.university_id FROM programs p WHERE ${where.sql} GROUP BY p.university_id)`
+        `
+          WITH matched_programs AS (
+            SELECT
+              p.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY p.program_dedupe_key
+                ORDER BY ${programDedupeWinnerOrder("p.")}
+              ) AS program_dedupe_rank
+            FROM programs p
+            WHERE ${where.sql}
+          )
+          SELECT COUNT(DISTINCT university_dedupe_key) AS total
+          FROM matched_programs
+          WHERE program_dedupe_rank = 1
+        `
       )
       .get(...where.params)
   );
   const rows = db
     .prepare(`
+      WITH matched_programs AS (
+        SELECT
+          p.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY p.program_dedupe_key
+            ORDER BY ${programDedupeWinnerOrder("p.")}
+          ) AS program_dedupe_rank
+        FROM programs p
+        WHERE ${where.sql}
+      ),
+      deduped_programs AS (
+        SELECT *
+        FROM matched_programs
+        WHERE program_dedupe_rank = 1
+      ),
+      university_stats AS (
+        SELECT
+          university_dedupe_key,
+          COUNT(id) AS program_count,
+          MAX(priority) AS featured_score,
+          SUM(CASE WHEN tuition_amount IS NOT NULL AND tuition_amount > 0 THEN 1 ELSE 0 END) AS tuition_project_count,
+          MIN(CASE WHEN tuition_amount IS NOT NULL AND tuition_amount > 0 THEN tuition_amount ELSE NULL END) AS tuition_min,
+          MAX(CASE WHEN tuition_amount IS NOT NULL AND tuition_amount > 0 THEN tuition_amount ELSE NULL END) AS tuition_max
+        FROM deduped_programs
+        GROUP BY university_dedupe_key
+      ),
+      ranked_universities AS (
+        SELECT
+          u.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY u.university_dedupe_key
+            ORDER BY ${universityDedupeWinnerOrder("u.")}
+          ) AS university_dedupe_rank
+        FROM universities u
+        JOIN university_stats s ON s.university_dedupe_key = u.university_dedupe_key
+      )
       SELECT
         u.detail_json AS detail_json,
-        COUNT(p.id) AS program_count,
-        MAX(p.priority) AS featured_score,
-        SUM(CASE WHEN p.tuition_amount IS NOT NULL AND p.tuition_amount > 0 THEN 1 ELSE 0 END) AS tuition_project_count,
-        MIN(CASE WHEN p.tuition_amount IS NOT NULL AND p.tuition_amount > 0 THEN p.tuition_amount ELSE NULL END) AS tuition_min,
-        MAX(CASE WHEN p.tuition_amount IS NOT NULL AND p.tuition_amount > 0 THEN p.tuition_amount ELSE NULL END) AS tuition_max
-      FROM programs p
-      JOIN universities u ON u.university_id = p.university_id
-      WHERE ${where.sql}
-      GROUP BY p.university_id
+        s.program_count,
+        s.featured_score,
+        s.tuition_project_count,
+        s.tuition_min,
+        s.tuition_max
+      FROM ranked_universities u
+      JOIN university_stats s ON s.university_dedupe_key = u.university_dedupe_key
+      WHERE u.university_dedupe_rank = 1
       ORDER BY
         CASE WHEN u.qs_rank IS NULL OR u.qs_rank <= 0 THEN 999999 ELSE u.qs_rank END ASC,
-        featured_score DESC,
-        program_count DESC,
+        s.featured_score DESC,
+        s.program_count DESC,
         u.school_name COLLATE NOCASE ASC
       LIMIT ? OFFSET ?
     `)
